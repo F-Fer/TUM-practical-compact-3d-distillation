@@ -4,10 +4,10 @@
 \subsection{Problem Formulation}
 \todo{notations taken from VGGT \cite{vggt}}
 
-\noindent Sequence $(I_k)_{k=1}^N$ of $N$ RGB images $I_k \in \mathbb{R}^{3 \times W \times H}$ capturing the same 3D scene. The goal is to reconstruct the scene by finding each camera (ie. for each image) intrinsics and extrinsics $\bf{g}_i \in \mathbb{R}^9$. As well as a point map $P_i \in \mathcal{R}^{3 \times W \times H}$ (which can be computed from the camera parameters and a depth map $D_i \in \mathcal{R}^{W \times H}$)
+\noindent Sequence $(I_k)_{k=1}^N$ of $N$ RGB images $I_k \in \mathbb{R}^{3 \times W \times H}$ capturing the same 3D scene. The goal is to reconstruct the scene by finding each camera (ie. for each image) intrinsics and extrinsics $\bf{g}_i \in \mathbb{R}^9$. As well as a point map $P_i \in \mathbb{R}^{3 \times W \times H}$ (which can be computed from the camera parameters and a depth map $D_i \in \mathbb{R}^{W \times H}$)
 
 \begin{itemize}
-    \item Feed-forward model $f_\theta: (I_i)_{i=1}^N \mapsto (\mathbf{g}_i, D_i, P_i)_{i=1}^N$; teacher $f_{\theta_T}$ (VGGT or DéjàView), student $f_{\theta_S}$ with $|\theta_S| \ll |\theta_T|$
+    \item Feed-forward model $f_\theta: (I_i)_{i=1}^N \mapsto (\mathbf{g}_i, D_i)_{i=1}^N$; point maps $P_i$ are not predicted but obtained by unprojecting $D_i$ with $\mathbf{g}_i$, which is more accurate than a dedicated point-map head \cite{vggt} and keeps $P_i$ consistent with the cameras during TTO; teacher $f_{\theta_T}$ (VGGT or DéjàView), student $f_{\theta_S}$ with $|\theta_S| \ll |\theta_T|$
     \item TTO $\mathcal{O}_T$ refines the student's prediction for $T$ iterations using only the input images: $(\hat{\mathbf{g}}_i, \hat{D}_i)_{i=1}^N = \mathcal{O}_T\big(f_{\theta_S}(I), I\big)$
     \item Total cost $C = C_{\text{fwd}}(\theta_S) + T \cdot C_{\text{iter}}$ (FLOPs or wall-clock time); for a budget $C$, which (student size, $T$) minimizes the reconstruction error, and how does it compare to $f_{\theta_T}$ at the same $C$?
     \item If DéjàView is the teacher, the model predicts depth and ray maps; $\mathbf{g}_i$ and $P_i$ are derived from the rays \cite{dejaview}
@@ -26,7 +26,7 @@
     \item Another idea: Try how TTO can overcome a worse initialization resulting from fewer iterations of DéjàView, or test if you can train DéjàView to cope with fewer iterations from the start
     \item \textbf{Distillation:}
     \begin{itemize}
-        \item output level: student regresses the teacher's depth, rays/cameras and point maps, weighted by the teacher's confidence
+        \item output level: student regresses the teacher's depth and rays/cameras, weighted by the teacher's confidence
         \item wide-baseline (strided) view sampling is necessary, otherwise the student does not learn poses \cite{ott3r}
     \end{itemize}
     \item \textbf{Test-time optimization}:

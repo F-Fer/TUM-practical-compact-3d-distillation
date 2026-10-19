@@ -4,7 +4,7 @@
 \subsection{Motivation}
 Classical structure-from-motion (SfM) pipelines, such as COLMAP~\cite{sfm}, reconstruct 3D scenes through feature matching, camera pose estimation, triangulation and bundle adjustment (BA). While effective, these pipelines can be slow and fail when there is little texture, limited overlap or sparse view collections.
 
-Feed-forward multi-view transformers, such as DUSt3R~\cite{dust3r} and VGGT~\cite{vggt}, offer an alternative by predicting camera parameters and 3D point maps directly from images. These models can provide rebust initial reconstruction. However, they are accompanied by a substantial model size: VGGT for instance contains around 1.26B parameters.
+Feed-forward multi-view transformers, such as DUSt3R~\cite{dust3r} and VGGT~\cite{vggt}, offer an alternative by predicting camera parameters and 3D point maps directly from images. These models can provide robust initial reconstruction. However, they are accompanied by a substantial model size: VGGT for instance contains around 1.26B parameters.
 
 \begin{itemize}
     \item Classical SfM (COLMAP \cite{sfm}): matching, pose estimation, triangulation and bundle adjustment (BA); accurate when it converges, but slow and brittle with little texture, little overlap or few views
