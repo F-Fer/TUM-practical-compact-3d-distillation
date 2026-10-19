@@ -4,9 +4,10 @@
 \subsection{Motivation}
 \begin{itemize}
     \item Classical SfM (COLMAP \cite{colmap}): matching, pose estimation, triangulation and bundle adjustment (BA); accurate when it converges, but slow and brittle with little texture, little overlap or few views
-    \item Feed-forward multi-view transformers (DUSt3R \cite{dust3r} $\rightarrow$ VGGT \cite{vggt}) regress cameras, depth and point maps in one pass ($\sim$0.2\,s) and stay robust where SfM fails
-    \item Progress came mostly from scaling: at 24 views VGGT has 1.26B parameters and needs 190 TFLOPs and 14.7\,GiB \cite{dejaview} $\rightarrow$ expensive for robotics, mobile/AR and large image collections
-    \item Capacity is not everything: DéjàView (117M) beats VGGT (inlier ratio 80.3 vs.\ 66.0, pose AUC@30 91.8 vs.\ 84.0) \cite{dejaview}; OTT3R distills $\pi^3$ (959M) into a 102M student \cite{ott3r}
+    \item Feed-forward multi-view transformers (DUSt3R \cite{dust3r}, VGGT~ \cite{vggt}) regress cameras, depth and point maps in one pass and stay robust where SfM fails
+    \item Progress came mostly from scaling: VGGT has 1.26B parameters
+    \item Capacity is not everything: DéjàView (117M) beats VGGT \cite{dejaview}; OTT3R distills $\pi^3$ (959M) into a 102M student \cite{ott3r}
+    \item At similar size, the fully trained DéjàView roughly matches $\pi^3$, while the cheaply distilled OTT3R student falls short \cite{dejaview,ott3r}. At small training budgets the limit is training compute, not parameters. TTO spends compute per scene instead
     \item Feed-forward predictions are not final: BA on top of VGGT raises AUC@3 on IMC from 39.2 to 66.4 for $\sim$1.6\,s extra \cite{vggt}; test-time methods improve pretrained models further \cite{test3r,reconstructionpriors}
     \item Gap: model compression and TTO have so far been studied separately; how they trade off at a fixed compute budget is open \todo{double-check with a literature search}
 \end{itemize}

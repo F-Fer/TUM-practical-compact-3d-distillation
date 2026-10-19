@@ -3,19 +3,17 @@
 
 \subsection{Baselines}
 \begin{itemize}
-    \item Teachers, feed-forward: VGGT \cite{vggt}, DéjàView \cite{dejaview}
-    \item Teachers + our TTO: does TTO also help large models (upper bound)?
-    \item Existing compact models: OTT3R (102M) \cite{ott3r}, Depth Anything 3 Large (356M) \cite{da3}
-    \item Existing TTO methods: VGGT + BA \cite{vggt}, test-time optimization with priors \cite{reconstructionpriors}, Test3R \cite{test3r}
-    \item Ablations: student trained on ground truth only (no distillation), student without TTO, TTO from a naive initialization (\eg identity poses, constant depth)
-    \item Reference: COLMAP \cite{colmap}
+    \item VGGT \cite{vggt}
+    \item DéjàView \cite{dejaview}
+    \item SfM \cite{sfm}
 \end{itemize}
 
 \subsection{Benchmarks}
 \begin{itemize}
-    \item DTU, ETH3D, 7-Scenes, ScanNet++, nuScenes: indoor, outdoor, object-centric and driving scenes, as in DéjàView \cite{dejaview}, so results compare directly to its tables
+    \item DTU, ETH3D, 7-Scenes, ScanNet++, nuScenes: indoor, outdoor, object-centric and driving scenes, as in DéjàView \cite{dejaview}
     \item IMC for comparison with VGGT + BA \cite{vggt}
-    \item \todo{choose a subset given compute}
+    \item 7-Scenes and DTU also under the $\pi^3$ protocol (accuracy/completeness after Sim(3) + ICP) for comparison with OTT3R \cite{ott3r} 
+    \item \todo{choose subset}
 \end{itemize}
 
 \subsection{Metrics}
@@ -24,7 +22,5 @@
     \item Point maps: relative $\ell_2$ error (Rel.\ L2) and inlier ratio (relative error $< 3\%$) \cite{dejaview}; accuracy, completeness and overall Chamfer distance on DTU/ETH3D \cite{vggt}
     \item Cameras: AUC@3$^\circ$ and AUC@30$^\circ$ of the maximum of rotation and translation angular errors over image pairs \cite{dejaview}
     \item Depth: AbsRel \todo{add $\delta < 1.25$?}
-    \item Efficiency: parameters, FLOPs (forward + TTO), wall-clock runtime and peak GPU memory, on one GPU at 24 views as in \cite{dejaview} and as a function of $N$
-    \item Main result: quality vs.\ total compute for every (student, $T$) pair $\rightarrow$ Pareto frontier against the teachers
-    \item Error analysis: inject controlled errors into teacher predictions (pose noise, global and per-view scale drift, depth noise, outlier views) at increasing magnitude and measure which TTO recovers; classify real student failures by type
+    \item Efficiency: parameters, FLOPs (forward + TTO), wall-clock runtime and peak GPU memory, on one GPU as in \cite{dejaview}
 \end{itemize}

@@ -2,21 +2,18 @@
 \label{sec:plan}
 
 \subsection{Milestones}
-Dates are tentative; the SIGGRAPH 2027 deadline is not announced yet \todo{assumed late January 2027, update when announced}.
 \begin{itemize}
-    \item \textbf{M1 -- Baselines (22.10.--12.11.):} run VGGT and DéjàView on the benchmarks; evaluation pipeline (Sim(3) alignment, metrics, FLOPs/runtime/memory); reproduce reported numbers
+    \item \textbf{M1 -- Baselines (22.10.--12.11.):} run VGGT and DéjàView on the benchmarks; reproduce reported numbers
     \item \textbf{M2 -- Distillation (12.11.--10.12.):} training pipeline and pseudo-labels; train students of increasing compression; evaluate their initial predictions
-    \item \textbf{M3 -- TTO (starts in parallel with M1, focus 10.12.--07.01.):} develop on perturbed teacher predictions first (error injection), then apply to the students
+    \item \textbf{M3 -- TTO (starts in parallel with M1, focus 10.12.--07.01.):}
     \item \textbf{M4 -- Comparison and writing (07.01.--deadline):} matched-compute comparison, ablations, chosen methodological contribution, paper
-    \item Course checkpoints: proposal 21.10., intermediate presentation 10.12. (target: M1 done, first students, TTO prototype), paper discussion at deadline $-$2 weeks, final report at the SIGGRAPH deadline, final presentation and poster at deadline $+$1 week
-    \item Team split \todo{names}: one person on distillation, one on TTO; shared evaluation code
 \end{itemize}
 
 \subsection{Expected Outcome}
 \begin{itemize}
     \item Pareto curves of reconstruction quality vs.\ total compute for students + TTO against the teachers
     \item The smallest student from which TTO reaches teacher quality (RQ1)
-    \item Hypothesis for RQ2: TTO fixes local errors (small pose errors, scale drift, depth noise) but not global ones (wrong correspondences, symmetric structures, low overlap), so quality drops sharply below some student size
+    \item Hypothesis for RQ2: TTO fixes local errors (small pose errors, scale drift, depth noise) but not global ones, so quality drops sharply below some student size
     \item A taxonomy of correctable vs.\ non-correctable initialization errors
     \item Compact student checkpoints and code
     \item A negative result (TTO cannot replace capacity) would still be informative: it quantifies how accurate the initialization has to be

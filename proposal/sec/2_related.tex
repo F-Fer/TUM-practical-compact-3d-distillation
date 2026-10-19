@@ -12,17 +12,18 @@
 
 \subsection{Reconstruction via Distillation}
 \begin{itemize}
-    \item Knowledge distillation: a student is trained to reproduce a teacher's outputs \cite{hintondistillation}
-    \item OTT3R \cite{ott3r}: distills $\pi^3$ (959M) into a 102M student (9.4$\times$ smaller, up to 7$\times$ faster) using 1.6\% of VGGT's training compute; also a pseudo-labeling pipeline as a fast alternative to COLMAP. Closest prior work, but purely feed-forward \todo{confirm no TTO in full paper}
-    \item Multi-View 3D Reconstruction using Knowledge Distillation \cite{reconstructiondistillation}: distills DUSt3R into scene-specific CNN/ViT students on 12Scenes; does not generalize to new scenes
+    \item OTT3R \cite{ott3r}: extends Distill3R by distilling $\pi^3$ (959M) into a 102M student on 2 GPUs
+    \begin{itemize}
+        \item closest prior work, but purely feed-forward, without TTO
+        \item zero-shot, its poses fail to align views on out-of-distribution scenes (7-Scenes completion 34.8\,cm vs.\ 2.0\,cm for the teacher); it closes the gap by retraining the student per domain (23\,h)
+    \end{itemize}
+    \item Multi-View 3D Reconstruction using Knowledge Distillation \cite{reconstructiondistillation}
     \item A survey on knowledge distillation: Recent advancements \cite{surveydistillation} \todo{(mostly for us)}
 \end{itemize}
 
 \subsection{Test-Time Optimization}
 \begin{itemize}
-    \item VGGT + BA \cite{vggt}: BA initialized from VGGT's predicted points and tracks, no separate triangulation needed
-    \item Test3R \cite{test3r}: test-time training for DUSt3R-style pairwise models; maximizes the consistency of the reconstructions from $(I_1, I_2)$ and $(I_1, I_3)$ relative to the shared image
-    \item Learning 3D Reconstruction with Priors in Test Time \cite{reconstructionpriors}: optimizes a pretrained multi-view transformer at inference with self-supervised cross-view photometric/geometric consistency, plus optional priors (poses, intrinsics, depth) as penalty terms; code is public
-    \item VGG-$T^3$ \cite{vggt3}: uses test-time training as an architectural component, compressing the growing key-value representation into a fixed-size MLP so that cost scales linearly with the number of views; targets efficiency, not output refinement
-    \item Positioning: these works refine large models; we study TTO as a substitute for model capacity
+    \item Test3R \cite{test3r}
+    \item VGG-$T^3$ \cite{vggt3}
+    \item Learning 3D Reconstruction with Priors in Test Time \cite{reconstructionpriors}
 \end{itemize}
