@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This directory has no code, build system or tests yet. It is a git repository whose `main` branch tracks `origin/main` at git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. It holds three reference PDFs for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth):
+This directory has no code, build system or tests yet. It is a git repository whose `main` branch tracks `origin/main` at git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. It holds three reference PDFs (gitignored; each clone downloads them from the links in `README.md`) for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth):
 
 - `Generative AI From Diffusion to World Models.pdf`: the course kickoff slides, covering structure, deadlines and the 8 project topics.
 - `VGGT.pdf`: *VGGT: Visual Geometry Grounded Transformer* (Wang et al., CVPR 2025, arXiv 2503.11651). It is a feed-forward transformer that predicts cameras, point maps, depth maps and point tracks for 1 to hundreds of views in one pass. Code is at https://github.com/facebookresearch/vggt.
