@@ -3,20 +3,26 @@
 
 \subsection{Multi-View 3D Reconstruction}
 \begin{itemize}
-    \item VGGT \cite{vggt}
-    \item DéjàView \cite{dejaview}
+    \item Classical SfM, \eg COLMAP \cite{colmap}: feature matching, incremental registration, triangulation and BA; accurate but slow and brittle
+    \item DUSt3R \cite{dust3r}, MASt3R \cite{mast3r}: regress point maps for image pairs, then fuse all pairs with a global alignment optimization
+    \item VGGT \cite{vggt}: 1.2B-parameter transformer with alternating frame/global attention over DINOv2 tokens; predicts cameras, depth, point maps and tracks for up to hundreds of views in one pass
+    \item $\pi^3$ \cite{pi3}, Depth Anything 3 \cite{da3}: further large feed-forward models (959M; 356M--1.2B)
+    \item DéjàView \cite{dejaview}: a single weight-shared transformer block applied $K$ times; 117M parameters, matches or beats $\sim$1B-parameter models, $K$ is a compute knob at inference
 \end{itemize}
 
 \subsection{Reconstruction via Distillation}
 \begin{itemize}
-    \item OTT3R \cite{ott3r}
-    \item Multi-View 3D Reconstruction using Knowledge Distillation \cite{reconstructiondistillation}
+    \item Knowledge distillation: a student is trained to reproduce a teacher's outputs \cite{hintondistillation}
+    \item OTT3R \cite{ott3r}: distills $\pi^3$ (959M) into a 102M student (9.4$\times$ smaller, up to 7$\times$ faster) using 1.6\% of VGGT's training compute; also a pseudo-labeling pipeline as a fast alternative to COLMAP. Closest prior work, but purely feed-forward \todo{confirm no TTO in full paper}
+    \item Multi-View 3D Reconstruction using Knowledge Distillation \cite{reconstructiondistillation}: distills DUSt3R into scene-specific CNN/ViT students on 12Scenes; does not generalize to new scenes
     \item A survey on knowledge distillation: Recent advancements \cite{surveydistillation} \todo{(mostly for us)}
 \end{itemize}
 
 \subsection{Test-Time Optimization}
 \begin{itemize}
-    \item Test3R \cite{test3r}
-    \item VGG-$T^3$ \cite{vggt3}
-    \item Learning 3D Reconstruction with Priors in Test Time \cite{reconstructionpriors}
+    \item VGGT + BA \cite{vggt}: BA initialized from VGGT's predicted points and tracks, no separate triangulation needed
+    \item Test3R \cite{test3r}: test-time training for DUSt3R-style pairwise models; maximizes the consistency of the reconstructions from $(I_1, I_2)$ and $(I_1, I_3)$ relative to the shared image
+    \item Learning 3D Reconstruction with Priors in Test Time \cite{reconstructionpriors}: optimizes a pretrained multi-view transformer at inference with self-supervised cross-view photometric/geometric consistency, plus optional priors (poses, intrinsics, depth) as penalty terms; code is public
+    \item VGG-$T^3$ \cite{vggt3}: uses test-time training as an architectural component, compressing the growing key-value representation into a fixed-size MLP so that cost scales linearly with the number of views; targets efficiency, not output refinement
+    \item Positioning: these works refine large models; we study TTO as a substitute for model capacity
 \end{itemize}

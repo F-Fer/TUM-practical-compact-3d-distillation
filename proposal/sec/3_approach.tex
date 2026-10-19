@@ -4,8 +4,50 @@
 \subsection{Problem Formulation}
 \todo{notations taken from VGGT \cite{vggt}}
 
-Sequence $(I_k)_{k=1}^N$ of $N$ RGB images $I_k \in \mathbb{R}^{3 \times W \times H}$ capturing the same 3D scene. The goal is to reconstruct the scene by finding each camera (ie. for each image) intrinsics and extrinsics $\bf{g}_i \in \mathbb{R}^9$. As well as a point map $P_i \in \mathcal{R}^{3 \times W \times H}$ (which can be computed from the camera parameters and a depth map $D_i \in \mathcal{R}^{W \times H}$)
+Sequence $(I_i)_{i=1}^N$ of $N$ RGB images $I_i \in \mathbb{R}^{3 \times H \times W}$ capturing the same 3D scene. The goal is to reconstruct the scene by finding each camera's (i.e., for each image) intrinsics and extrinsics $\mathbf{g}_i \in \mathbb{R}^9$, as well as a point map $P_i \in \mathbb{R}^{3 \times H \times W}$ (which can be computed from the camera parameters and a depth map $D_i \in \mathbb{R}^{H \times W}$).
+
+\begin{itemize}
+    \item Feed-forward model $f_\theta: (I_i)_{i=1}^N \mapsto (\mathbf{g}_i, D_i, P_i)_{i=1}^N$; teacher $f_{\theta_T}$ (VGGT or DéjàView), student $f_{\theta_S}$ with $|\theta_S| \ll |\theta_T|$
+    \item TTO $\mathcal{O}_T$ refines the student's prediction for $T$ iterations using only the input images: $(\hat{\mathbf{g}}_i, \hat{D}_i)_{i=1}^N = \mathcal{O}_T\big(f_{\theta_S}(I), I\big)$
+    \item Total cost $C = C_{\text{fwd}}(\theta_S) + T \cdot C_{\text{iter}}$ (FLOPs or wall-clock time); for a budget $C$, which (student size, $T$) minimizes the reconstruction error, and how does it compare to $f_{\theta_T}$ at the same $C$?
+    \item If DéjàView is the teacher, the model predicts depth and ray maps; $\mathbf{g}_i$ and $P_i$ are derived from the rays \cite{dejaview}
+\end{itemize}
 
 \subsection{Proposed Method}
+\begin{itemize}
+    \item \textbf{Teacher} \todo{decide}: VGGT (1.26B, public code, predicts tracks usable for BA) and/or DéjàView (117M, stronger, already compact)
+    \item \textbf{Students:} progressively smaller variants of the teacher architecture
+    \begin{itemize}
+        \item smaller DINOv2 encoder (ViT-B, 86M $\rightarrow$ ViT-S, 21M), initialized from pretrained weights
+        \item fewer or narrower transformer blocks (VGGT) or fewer loop steps $K$ (DéjàView)
+        \item \todo{size grid, \eg 4 students between $\sim$20M and $\sim$300M}
+    \end{itemize}
+    \item \textbf{Distillation:}
+    \begin{itemize}
+        \item output level: student regresses the teacher's depth, rays/cameras and point maps with the teacher's training losses, weighted by the teacher's confidence
+        \item optional feature level: match intermediate tokens (needs a projection when widths differ)
+        \item optionally mix in ground-truth losses where available (ablation)
+    \end{itemize}
+    \item \textbf{Test-time optimization} (per scene, no ground truth, initialized from the student):
+    \begin{itemize}
+        \item variables: camera parameters $\mathbf{g}_i$ and per-view depth corrections (\eg scale/shift + low-resolution residual) \todo{or network weights as in \cite{test3r,reconstructionpriors}}
+        \item objectives: reprojection error on correspondences (BA; tracks from an off-the-shelf matcher or from the predicted point maps), photometric or feature-metric consistency between views warped with the predicted depth and poses, multi-view depth consistency, and a regularizer towards the initialization
+        \item number of iterations $T$ is the second compute knob next to student size
+    \end{itemize}
+    \item \textbf{Candidate contributions} \todo{pick 1--2}:
+    \begin{itemize}
+        \item optimization-aware distillation: apply the loss after a few unrolled, differentiable TTO steps so that the student spends its capacity on errors TTO cannot fix
+        \item learned vs.\ hand-designed iteration: DéjàView loop steps $K$ against TTO iterations at equal compute
+        \item confidence-guided TTO: use predicted confidence to decide where and how long to optimize
+    \end{itemize}
+\end{itemize}
 
 \subsection{Training (dataset ?)}
+\begin{itemize}
+    \item Teacher pseudo-labels remove the need for 3D ground truth $\rightarrow$ any multi-view images or videos can be used
+    \item Candidate data: subsets of the teachers' training sets that also have ground truth, \eg CO3Dv2, DL3DV, BlendedMVS, MegaDepth, ScanNet++ (train split), Hypersim, Virtual KITTI 2 \cite{vggt,dejaview}; OTT3R's pseudo-labeling pipeline as an alternative \cite{ott3r}
+    \item Teacher outputs precomputed offline or produced online: depth + rays + confidence at $\sim$500\,px $\approx$ 3\,MB per image in fp16, \ie $\sim$300\,GB per 100k images \todo{decide}
+    \item Reduced-scale training: 2--24 views per sample, $\sim$500\,px longest side \cite{vggt}; encoder frozen or trained at a lower learning rate (DéjàView uses 0.1$\times$ on DINOv2 \cite{dejaview})
+    \item Evaluation scenes stay out of the distillation data (scene-level split for ScanNet++)
+    \item \todo{ask supervisors: available GPUs and storage}
+\end{itemize}

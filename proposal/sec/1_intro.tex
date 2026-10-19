@@ -2,3 +2,26 @@
 \label{sec:intro}
 
 \subsection{Motivation}
+\begin{itemize}
+    \item Classical SfM (COLMAP \cite{colmap}): matching, pose estimation, triangulation and bundle adjustment (BA); accurate when it converges, but slow and brittle with little texture, little overlap or few views
+    \item Feed-forward multi-view transformers (DUSt3R \cite{dust3r} $\rightarrow$ VGGT \cite{vggt}) regress cameras, depth and point maps in one pass ($\sim$0.2\,s) and stay robust where SfM fails
+    \item Progress came mostly from scaling: at 24 views VGGT has 1.26B parameters and needs 190 TFLOPs and 14.7\,GiB \cite{dejaview} $\rightarrow$ expensive for robotics, mobile/AR and large image collections
+    \item Capacity is not everything: DéjàView (117M) beats VGGT (inlier ratio 80.3 vs.\ 66.0, pose AUC@30 91.8 vs.\ 84.0) \cite{dejaview}; OTT3R distills $\pi^3$ (959M) into a 102M student \cite{ott3r}
+    \item Feed-forward predictions are not final: BA on top of VGGT raises AUC@3 on IMC from 39.2 to 66.4 for $\sim$1.6\,s extra \cite{vggt}; test-time methods improve pretrained models further \cite{test3r,reconstructionpriors}
+    \item Gap: model compression and TTO have so far been studied separately; how they trade off at a fixed compute budget is open \todo{double-check with a literature search}
+\end{itemize}
+
+\subsection{Research Questions}
+\begin{itemize}
+    \item \textbf{RQ1:} How small can a distilled student become while still providing an initialization from which TTO reaches teacher-level quality?
+    \item \textbf{RQ2:} Which initialization errors can TTO correct (\eg small pose errors, scale drift, depth noise) and which not (\eg wrong correspondences, symmetric scenes, low overlap)?
+    \item \textbf{RQ3:} At matched total compute (forward pass + optimization), is a compact model with TTO competitive with a large feed-forward model?
+\end{itemize}
+
+\subsection{Contributions (planned)}
+\begin{itemize}
+    \item A family of compact students distilled from VGGT/DéjàView
+    \item A compute-matched study of student size $\times$ TTO budget with Pareto curves against the teachers
+    \item An analysis of which initialization errors TTO recovers, via controlled error injection
+    \item \todo{one methodological contribution, see candidates in Sec.~\ref{sec:approach}}
+\end{itemize}

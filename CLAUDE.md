@@ -4,11 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This directory has no code, build system or tests yet. It is a git repository whose `main` branch tracks `origin/main` at git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. It holds three reference PDFs (gitignored; each clone downloads them from the links in `README.md`) for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth):
+This directory has no code, build system or tests yet. It is a git repository whose `main` branch tracks `origin/main` at git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. `proposal/` holds the LaTeX project proposal (CVPR template, one file per section in `proposal/sec/`, bibliography in `proposal/main.bib`). It is written in Overleaf, and `preamble.tex` and `cvpr.sty` exist only there, so it doesn't compile locally as-is.
+
+`docs/` holds reference PDFs (gitignored; each clone downloads them from the links in `README.md`) for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth):
 
 - `Generative AI From Diffusion to World Models.pdf`: the course kickoff slides, covering structure, deadlines and the 8 project topics.
 - `VGGT.pdf`: *VGGT: Visual Geometry Grounded Transformer* (Wang et al., CVPR 2025, arXiv 2503.11651). It is a feed-forward transformer that predicts cameras, point maps, depth maps and point tracks for 1 to hundreds of views in one pass. Code is at https://github.com/facebookresearch/vggt.
 - `Déjà-View.pdf`: *DéjàView: Looping Transformers for Multi-View 3D Reconstruction* (NVIDIA, arXiv 2605.30215). It applies one shared transformer block recurrently for K refinement steps, and K is a compute knob you set at inference time. It matches much larger feed-forward models with far fewer parameters.
+- `OTT3R.pdf`: *OTT3R* (Leblanc & Poullis, ACCV 2026, arXiv 2609.36374). It distills π³ (959M) into a 102M student on 2 GPUs, using an offline cache of teacher pseudo-labels. It is purely feed-forward with no test-time optimization, and it is the closest prior work. Code is at https://github.com/TheFourthKaramazov/OTT3R.
 
 When code is added, update this file with the real setup, training and evaluation commands.
 
@@ -17,7 +20,7 @@ When code is added, update this file with the real setup, training and evaluatio
 `poppler` isn't installed, so the Read tool cannot render these PDFs, and `pypdf` and `fitz` are missing too. Use macOS PDFKit through JXA to extract text instead (quote the paths, since the filenames contain spaces and non-ASCII characters):
 
 ```sh
-osascript -l JavaScript -e "ObjC.import('PDFKit'); var d=\$.PDFDocument.alloc.initWithURL(\$.NSURL.fileURLWithPath('$PWD/VGGT.pdf')); var s=''; for (var i=0;i<d.pageCount;i++) s += d.pageAtIndex(i).string.js + '\n'; s"
+osascript -l JavaScript -e "ObjC.import('PDFKit'); var d=\$.PDFDocument.alloc.initWithURL(\$.NSURL.fileURLWithPath('$PWD/docs/VGGT.pdf')); var s=''; for (var i=0;i<d.pageCount;i++) s += d.pageAtIndex(i).string.js + '\n'; s"
 ```
 
 ## Course context that shapes the work

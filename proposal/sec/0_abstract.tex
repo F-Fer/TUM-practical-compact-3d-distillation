@@ -1,3 +1,9 @@
 \begin{abstract}
-
+\begin{itemize}
+    \item Feed-forward multi-view transformers (VGGT, DéjàView) predict cameras, depth and point maps in a single pass, but state-of-the-art models have grown to $\sim$1B parameters
+    \item Two observations: compact models can be competitive (DéjàView, 117M), and optimization on top of feed-forward predictions still gives large gains (VGGT + BA)
+    \item Question: how small can a feed-forward model become if test-time optimization (TTO) refines its output? Does high-quality reconstruction need an accurate initial prediction?
+    \item Approach: distill VGGT/DéjàView into progressively smaller students, refine their predictions with TTO, and compare against the teachers
+    \item Expected result: quality-vs-compute Pareto curves and a characterization of which initialization errors TTO can and cannot correct
+\end{itemize}
 \end{abstract}
