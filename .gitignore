@@ -1,2 +1,8 @@
 # Reference papers and course slides stay local (see README for links)
 *.pdf
+
+.DS_Store
+.idea
+.vscode
+
+__pychache__
