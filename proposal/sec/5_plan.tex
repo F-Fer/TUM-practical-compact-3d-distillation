@@ -3,18 +3,16 @@
 
 \subsection{Milestones}
 \begin{itemize}
-    \item \textbf{M1 -- Baselines (22.10.--12.11.):} run VGGT and DéjàView on the benchmarks; reproduce reported numbers
-    \item \textbf{M2 -- Distillation (12.11.--10.12.):} training pipeline and pseudo-labels; train students of increasing compression; evaluate their initial predictions
-    \item \textbf{M3 -- TTO (starts in parallel with M1, focus 10.12.--07.01.):}
-    \item \textbf{M4 -- Comparison and writing (07.01.--deadline):} matched-compute comparison, ablations, chosen methodological contribution, paper
+    \item \textbf{M1 -- Baselines:} run VGGT and DéjàView on the benchmarks; reproduce reported numbers
+    \item \textbf{M2 -- Distillation:} training pipeline and pseudo-labels; train students of increasing compression; evaluate their initial predictions
+    \item \textbf{M3 -- TTO (starts in parallel with M1):}
+    \item \textbf{M4 -- Comparison and writing:} matched-compute comparison, ablations, chosen methodological contribution, paper
 \end{itemize}
 
 \subsection{Expected Outcome}
 \begin{itemize}
     \item Pareto curves of reconstruction quality vs.\ total compute for students + TTO against the teachers
     \item The smallest student from which TTO reaches teacher quality (RQ1)
-    \item Hypothesis for RQ2: TTO fixes local errors (small pose errors, scale drift, depth noise) but not global ones, so quality drops sharply below some student size
-    \item A taxonomy of correctable vs.\ non-correctable initialization errors
     \item Compact student checkpoints and code
     \item A negative result (TTO cannot replace capacity) would still be informative: it quantifies how accurate the initialization has to be
 \end{itemize}

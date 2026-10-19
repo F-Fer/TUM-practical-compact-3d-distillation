@@ -21,6 +21,6 @@
     \item All predictions are first aligned to the ground truth with a Sim(3) transform
     \item Point maps: relative $\ell_2$ error (Rel.\ L2) and inlier ratio (relative error $< 3\%$) \cite{dejaview}; accuracy, completeness and overall Chamfer distance on DTU/ETH3D \cite{vggt}
     \item Cameras: AUC@3$^\circ$ and AUC@30$^\circ$ of the maximum of rotation and translation angular errors over image pairs \cite{dejaview}
-    \item Depth: AbsRel \todo{add $\delta < 1.25$?}
+    \item Depth: AbsRel 
     \item Efficiency: parameters, FLOPs (forward + TTO), wall-clock runtime and peak GPU memory, on one GPU as in \cite{dejaview}
 \end{itemize}

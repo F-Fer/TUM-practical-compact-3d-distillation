@@ -13,7 +13,7 @@
     \item If DéjàView is the teacher, the model predicts depth and ray maps; $\mathbf{g}_i$ and $P_i$ are derived from the rays \cite{dejaview}
 \end{itemize}
 
-v\subsection{Proposed Method}
+\subsection{Proposed Method}
 \begin{itemize}
     \item \textbf{Teacher} \todo{decide}: VGGT (1.26B, public code, predicts tracks usable for BA), DéjàView, or $\pi^3$
     \item \textbf{Students:} progressively smaller variants of the teacher architecture
@@ -23,22 +23,20 @@ v\subsection{Proposed Method}
         \item fewer or narrower transformer blocks (VGGT) or fewer loop steps $K$ (DéjàView)
         \item \todo{size grid, \eg 4 students between $\sim$20M and $\sim$300M}
     \end{itemize}
+    \item Another idea: Try how TTO can overcome a worse initialization resulting from fewer iterations of DéjàView, or test if you can train DéjàView to cope with fewer iterations from the start
     \item \textbf{Distillation:}
     \begin{itemize}
         \item output level: student regresses the teacher's depth, rays/cameras and point maps, weighted by the teacher's confidence
         \item wide-baseline (strided) view sampling is necessary, otherwise the student does not learn poses \cite{ott3r}
     \end{itemize}
-    \item \textbf{Test-time optimization} (per scene, no ground truth, initialized from the student):
+    \item \textbf{Test-time optimization}:
     \begin{itemize}
-        \item variables: camera parameters $\mathbf{g}_i$ and per-view depth corrections (\eg scale/shift + low-resolution residual) \todo{or network weights as in \cite{test3r,reconstructionpriors}}
-        \item objectives: reprojection error on correspondences (BA; tracks from an off-the-shelf matcher or from the predicted point maps), photometric or feature-metric consistency between views warped with the predicted depth and poses, multi-view depth consistency, and a regularizer towards the initialization
-        \item number of iterations $T$ is the second compute knob next to student size
+        \item variables: camera parameters $\mathbf{g}_i$ and depth corrections
+        \item objectives: reprojection error on correspondences, photometric or feature-metric consistency between views warped with the predicted depth and poses
     \end{itemize}
-    \item \textbf{Candidate contributions} \todo{pick 1--2}:
+    \item \textbf{Candidate contributions}:
     \begin{itemize}
-        \item optimization-aware distillation: apply the loss after a few unrolled, differentiable TTO steps so that the student spends its capacity on errors TTO cannot fix
-        \item learned vs.\ hand-designed iteration: DéjàView loop steps $K$ against TTO iterations at equal compute
-        \item confidence-guided TTO: use predicted confidence to decide where and how long to optimize
+        \item \todo{?}
     \end{itemize}
 \end{itemize}
 
@@ -46,6 +44,6 @@ v\subsection{Proposed Method}
 \begin{itemize}
     \item Candidate data: subsets of the teachers' training sets that also have ground truth, \eg CO3Dv2, DL3DV, BlendedMVS, MegaDepth, ScanNet++ \cite{scannetpp} (train split), Hypersim, Virtual KITTI 2 \cite{vggt,dejaview}; OTT3R uses CO3D, MegaDepth, ARKitScenes, ScanNet++ \cite{scannetpp}, Habitat and BlendedMVS (667K images) with its own pseudo-labeling pipeline \cite{ott3r}
     \item \todo{Why not just train on ground truth labels?}
-    \item Teacher outputs precomputed offline (OTT3R: 667K images in 283\,GB, $\approx$0.4\,MB per image with quantization and local point maps at 518$\times$224; teacher pass 3.5\,h on 2 GPUs \cite{ott3r})
+    \item Teacher outputs precomputed offline (OTT3R: 667K images in 283\,GB)
     \item Evaluation scenes stay out of the distillation data
 \end{itemize}

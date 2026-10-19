@@ -3,11 +3,11 @@
 
 \subsection{Multi-View 3D Reconstruction}
 \begin{itemize}
-    \item Classical SfM, \eg COLMAP \cite{colmap}: feature matching, incremental registration, triangulation and BA; accurate but slow and brittle
-    \item DUSt3R \cite{dust3r}, MASt3R \cite{mast3r}: regress point maps for image pairs, then fuse all pairs with a global alignment optimization
-    \item VGGT \cite{vggt}: 1.2B-parameter transformer with alternating frame/global attention over DINOv2 tokens; predicts cameras, depth, point maps and tracks for up to hundreds of views in one pass
-    \item $\pi^3$ \cite{pi3}, Depth Anything 3 \cite{da3}: further large feed-forward models (959M; 356M--1.2B)
-    \item DéjàView \cite{dejaview}: a single weight-shared transformer block applied $K$ times; 117M parameters, matches or beats $\sim$1B-parameter models, $K$ is a compute knob at inference
+    \item Classical SfM, \eg COLMAP \cite{colmap}
+    \item DUSt3R \cite{dust3r}, MASt3R \cite{mast3r}
+    \item VGGT \cite{vggt}
+    \item DéjàView \cite{dejaview}
+    \item $\pi^3$ \cite{pi3}
 \end{itemize}
 
 \subsection{Reconstruction via Distillation}
