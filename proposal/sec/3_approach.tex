@@ -81,9 +81,7 @@ At inference, we will optimize camera parameters $\mathbf{g}_i$ and depth maps $
 
 \subsection{Training}
 
-We will select subsets of existing multi-view datasets with ground-truth geometry, such as CO3Dv2~\cite{co3dv2}, DL3DV~\cite{dl3dv}, and BlendedMVS~\cite{blendedmvs}. To broaden scene diversity, we may also use MegaDepth~\cite{megadepth}, ScanNet++~\cite{scannetpp}, Hypersim~\cite{hypersim}, or Virtual KITTI 2~\cite{virtualkitti2}.
-
-Alternatively, following OTT3R~\cite{ott3r}, we will precompute teacher predictions as pseudo-labels. OTT3R uses 667K images across six datasets. Distillation allows the student to learn the teacher's predictions directly, while ground-truth supervision remains an alternative or complement.
+Following OTT3R~\cite{ott3r}, we will mainly supervise students with teacher predictions, precomputed offline as pseudo-labels on multi-view datasets such as CO3Dv2~\cite{co3dv2}, DL3DV~\cite{dl3dv}, BlendedMVS~\cite{blendedmvs}, MegaDepth~\cite{megadepth}, ScanNet++~\cite{scannetpp}, Hypersim~\cite{hypersim} and Virtual KITTI 2~\cite{virtualkitti2}. Unlike their sensor- or SfM-based ground truth, which is often sparse and noisy, these labels are dense and consistent, and matching the teacher isolates the error caused by compression. Including ground truth labels in the data will serve as a complement and as an ablation. Beyond the final outputs, we may also train students to match intermediate teacher features. 
 
 \begin{comment}
 \begin{itemize}
