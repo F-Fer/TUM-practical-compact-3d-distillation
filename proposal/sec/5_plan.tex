@@ -1,18 +1,26 @@
 \section{Plan}
 \label{sec:plan}
 
+The project timeline is shown in Fig.~\ref{fig:plan}.
+
 \subsection{Milestones}
+
 \begin{itemize}
-    \item \textbf{M1 -- Baselines:} run VGGT and DéjàView on the benchmarks; reproduce reported numbers
-    \item \textbf{M2 -- Distillation:} training pipeline and pseudo-labels; train students of increasing compression; evaluate their initial predictions
-    \item \textbf{M3 -- TTO (starts in parallel with M1):}
-    \item \textbf{M4 -- Comparison and writing:} matched-compute comparison, ablations, chosen methodological contribution, paper
+    \item \textbf{M1 - Baselines:} run VGGT and DéjàView on the benchmarks; reproduce reported numbers
+    \item \textbf{M2 - Distillation:} training pipeline and pseudo-labels; train students of increasing compression; evaluate their initial predictions
+    \item \textbf{M3 - TTO (starts in parallel with M1):}
+    \item \textbf{M4 - Comparison and writing:} matched-compute comparison, ablations, chosen methodological contribution, paper
 \end{itemize}
 
 \subsection{Expected Outcome}
+
+The project will produce Pareto curves of reconstruction quality versus total compute, comparing distilled students with TTO against the original teachers. We will identify the smallest student for which TTO approaches teacher-level quality (Q1), and release compact student checkpoints and evaluation code. Even if TTO cannot compensate for reduced model capacity, the results will help quantify the initialization quality required for effective refinement.
+
+\begin{comment}
 \begin{itemize}
     \item Pareto curves of reconstruction quality vs.\ total compute for students + TTO against the teachers
     \item The smallest student from which TTO reaches teacher quality (RQ1)
     \item Compact student checkpoints and code
     \item A negative result (TTO cannot replace capacity) would still be informative: it quantifies how accurate the initialization has to be
 \end{itemize}
+\end{comment}

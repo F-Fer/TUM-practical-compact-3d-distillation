@@ -2,21 +2,37 @@
 \label{sec:eval}
 
 \subsection{Baselines}
+
+We will compare against VGGT~\cite{vggt}, DéjàView~\cite{dejaview}, and COLMAP~\cite{sfm}. The large feed-forward models provide quality references, while COLMAP serves as a classical reconstruction baseline.
+
+\begin{comment}
 \begin{itemize}
     \item VGGT \cite{vggt}
     \item DéjàView \cite{dejaview}
     \item SfM \cite{sfm}
 \end{itemize}
+\end{comment}
 
 \subsection{Benchmarks}
+
+We will initially evaluate on 7-Scenes, DTU, and ScanNet++, following the protocols used by OTT3R~\cite{ott3r} and DéjàView~\cite{dejaview}. If resources permit, ETH3D~\cite{vggt} will be added to assess outdoor reconstruction. For camera pose estimation, we will also consider the Image Matching Challenge benchmark used by VGGT~\cite{vggt}.
+
+\begin{comment}
 \begin{itemize}
     \item DTU, ETH3D, 7-Scenes, ScanNet++, nuScenes: indoor, outdoor, object-centric and driving scenes, as in DéjàView \cite{dejaview}
     \item IMC for comparison with VGGT + BA \cite{vggt}
     \item 7-Scenes and DTU also under the $\pi^3$ protocol (accuracy/completeness after Sim(3) + ICP) for comparison with OTT3R \cite{ott3r} 
     \item \todo{choose subset}
 \end{itemize}
+\end{comment}
 
 \subsection{Metrics}
+
+Geometry will be evaluated on point maps obtained by unprojecting the predicted depth maps with the estimated camera parameters. Following DéjàView~\cite{dejaview}, we will report Relative $\ell_2$ error and the inlier ratio after Sim(3) alignment. On DTU and ETH3D, we will additionally report reconstruction accuracy, completeness, and Chamfer distance following the VGGT and OTT3R evaluation protocols~\cite{vggt,ott3r}.
+
+Camera pose estimation will be measured using AUC@3$^\circ$ and AUC@30$^\circ$, computed from rotation and translation angular errors as in DéjàView~\cite{dejaview}. Efficiency will be evaluated through parameter count, FLOPs including TTO, wall-clock runtime, and peak GPU memory on a single GPU~\cite{dejaview}.
+
+\begin{comment}
 \begin{itemize}
     \item Alignment: point maps are aligned to the ground truth with a Sim(3) transform before scoring
     \item Point maps, unprojected from predicted depth and cameras for all methods \cite{dejaview}: relative $\ell_2$ error (Rel.\ L2) and inlier ratio (relative error $< 3\%$) \cite{dejaview}; accuracy, completeness and overall Chamfer distance on DTU/ETH3D \cite{vggt}
@@ -24,3 +40,4 @@
     \item Depth: AbsRel 
     \item Efficiency: parameters, FLOPs (forward + TTO), wall-clock runtime and peak GPU memory, on one GPU as in \cite{dejaview}
 \end{itemize}
+\end{comment}

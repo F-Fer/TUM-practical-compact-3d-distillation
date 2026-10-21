@@ -20,6 +20,10 @@
 \definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
 \usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
 
+\usepackage{verbatim}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+
 %%%%%%%%% PAPER ID  - PLEASE UPDATE
 \def\paperID{Project 07} % *** Enter the Paper ID here
 \def\confName{CVPR}
@@ -29,8 +33,9 @@
 \title{Compact Feed-Forward 3D Reconstruction through Distillation and Test-Time Optimization}
 
 %%%%%%%%% AUTHORS - PLEASE UPDATE
-\author{First Author\\
-{\tt\small firstauthor@i1.org}
+\author{
+Antonin Granados\\
+{\tt\small antonin.granados@telecom-paris.fr}
 \and
 Finn Ferchau\\
 {\tt\small finn.ferchau@tum.de}
@@ -38,7 +43,7 @@ Finn Ferchau\\
 
 \begin{document}
 \maketitle
-% \input{fig/teaser}
+\input{fig/timeline}
 \input{sec/0_abstract}    
 \input{sec/1_intro}
 \input{sec/2_related}

@@ -2,6 +2,25 @@
 \label{sec:related}
 
 \subsection{Multi-View 3D Reconstruction}
+
+Classical methods such as COLMAP~\cite{sfm} rely on feature matching and bundle adjustment. While being relatively accurate, they are slow and need a large amount of overlap between views and texture.
+
+Learning-based approaches, including DUSt3R~\cite{dust3r} and MASt3R~\cite{mast3r}, predict dense geometry directly from images. VGGT~\cite{vggt} extends this approach to multiple views, while DéjàView~\cite{dejaview} and $\pi^3$~\cite{pi3} explore alternative architectures for efficient reconstruction and multi-view consistency.
+
+\subsection{Reconstruction via Distillation}
+
+Knowledge distillation compresses large models into smaller students while preserving their predictions~\cite{reconstructiondistillation,surveydistillation}.
+
+OTT3R~\cite{ott3r} distills the 959M-parameter $\pi^3$ into a 102M-parameter student. However, its zero-shot performance degrades on out-of-distribution scenes, requiring costly domain-specific retraining to recover accuracy. Whether test-time optimization can mitigate this loss remains unexplored in this setting.
+
+\subsection{Test-Time Optimization}
+
+Test3R~\cite{test3r} improves reconstruction through cross-view consistency, while \emph{Learning 3D Reconstruction with Priors in Test Time}~\cite{reconstructionpriors} incorporates geometric priors during inference.
+
+VGG-T$^3$~\cite{vggt3} uses test-time training to construct compact scene representations. However, these approaches do not directly investigate whether test-time optimization can compensate for the reduced capacity of a distilled reconstruction model.
+
+\begin{comment}
+\subsection{Multi-View 3D Reconstruction}
 \begin{itemize}
     \item Classical SfM, \eg COLMAP \cite{sfm}
     \item DUSt3R \cite{dust3r}, MASt3R \cite{mast3r}
@@ -27,3 +46,4 @@
     \item VGG-$T^3$ \cite{vggt3}
     \item Learning 3D Reconstruction with Priors in Test Time \cite{reconstructionpriors}
 \end{itemize}
+\end{comment}

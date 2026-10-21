@@ -2,8 +2,32 @@
 \label{sec:approach}
 
 \subsection{Problem Formulation}
-\todo{notations taken from VGGT \cite{vggt}}
 
+Given a sequence of $N$ RGB images $(I_i)_{i=1}^N$, with
+$I_i \in \mathbb{R}^{3 \times W \times H}$, capturing the same 3D scene, the goal is to recover the camera parameters $\mathbf{g}_i \in \mathbb{R}^9$ and depth maps $D_i \in \mathbb{R}^{W \times H}$. The corresponding point maps $P_i \in \mathbb{R}^{3 \times W \times H}$ are obtained by unprojecting the depth maps using the camera parameters. For DéjàView, the model predicts depth and ray maps instead; camera parameters $\mathbf{g}_i$ and point maps $P_i$ are derived from the rays~\cite{dejaview}.
+
+A feed-forward model $f_\theta$ predicts these quantities:
+\[
+f_\theta : (I_i)_{i=1}^N
+\mapsto (\mathbf{g}_i, D_i)_{i=1}^N.
+\]
+We consider a teacher $f_{\theta_T}$ (VGGT~\cite{vggt}, DéjàView~\cite{dejaview} or $\pi^3$~\cite{pi3}) and a smaller student $f_{\theta_S}$, with $|\theta_S| \ll |\theta_T|$. Predicting point maps through unprojection, rather than a dedicated prediction head, maintains consistency between the cameras and geometry during test-time optimization (TTO)~\cite{vggt}.
+
+TTO refines the student's predictions over $T$ iterations using only the input images:
+\[
+(\hat{\mathbf{g}}_i,\hat{D}_i)_{i=1}^N
+= \mathcal{O}_T\big(f_{\theta_S}((I_i)_{i=1}^N),
+(I_i)_{i=1}^N\big).
+\]
+
+We measure the total computational cost as
+\[
+C = C_{\mathrm{fwd}}(\theta_S) + T\,C_{\mathrm{iter}},
+\]
+where $C_{\mathrm{fwd}}$ is the student's forward-pass cost and $C_{\mathrm{iter}}$ is the cost per optimization iteration, measured in FLOPs or wall-clock time. Our objective is to determine which student size and iteration count minimize reconstruction error under a fixed budget $C$, and how this trade-off compares with the teacher at the same budget.
+
+\begin{comment}
+\todo{notations taken from VGGT \cite{vggt}}
 \noindent Sequence $(I_k)_{k=1}^N$ of $N$ RGB images $I_k \in \mathbb{R}^{3 \times W \times H}$ capturing the same 3D scene. The goal is to reconstruct the scene by finding each camera (ie. for each image) intrinsics and extrinsics $\bf{g}_i \in \mathbb{R}^9$. As well as a point map $P_i \in \mathbb{R}^{3 \times W \times H}$ (which can be computed from the camera parameters and a depth map $D_i \in \mathbb{R}^{W \times H}$)
 
 \begin{itemize}
@@ -12,8 +36,20 @@
     \item Total cost $C = C_{\text{fwd}}(\theta_S) + T \cdot C_{\text{iter}}$ (FLOPs or wall-clock time); for a budget $C$, which (student size, $T$) minimizes the reconstruction error, and how does it compare to $f_{\theta_T}$ at the same $C$?
     \item If DéjàView is the teacher, the model predicts depth and ray maps; $\mathbf{g}_i$ and $P_i$ are derived from the rays \cite{dejaview}
 \end{itemize}
+\end{comment}
 
 \subsection{Proposed Method}
+
+\paragraph{Teacher and student models.}
+We will select a teacher among VGGT~\cite{vggt}, DéjàView~\cite{dejaview}, and $\pi^3$~\cite{pi3}. Starting from the teacher architecture, we will train progressively smaller students, using OTT3R's public implementation as a starting point. Compression strategies include replacing the DINOv2 ViT-B encoder (86M parameters) with ViT-S (21M), reducing the number or width of transformer blocks, and, for DéjàView, reducing the number of recurrent iterations $K$.
+
+\paragraph{Distillation.}
+Students will be trained to regress the teacher's depth and camera or ray predictions, weighted by the teacher's confidence. Following OTT3R~\cite{ott3r}, we will use wide-baseline, strided view sampling to ensure that students learn camera poses as well as local geometry.
+
+\paragraph{Test-time optimization.}
+At inference, we will optimize camera parameters $\mathbf{g}_i$ and depth corrections using multi-view consistency objectives. Candidate losses include reprojection error on correspondences and photometric or feature-metric consistency between views warped using the predicted depths and poses. We will evaluate whether this optimization compensates for errors introduced by model compression.
+
+\begin{comment}
 \begin{itemize}
     \item \textbf{Teacher} \todo{decide}: VGGT (1.26B, public code, predicts tracks usable for BA), DéjàView, or $\pi^3$
     \item \textbf{Students:} progressively smaller variants of the teacher architecture
@@ -39,11 +75,19 @@
         \item \todo{?}
     \end{itemize}
 \end{itemize}
+\end{comment}
 
 \subsection{Training}
+
+We will select subsets of existing multi-view datasets with ground-truth geometry, such as CO3Dv2~\cite{co3dv2}, DL3DV~\cite{dl3dv}, and BlendedMVS~\cite{blendedmvs}. To broaden scene diversity, we may also use MegaDepth~\cite{megadepth}, ScanNet++~\cite{scannetpp}, Hypersim~\cite{hypersim}, or Virtual KITTI 2~\cite{virtualkitti2}.
+
+Alternatively, following OTT3R~\cite{ott3r}, we will precompute teacher predictions as pseudo-labels. OTT3R uses 667K images across six datasets, requiring 283\,GB of storage. Distillation allows the student to learn the teacher's predictions directly, while ground-truth supervision remains an alternative or complement.
+
+\begin{comment}
 \begin{itemize}
-    \item Candidate data: subsets of the teachers' training sets that also have ground truth, \eg CO3Dv2, DL3DV, BlendedMVS, MegaDepth, ScanNet++ \cite{scannetpp} (train split), Hypersim, Virtual KITTI 2 \cite{vggt,dejaview}; OTT3R uses CO3D, MegaDepth, ARKitScenes, ScanNet++ \cite{scannetpp}, Habitat and BlendedMVS (667K images) with its own pseudo-labeling pipeline \cite{ott3r}
+    \item Candidate data: subsets of the teachers' training sets that also have ground truth, \eg CO3Dv2~\cite{co3dv2}, DL3DV~\cite{dl3dv}, BlendedMVS~\cite{blendedmvs}, MegaDepth~\cite{megadepth}, ScanNet++~\cite{scannetpp} (train split), Hypersim~\cite{hypersim}, Virtual KITTI 2~\cite{virtualkitti2}; OTT3R uses CO3D, MegaDepth, ARKitScenes, ScanNet++ \cite{scannetpp}, Habitat and BlendedMVS (667K images) with its own pseudo-labeling pipeline \cite{ott3r}
     \item \todo{Why not just train on ground truth labels?}
     \item Teacher outputs precomputed offline (OTT3R: 667K images in 283\,GB)
     \item Evaluation scenes stay out of the distillation data
 \end{itemize}
+\end{comment}

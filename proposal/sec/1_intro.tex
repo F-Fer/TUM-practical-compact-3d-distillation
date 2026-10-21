@@ -2,27 +2,45 @@
 \label{sec:intro}
 
 \subsection{Motivation}
-Classical structure-from-motion (SfM) pipelines, such as COLMAP~\cite{sfm}, reconstruct 3D scenes through feature matching, camera pose estimation, triangulation and bundle adjustment (BA). While effective, these pipelines can be slow and fail when there is little texture, limited overlap or sparse view collections.
 
-Feed-forward multi-view transformers, such as DUSt3R~\cite{dust3r} and VGGT~\cite{vggt}, offer an alternative by predicting camera parameters and 3D point maps directly from images. These models can provide robust initial reconstruction. However, they are accompanied by a substantial model size: VGGT for instance contains around 1.26B parameters.
+Despite the progress of feed-forward 3D reconstruction, achieving high reconstruction quality with limited computational resources remains challenging. Large models can be expensive to deploy, while reducing their size may compromise their predictions.
 
+We propose to investigate whether test-time optimization (TTO) can compensate for the quality lost when distilling a large reconstruction model into a smaller student.
+
+\subsection{Research Questions}
+
+We investigate this trade-off through three research questions:
+
+\begin{itemize}
+    \item \textbf{Q1:} How small can a distilled student become while still providing an initialization from which TTO reaches teacher-level quality?
+    \item \textbf{Q2:} Which initialization errors can TTO correct, such as small pose errors, scale drift, and depth noise, and which remain difficult to resolve?
+    \item \textbf{Q3:} At matched total compute, is a compact model with TTO competitive with a large feed-forward model?
+\end{itemize}
+
+\begin{comment}
+\subsection{Motivation}
 \begin{itemize}
     \item Classical SfM (COLMAP \cite{sfm}): matching, pose estimation, triangulation and bundle adjustment (BA); accurate when it converges, but slow and brittle with little texture, little overlap or few views
     \item Feed-forward multi-view transformers (DUSt3R \cite{dust3r}, VGGT~ \cite{vggt}) regress cameras, depth and point maps in one pass and stay robust where SfM fails
     \item Progress came mostly from scaling: VGGT has 1.26B parameters
-    \item At similar size, the fully trained DéjàView roughly matches $\pi^3$, while the cheaply distilled OTT3R student falls short \cite{dejaview,ott3r}. At small training budgets the limit is training compute. TTO spends compute per scene instead
+    \item Capacity is not everything: DéjàView (117M) beats VGGT \cite{dejaview}; OTT3R distills $\pi^3$ (959M) into a 102M student \cite{ott3r}
+    \item At similar size, the fully trained DéjàView roughly matches $\pi^3$, while the cheaply distilled OTT3R student falls short \cite{dejaview,ott3r}. At small training budgets the limit is training compute, not parameters. TTO spends compute per scene instead
+    \item Feed-forward predictions are not final: BA on top of VGGT raises AUC@3 on IMC from 39.2 to 66.4 for $\sim$1.6\,s extra \cite{vggt}; test-time methods improve pretrained models further \cite{test3r,reconstructionpriors}
     \item Gap: model compression and TTO have so far been studied separately; how they trade off at a fixed compute budget is open \todo{double-check with a literature search}
 \end{itemize}
 
 \subsection{Research Questions}
 \begin{itemize}
     \item \textbf{RQ1:} How small can a distilled student become while still providing an initialization from which TTO reaches teacher-level quality?
-    \item \textbf{RQ2:} At matched total compute, is a compact model with TTO competitive with a large feed-forward model?
+    \item \textbf{RQ2:} Which initialization errors can TTO correct (\eg small pose errors, scale drift, depth noise) and which not (\eg symmetric scenes, low overlap)?
+    \item \textbf{RQ3:} At matched total compute (forward pass + optimization), is a compact model with TTO competitive with a large feed-forward model?
 \end{itemize}
 
 \subsection{Contributions (planned)}
 \begin{itemize}
     \item A family of compact students distilled from VGGT/DéjàView 
     \item A compute-matched study of student size $\times$ TTO budget with Pareto curves against the teachers
-    \item one methodological contribution. Hard to plan at this point in time.
+    \item An analysis of which initialization errors TTO recovers
+    \item \todo{one methodological contribution, see candidates in Sec.~\ref{sec:approach}}
 \end{itemize}
+\end{comment}
