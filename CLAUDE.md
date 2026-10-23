@@ -4,20 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This directory has no code, build system or tests yet. It is a git repository whose `main` branch tracks `origin/main` at git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. `proposal/` holds the LaTeX project proposal (CVPR template, one file per section in `proposal/sec/`, bibliography in `proposal/main.bib`). It is written in Overleaf, and `preamble.tex` and `cvpr.sty` exist only there, so it doesn't compile locally as-is. `presentation/` holds the Beamer slides (`slides.tex`) of the proposal presentation on 22.10.26, built locally with latexmk. Both still describe the original distillation plan (see "Plan change" below).
+The repository is git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git, and the work is split across branches:
 
-`docs/` holds reference PDFs (gitignored; each clone downloads them from the links in `README.md`) for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth):
+- `main`: `README.md` (reference links), `.gitignore` and this file.
+- `proposal`: also holds `proposal/`, the LaTeX project proposal (CVPR template, one file per section in `proposal/sec/`, bibliography in `proposal/main.bib`). It is written in Overleaf, and `preamble.tex` and `cvpr.sty` exist only there, so it doesn't compile locally as-is. The compiled PDF is in `docs/`.
+- `benchmarks`: the DA3 benchmark setup described under "Setup and commands" (see also "Plan change" below).
 
-- `Generative AI From Diffusion to World Models.pdf`: the course kickoff slides, covering structure, deadlines and the 8 project topics.
+The Beamer slides of the proposal presentation (22.10.26) aren't in any branch. The proposal and slides still describe the original distillation plan.
+
+`docs/` holds reference PDFs (gitignored; each clone downloads them from the links in `README.md`, so the set and the filenames differ between machines) for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth). On this machine it has:
+
 - `VGGT.pdf`: *VGGT: Visual Geometry Grounded Transformer* (Wang et al., CVPR 2025, arXiv 2503.11651). It is a feed-forward transformer that predicts cameras, point maps, depth maps and point tracks for 1 to hundreds of views in one pass. Code is at https://github.com/facebookresearch/vggt.
-- `Déjà-View.pdf`: *DéjàView: Looping Transformers for Multi-View 3D Reconstruction* (NVIDIA, arXiv 2605.30215). It applies one shared transformer block recurrently for K refinement steps, and K is a compute knob you set at inference time. It matches much larger feed-forward models with far fewer parameters.
-- `OTT3R.pdf`: *OTT3R* (Leblanc & Poullis, ACCV 2026, arXiv 2609.36374). It distills π³ (959M) into a 102M student on 2 GPUs, using an offline cache of teacher pseudo-labels. It is purely feed-forward with no test-time optimization, and it is the closest prior work. Code is at https://github.com/TheFourthKaramazov/OTT3R.
+- `dejaview.pdf`: *DéjàView: Looping Transformers for Multi-View 3D Reconstruction* (NVIDIA, arXiv 2605.30215). It applies one shared transformer block recurrently for K refinement steps, and K is a compute knob you set at inference time. It matches much larger feed-forward models with far fewer parameters.
+- `OTT3R.pdf`: *OTT3R* (Leblanc & Poullis, ACCV 2026, arXiv 2609.36374). It distills π³ (959M) into a 102M student on 2 GPUs, using an offline cache of teacher pseudo-labels. It is purely feed-forward with no test-time optimization. It was the closest prior work for the distillation plan. Code is at https://github.com/TheFourthKaramazov/OTT3R.
+- `DA3.pdf`: *Depth Anything 3* (see the section below).
+- `Test3R.pdf`: *Test3R: Learning to Reconstruct 3D at Test Time* (Yuan et al., NUS, arXiv 2506.13750). It fine-tunes DUSt3R at test time (prompt tuning) with a self-supervised loss: for an image triplet (I1, I2, I3), the pointmaps of I1 predicted from the pairs (I1, I2) and (I1, I3) must agree. Code is at https://github.com/nopQAQ/Test3R.
+- `Compact_Feed_Forward_3D_Reconstruction_through_Distillation_and_Test_Time_Optimization.pdf`: our submitted proposal.
 
-When code is added, update this file with the real setup, training and evaluation commands.
+The course kickoff slides ("Generative AI From Diffusion to World Models", covering structure, deadlines and the 8 project topics) aren't in `docs/` on this machine; the course facts below come from them.
+
+### Setup and commands
+
+There are no tests or linters. Third-party code lives in git submodules under `third_party/` (currently only `Depth-Anything-3`, pinned) and is never patched; our code is in `scripts/`. The environment is a uv project (`pyproject.toml` + `uv.lock`, Python 3.11, torch 2.5.1 cu121, so NVIDIA driver ≥ 530). DA3 is installed editable from the submodule; its package metadata misses `addict` and `scikit-learn`, which our `pyproject.toml` adds. Keep `open3d==0.19.0`: in 0.20.0 `ScalableTSDFVolume` produces empty meshes, and DA3's `sample_points_from_mesh` silently replaces those with random points in [-1, 1]³, so recon metrics collapse (F1 ≈ 1%) without any error.
+
+```sh
+git submodule update --init                # after cloning
+uv sync                                    # creates .venv
+scripts/download_bench.sh [hiroom ...]     # DA3-BENCH into workspace/benchmark_dataset/ (~41 GB for all six)
+uv run scripts/run_bench.py depth-anything/DA3-SMALL "eval.datasets=[hiroom]" "eval.modes=[pose]"
+uv run scripts/compare_paper.py [--save]   # ours vs DA3 paper Tables 2/3; --save copies into results/da3_bench/
+```
+
+- `workspace/` (gitignored) holds everything large and machine-local: benchmark data, predictions and logs. The DA3 evaluator resolves data paths as `workspace/benchmark_dataset/...` relative to the cwd, which is why `run_bench.py` changes to the repo root.
+- `run_bench.py <model> [overrides]` runs `depth_anything_3.bench.evaluator` in-process (overrides are its OmegaConf dotlist, e.g. `eval.datasets=[...]`, `eval.modes=[pose,recon_unposed,recon_posed]`, `eval.eval_only=true`). It writes to `workspace/evaluation/<model name>/` and additionally logs per-call forward time and peak GPU memory to `timings.jsonl` there by wrapping `DepthAnything3.forward`/`inference`.
+- Predictions are stored per scene as `model_results/<dataset>/<scene>/{unposed,posed}/exports/mini_npz/results.npz`, and `eval.eval_only=true` re-scores them without inference. A TTO method can rewrite these files in place (same format) and reuse the evaluator's metrics unchanged.
+- Committed results: `results/da3_bench/<model>/` (metric JSONs, timing logs, `comparison.md`).
 
 ### Reading the PDFs
 
-`poppler` isn't installed, so the Read tool cannot render these PDFs, and `pypdf` and `fitz` are missing too. Use macOS PDFKit through JXA to extract text instead (quote the paths, since the filenames contain spaces and non-ASCII characters):
+On Linux, `pdftotext` (poppler) is installed: `pdftotext -f 3 -l 5 docs/DA3.pdf -` prints pages 3 to 5 to stdout. On macOS without poppler, use PDFKit through JXA instead (quote the path):
 
 ```sh
 osascript -l JavaScript -e "ObjC.import('PDFKit'); var d=\$.PDFDocument.alloc.initWithURL(\$.NSURL.fileURLWithPath('$PWD/docs/VGGT.pdf')); var s=''; for (var i=0;i<d.pageCount;i++) s += d.pageAtIndex(i).string.js + '\n'; s"
@@ -47,7 +72,7 @@ Milestones from the kickoff slides:
 We don't have enough compute to distill a large teacher properly, so we dropped distillation (milestone 2) and focus on test-time optimization (TTO):
 
 - **Models:** instead of distilling our own students, we use pretrained models of different sizes, most likely the three smallest any-view Depth Anything 3 models (DA3-Small, DA3-Base and DA3-Large, see below).
-- **TTO:** we compare several TTO methods on top of each model. The candidates from the presentation refine cameras and depth maps using reprojection error on correspondences (sparse, robust to a poor initialization, e.g. bundle adjustment), photometric consistency (dense, needs a good initialization) or feature-metric consistency (dense, more robust to lighting and viewpoint). Test3R is related work.
+- **TTO:** we compare several TTO methods on top of each model. The candidates from the presentation refine cameras and depth maps using reprojection error on correspondences (sparse, robust to a poor initialization, e.g. bundle adjustment), photometric consistency (dense, needs a good initialization) or feature-metric consistency (dense, more robust to lighting and viewpoint). Test3R (`docs/Test3R.pdf`) is related work, though it optimizes network parameters rather than the outputs.
 - **Question:** at a matched compute budget (one forward pass plus T TTO iterations), which model size, TTO method and T give the best reconstruction? Can a smaller model with TTO match a larger model's feed-forward prediction?
 
 Tasks for the week of 23.10.26:
@@ -68,7 +93,7 @@ Evaluation conventions both papers use: predictions are aligned to ground truth 
 
 ### Depth Anything 3
 
-*Depth Anything 3: Recovering the Visual Space from Any Views* (arXiv 2511.10647, not in `docs/` yet). Code is at https://github.com/ByteDance-Seed/Depth-Anything-3. These are the any-view checkpoints on Hugging Face, with parameter counts from the repo README:
+*Depth Anything 3: Recovering the Visual Space from Any Views* (arXiv 2511.10647, `docs/DA3.pdf`). Code is at https://github.com/ByteDance-Seed/Depth-Anything-3. These are the any-view checkpoints on Hugging Face, with parameter counts from the repo README:
 
 | Checkpoint | Params | License |
 |---|---|---|

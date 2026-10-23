@@ -1,0 +1,32 @@
+[project]
+name = "compact-3d-tto"
+version = "0.1.0"
+description = "Compact feed-forward 3D reconstruction + test-time optimization (TUM practical, Project 07)"
+requires-python = "==3.11.*"
+dependencies = [
+    # cu121 wheels: run on NVIDIA drivers >= 530 (CUDA 12.1+)
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "xformers==0.0.28.post3",
+    "depth-anything-3",
+    "huggingface_hub[cli]",
+    # imported by DA3 but missing from its package metadata
+    "addict",
+    "scikit-learn",
+    # 0.20.0 ScalableTSDFVolume integrates nothing (empty meshes -> broken recon metrics)
+    "open3d==0.19.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+xformers = { index = "pytorch-cu121" }
+depth-anything-3 = { path = "third_party/Depth-Anything-3", editable = true }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
