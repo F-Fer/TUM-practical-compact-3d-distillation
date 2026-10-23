@@ -32,7 +32,7 @@ git submodule update --init                # after cloning
 uv sync                                    # creates .venv
 scripts/download_bench.sh [hiroom ...]     # DA3-BENCH into workspace/benchmark_dataset/ (~41 GB download, ~79 GB extracted, for all six)
 uv run scripts/run_bench.py depth-anything/DA3-SMALL "eval.datasets=[hiroom]" "eval.modes=[pose]"
-scripts/run_bench_loop.sh [overrides]      # SMALL, BASE, LARGE-1.1 in turn, then compare_paper.py
+scripts/run_bench_loop.sh [overrides]      # SMALL, BASE in turn, then compare_paper.py (LARGE: see below)
 uv run scripts/compare_paper.py [--save]   # ours vs DA3 paper Tables 2/3; --save copies into results/da3_bench/
 ```
 
@@ -42,6 +42,24 @@ uv run scripts/compare_paper.py [--save]   # ours vs DA3 paper Tables 2/3; --sav
 - Committed results: `results/da3_bench/<model>/` (metric JSONs, timing logs, `comparison.md`), created by `compare_paper.py --save`. The paper's Table 2/3 values are hard-coded in `compare_paper.py`, which matches a run directory to them by the `-small`/`-base`/`-large` substring of its name.
 - Runtime: inference is cheap, but recon scoring dominates: ~95% of it is the scipy KDTree nearest-neighbour query in DA3's `bench/utils.py`, which is single-threaded. `run_bench.py` patches `KDTree.query` to `workers=-1` (identical metrics, ~7x faster on 16 cores; HiRoom scene 54 s → 8 s). TSDF fusion (~8 s per scene, 4 parallel workers) is the next cost. A full benchmark of one model takes hours, so start long runs in their own tmux session (`tmux new -d -s bench "uv run scripts/run_bench.py ..."`), not as a Claude background task, which dies when Claude exits.
 - GPU budget: the only machines are an RTX 3070 (8 GB) and an RTX 3080 (10 GB). Size every benchmark and TTO run for ≤ 8 GB; DA3-Giant and VGGT-1B at 100 frames don't fit.
+
+### Open problem: DA3-LARGE-1.1 runs out of GPU memory
+
+On the 3080, LARGE-1.1 crashes with CUDA OOM already on an 18-frame HiRoom scene, so `run_bench_loop.sh` currently runs only SMALL and BASE. Measured peak memory of one forward pass (504×504, bf16 autocast, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`):
+
+| Model | 18 frames | 40 | 60 | 100 |
+|---|---|---|---|---|
+| LARGE-1.1 as-is | 6.96 GiB (9.2 reserved without expandable segments) | – | – | OOM |
+| LARGE-1.1 + both fixes below | 3.77 GiB | 6.39 | 8.11 | OOM |
+| BASE as-is / head chunk 2 | – | – | – | 8.91 / 7.73 GiB |
+| SMALL as-is | – | – | – | 4.70 GiB |
+
+Where the memory goes (all in `third_party/.../model/`):
+- `dinov2/vision_transformer.py` `_get_intermediate_layers_not_chunked` keeps the 4 output layers as fp32 `[1, S, 1297, 2048]` tensors (~1 GiB each at 100 frames). `get_intermediate_layers` then builds normalized copies while the originals stay alive, because `camera_tokens` are views into them. Fix 1 (bit-identical outputs): clone the camera tokens and normalize the second half of the channels in place.
+- `dualdpt.py` `DualDPT.forward` runs the depth head in fp32 on `chunk_size=8` frames at a time (`da3.py` doesn't pass it). Fix 2: `chunk_size=2` saves ~2.5 GiB; depth changes by ≤ 2e-4 (cuDNN batch-size effects), so not bit-identical.
+- At 100 frames even with both fixes, the backbone OOMs around block 14 of 24: weights 1.5 GiB + the 4 stored outputs (~4 GiB) + ~3 GiB transient per block.
+
+Planned fix, not implemented yet: offload each stored output layer to CPU as it is produced and move only the head's current frame chunk back to the GPU (patched from `scripts/`, like the timing and KDTree patches). Estimated 100-frame peak 5–6 GiB with identical numbers, at ~4 GiB PCIe transfer per scene. The alternatives (fewer frames for LARGE, or LARGE only on HiRoom/DTU) break comparability with the paper's Tables 2/3. The same patch would also let BASE fit on the 8 GB 3070.
 
 ### Reading the PDFs
 

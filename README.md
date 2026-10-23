@@ -43,7 +43,7 @@ uv run scripts/run_bench.py depth-anything/DA3-SMALL "eval.datasets=[hiroom]" "e
 uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.eval_only=true
 ```
 
-The models we use are `depth-anything/DA3-SMALL`, `depth-anything/DA3-BASE` and `depth-anything/DA3-LARGE-1.1`. They are downloaded from Hugging Face on first use.
+The models we use are `depth-anything/DA3-SMALL`, `depth-anything/DA3-BASE` and `depth-anything/DA3-LARGE-1.1`. They are downloaded from Hugging Face on first use. DA3-LARGE-1.1 doesn't fit into 10 GB of GPU memory yet (see "Open problem" in `CLAUDE.md`), so for now we only benchmark SMALL and BASE.
 
 A full run of one model takes several hours, most of it scoring the reconstructions on the CPU. On a remote machine, start it in tmux so it keeps running after you disconnect:
 
@@ -51,11 +51,11 @@ A full run of one model takes several hours, most of it scoring the reconstructi
 tmux new -d -s bench "uv run scripts/run_bench.py depth-anything/DA3-SMALL 2>&1 | tee workspace/bench_small.log"
 ```
 
-To benchmark all three models one after another, use `scripts/run_bench_loop.sh`. It runs DA3-SMALL, DA3-BASE and DA3-LARGE-1.1 in turn and then prints the comparison with the paper. If one model fails, it continues with the next. Any arguments are passed to every run as evaluator overrides, and each model logs to `workspace/bench_<model>.log`.
+To benchmark several models one after another, use `scripts/run_bench_loop.sh`. It runs DA3-SMALL and DA3-BASE in turn and then prints the comparison with the paper. If one model fails, it continues with the next. Any arguments are passed to every run as evaluator overrides, and each model logs to `workspace/bench_<model>.log`.
 
 ```sh
 scripts/run_bench_loop.sh "eval.datasets=[hiroom]"    # quick check of the whole loop
-tmux new -d -s bench scripts/run_bench_loop.sh        # full benchmark of all three models
+tmux new -d -s bench scripts/run_bench_loop.sh        # full benchmark of all models in the loop
 ```
 
 To check on a tmux run, use `tmux attach -t bench` and detach with Ctrl-b d, or follow a log with `tail -f workspace/bench_DA3-BASE.log`.

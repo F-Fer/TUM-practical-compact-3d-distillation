@@ -7,7 +7,7 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
-for m in DA3-SMALL DA3-BASE DA3-LARGE-1.1; do
+for m in DA3-SMALL DA3-BASE; do  # DA3-LARGE-1.1 runs out of GPU memory, see CLAUDE.md
     uv run scripts/run_bench.py "depth-anything/$m" "$@" 2>&1 | tee "workspace/bench_$m.log"
 done
 uv run scripts/compare_paper.py
