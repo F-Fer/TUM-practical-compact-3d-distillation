@@ -1,0 +1,38 @@
+tum1 is set up, so you can continue there:
+
+ssh tum1
+cd ~/dev/TUM-practical-compact-3d-distillation
+claude
+
+The first start asks you to log in.
+
+On tum1:
+- Repo: ~/dev/TUM-practical-compact-3d-distillation on branch benchmarks at your commit 92d0f71, with the DA3 submodule checked out at the pinned commit. I used ~/dev rather than /dev, which is the system's device directory.
+- Environment: uv is installed, and uv sync --locked built the same environment as here (torch 2.5.1+cu121, open3d 0.19.0). The GPU check passed on the 3080.
+- Data: the full benchmark download is running in the tmux session download, with its log in workspace/download.log. HiRoom and 7-Scenes were done within about a minute, so the full 41 GB should finish in roughly 15 minutes. To watch it, run tmux attach -t download and detach with Ctrl-b d.
+- Claude Code: version 2.1.309 is installed in ~/.local/bin but not logged in.
+
+Context for the new session:
+- CLAUDE.md in the repo already has the setup, the commands and the Open3D pitfall.
+- I copied my memory files to the matching project folder on tum1. Besides the hardware notes, there's a new status note with the pilot results, the Open3D bug, the timings and the next steps. A session started in that directory picks them up.
+- The next step is in that note: run the full benchmark in tmux for DA3-SMALL, then BASE, then LARGE-1.1, one after another on the single GPU. Then run compare_paper.py --save and commit the results. Expect roughly 8–10 hours in total.
+
+The ScanNet++/ETH3D download on this laptop is still running in the background. It's no longer needed for the benchmark runs, but it gives you local data for debugging TTO code later. Should I stop it to free up the WiFi?
+
+✻ Cogitated for 2m 48s · done 11:53 AM
+
+❯ How long does the download still take? How can I open a claude code session that does not quit if I close the ssh connection?
+
+  Ran 2 shell commands
+
+Download: on tum1 it's already finished. All six datasets are extracted (about 79 GB), so the benchmark can start right away. The download on this laptop has 3.7 of ETH3D's 15 GB after about 20 minutes, which at about 3 MB/s means roughly another hour.
+
+A Claude Code session that survives disconnects: run it inside tmux on tum1. This command creates the session the first time and reattaches to it after that:
+
+ssh -t tum1 'tmux new -A -s claude -c ~/dev/TUM-practical-compact-3d-distillation ~/.local/bin/claude'
+
+- To detach and leave Claude running: press Ctrl-b, then d. Closing the terminal or losing WiFi has the same effect, because the session keeps running on tum1.
+- To reconnect: run the same command again; it reattaches to the running session.
+- If the session ever ends: start it again the same way and run /resume inside Claude to pick up the previous conversation.
+
+One recommendation for the multi-hour benchmark runs: have Claude start each one in its own tmux session, for example tmux new -d -s bench "uv run scripts/run_bench.py ...", and not as a Claude background task. Background tasks stop when Claude exits, while a separate tmux session keeps running even if you restart Claude.
