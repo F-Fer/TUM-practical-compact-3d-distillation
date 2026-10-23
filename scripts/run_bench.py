@@ -12,6 +12,7 @@ Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is gi
     runs.jsonl                        one line per invocation (machine, versions, wall time)
 """
 
+import functools
 import json
 import os
 import platform
@@ -21,8 +22,15 @@ import time
 from datetime import datetime
 
 import torch
+from scipy.spatial import KDTree
 
-from depth_anything_3.api import DepthAnything3
+# Recon scoring spends ~95% of its time in single-threaded KDTree queries (bench/utils.py
+# nn_correspondance); querying on all cores gives identical distances, ~7x faster
+KDTree.query = functools.partialmethod(KDTree.query, workers=-1)
+
+# DA3's logger reads its level once at import; its per-call INFO timings duplicate timings.jsonl
+os.environ.setdefault("DA3_LOG_LEVEL", "WARN")
+from depth_anything_3.api import DepthAnything3  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

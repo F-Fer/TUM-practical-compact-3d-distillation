@@ -30,15 +30,18 @@ There are no tests or linters. Third-party code lives in git submodules under `t
 ```sh
 git submodule update --init                # after cloning
 uv sync                                    # creates .venv
-scripts/download_bench.sh [hiroom ...]     # DA3-BENCH into workspace/benchmark_dataset/ (~41 GB for all six)
+scripts/download_bench.sh [hiroom ...]     # DA3-BENCH into workspace/benchmark_dataset/ (~41 GB download, ~79 GB extracted, for all six)
 uv run scripts/run_bench.py depth-anything/DA3-SMALL "eval.datasets=[hiroom]" "eval.modes=[pose]"
+scripts/run_bench_loop.sh [overrides]      # SMALL, BASE, LARGE-1.1 in turn, then compare_paper.py
 uv run scripts/compare_paper.py [--save]   # ours vs DA3 paper Tables 2/3; --save copies into results/da3_bench/
 ```
 
 - `workspace/` (gitignored) holds everything large and machine-local: benchmark data, predictions and logs. The DA3 evaluator resolves data paths as `workspace/benchmark_dataset/...` relative to the cwd, which is why `run_bench.py` changes to the repo root.
-- `run_bench.py <model> [overrides]` runs `depth_anything_3.bench.evaluator` in-process (overrides are its OmegaConf dotlist, e.g. `eval.datasets=[...]`, `eval.modes=[pose,recon_unposed,recon_posed]`, `eval.eval_only=true`). It writes to `workspace/evaluation/<model name>/` and additionally logs per-call forward time and peak GPU memory to `timings.jsonl` there by wrapping `DepthAnything3.forward`/`inference`.
+- `run_bench.py <model> [overrides]` runs `depth_anything_3.bench.evaluator` in-process (overrides are its OmegaConf dotlist, e.g. `eval.datasets=[...]`, `eval.modes=[pose,recon_unposed,recon_posed]`, `eval.eval_only=true`). It writes to `workspace/evaluation/<model name>/` and additionally logs per-call forward time and peak GPU memory to `timings.jsonl` there by wrapping `DepthAnything3.forward`/`inference`, plus one line per invocation (host, GPU, versions, wall time) to `runs.jsonl`. `workspace.work_dir=...` overrides the output directory, so runs of the same model (e.g. with and without TTO) don't overwrite each other.
 - Predictions are stored per scene as `model_results/<dataset>/<scene>/{unposed,posed}/exports/mini_npz/results.npz`, and `eval.eval_only=true` re-scores them without inference. A TTO method can rewrite these files in place (same format) and reuse the evaluator's metrics unchanged.
-- Committed results: `results/da3_bench/<model>/` (metric JSONs, timing logs, `comparison.md`).
+- Committed results: `results/da3_bench/<model>/` (metric JSONs, timing logs, `comparison.md`), created by `compare_paper.py --save`. The paper's Table 2/3 values are hard-coded in `compare_paper.py`, which matches a run directory to them by the `-small`/`-base`/`-large` substring of its name.
+- Runtime: inference is cheap, but recon scoring dominates: ~95% of it is the scipy KDTree nearest-neighbour query in DA3's `bench/utils.py`, which is single-threaded. `run_bench.py` patches `KDTree.query` to `workers=-1` (identical metrics, ~7x faster on 16 cores; HiRoom scene 54 s → 8 s). TSDF fusion (~8 s per scene, 4 parallel workers) is the next cost. A full benchmark of one model takes hours, so start long runs in their own tmux session (`tmux new -d -s bench "uv run scripts/run_bench.py ..."`), not as a Claude background task, which dies when Claude exits.
+- GPU budget: the only machines are an RTX 3070 (8 GB) and an RTX 3080 (10 GB). Size every benchmark and TTO run for ≤ 8 GB; DA3-Giant and VGGT-1B at 100 frames don't fit.
 
 ### Reading the PDFs
 
@@ -104,7 +107,7 @@ Evaluation conventions both papers use: predictions are aligned to ground truth 
 
 The `-1.1` checkpoints were retrained after a training bug fix and replace the deprecated `DA3-LARGE` and `DA3-GIANT`. It isn't clear which checkpoints produced the paper's numbers, so if DA3-Large doesn't match, try the deprecated `DA3-LARGE` as well. There is a separate monocular series (`DA3MONO-LARGE`, `DA3METRIC-LARGE`), which we don't use.
 
-**Benchmark:** the repo documents it in `docs/BENCHMARK.md`. The preprocessed data is the Hugging Face dataset `depth-anything/DA3-BENCH`, and the dataset paths are set in `src/depth_anything_3/utils/constants.py`. Run it with `python -m depth_anything_3.bench.evaluator model.path=depth-anything/DA3-SMALL`. To run less, add `eval.datasets=[hiroom]` or `eval.modes=[pose,recon_unposed]`. The doc only shows `DA3-GIANT`, so it is untested whether `model.path` accepts the smaller variants.
+**Benchmark:** the repo documents it in `docs/BENCHMARK.md`. The preprocessed data is the Hugging Face dataset `depth-anything/DA3-BENCH`, and the dataset paths are set in `src/depth_anything_3/utils/constants.py`. Run it with `python -m depth_anything_3.bench.evaluator model.path=depth-anything/DA3-SMALL`. To run less, add `eval.datasets=[hiroom]` or `eval.modes=[pose,recon_unposed]`. The doc only shows `DA3-GIANT`, but `model.path` also accepts the smaller variants: a DA3-SMALL pilot on HiRoom matched the paper within 0.5 points.
 
 - **Datasets:** HiRoom, ETH3D, DTU (DTU-64 for pose, DTU-49 for reconstruction), 7-Scenes and ScanNet++. At most 100 frames per scene are used (`max_frames`).
 - **Metrics:** the paper reports all four model sizes. Pose is reported as AUC@3/AUC@30 (Table 2). Reconstruction is reported as F1 after TSDF fusion, or Chamfer distance in mm on DTU (Table 3), each without and with ground-truth poses as input. These metrics differ from the VGGT/DéjàView conventions above.
