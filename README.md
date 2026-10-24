@@ -10,12 +10,14 @@ Requirements: an NVIDIA GPU with driver ≥ 530 (CUDA 12.1 wheels), [uv](https:/
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
 cd TUM-practical-compact-3d-distillation
 # in an existing clone: git submodule update --init
-uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3 from third_party/)
+uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3 and VGGT from third_party/)
 ```
 
 Third-party code lives in git submodules under `third_party/` and isn't modified; our code is in `scripts/`.
 
 Don't upgrade `open3d` past 0.19.0. In 0.20.0, TSDF fusion produces empty meshes, and the reconstruction metrics silently drop to F1 ≈ 1%.
+
+`pycolmap` is pinned to 3.10.0 because VGGT's bundle adjustment code uses its API, which was removed in 3.12. This breaks DA3's COLMAP export, which the benchmark doesn't use.
 
 ## DA3 benchmark
 
