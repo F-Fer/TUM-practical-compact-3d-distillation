@@ -1,0 +1,2 @@
+{"started": "2026-10-24T08:48:44", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "depth-anything/DA3-LARGE-1.1", "overrides": ["inference.num_fusion_workers=1", "eval.datasets=[hiroom]"], "wall_s": 461.0238842389663}
+{"started": "2026-10-24T09:35:13", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "depth-anything/DA3-LARGE-1.1", "overrides": ["inference.num_fusion_workers=1", "eval.eval_only=true"], "wall_s": 3244.9452022320474}

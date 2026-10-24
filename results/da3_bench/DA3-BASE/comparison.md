@@ -9,4 +9,4 @@ Ours (difference to paper). F1 and AUC in %, DTU Chamfer distance in mm.
 | Recon w/o GT pose | 23.36 (-2.54) | 48.14 (-1.36) | 2.91 (+0.04) | 49.68 (-0.22) | 47.71 (+0.51) |
 | Recon w/ GT pose | 72.12 (+0.72) | 66.32 (-0.38) | 1.96 (-0.40) | 49.81 (-0.79) | 67.32 (-0.48) |
 
-285 inference calls, forward total 6.3 min, max peak memory 7.02 GiB.
+206 inference calls, forward total 5.8 min, max peak memory 7.02 GiB.

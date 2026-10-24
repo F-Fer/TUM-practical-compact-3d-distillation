@@ -21,8 +21,10 @@ import sys
 import time
 from datetime import datetime
 
-import torch
-from scipy.spatial import KDTree
+# Fragmentation alone made DA3-LARGE-1.1 reserve 9.2 GiB for 7 GiB of tensors; must be set before CUDA init
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+import torch  # noqa: E402
+from scipy.spatial import KDTree  # noqa: E402
 
 # Recon scoring spends ~95% of its time in single-threaded KDTree queries (bench/utils.py
 # nn_correspondance); querying on all cores gives identical distances, ~7x faster
@@ -31,6 +33,12 @@ KDTree.query = functools.partialmethod(KDTree.query, workers=-1)
 # DA3's logger reads its level once at import; its per-call INFO timings duplicate timings.jsonl
 os.environ.setdefault("DA3_LOG_LEVEL", "WARN")
 from depth_anything_3.api import DepthAnything3  # noqa: E402
+
+import da3_lowmem  # noqa: E402
+
+# Keeps the backbone's output layers in CPU memory (bit-identical outputs); without it
+# DA3-LARGE-1.1 runs out of memory on 10 GB, see da3_lowmem.py
+da3_lowmem.install()
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
