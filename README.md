@@ -60,16 +60,22 @@ tmux new -d -s bench scripts/run_bench_loop.sh        # full benchmark of all mo
 
 To check on a tmux run, use `tmux attach -t bench` and detach with Ctrl-b d, or follow a log with `tail -f workspace/bench_DA3-BASE.log`.
 
-Results go to `workspace/evaluation/<model>/` (add `workspace.work_dir=<dir>` to choose another folder):
+### What is saved where
 
-| Path | Content |
+Each run writes to `workspace/evaluation/<model>/` (add `workspace.work_dir=<dir>` to choose another folder). `workspace/` is gitignored and exists only on the machine that ran the benchmark (for our runs: tum1). The predictions take about 16 GB per model.
+
+| Path in `workspace/evaluation/<model>/` | Content |
 |---|---|
-| `model_results/<dataset>/<scene>/{unposed,posed}/exports/mini_npz/results.npz` | predictions per scene |
-| `metric_results/<dataset>_<mode>.json` | metrics per dataset and mode |
-| `timings.jsonl` | forward time and peak GPU memory per inference call |
-| `runs.jsonl` | one line per run: host, GPU, versions, wall time |
+| `model_results/<dataset>/<scene>/{unposed,posed}/exports/mini_npz/results.npz` | the model's output for one scene: `depth` and `conf` (`[N, H, W]`), `extrinsics` (`[N, 3, 4]`, world-to-camera) and `intrinsics` (`[N, 3, 3]`), all float32, N frames. `unposed` is the run without GT cameras, `posed` the one with. A TTO method can overwrite these files and rescore them with `eval.eval_only=true` |
+| `model_results/.../exports/gt_meta.npz` | the ground-truth cameras (`extrinsics` `[N, 4, 4]`, `intrinsics`) and the paths of the N input images |
+| `model_results/.../exports/fuse/pcd.ply` | the TSDF-fused point cloud that the recon metrics score (~27 MB per scene) |
+| `metric_results/<dataset>_<mode>.json` | metrics per scene and their `mean`. Pose: `auc03`, `auc05`, `auc15`, `auc30`. Recon: `acc`, `comp`, `overall` (distances), `precision`, `recall`, `fscore` |
+| `timings.jsonl` | one line per forward pass: scene, posed or not, number of frames, input size, forward time, peak GPU memory. After a rerun, keep only the latest line per scene (we keep the full history in `timings.all.jsonl`) |
+| `runs.jsonl` | one line per finished `run_bench.py` call: host, GPU, versions, overrides, wall time. Runs that crashed have no line |
 
-`workspace/` is gitignored and holds all data, predictions and logs.
+The console logs are `workspace/bench_<model>*.log`. The benchmark data itself is in `workspace/benchmark_dataset/` (see "Download the data").
+
+Committed to git (`results/da3_bench/<model>/`, written by `compare_paper.py --save`): the metric JSONs, `timings.jsonl`, `runs.jsonl` and `comparison.md` (our numbers next to the paper's). The predictions and point clouds are too large and aren't committed. To get them on another machine, rerun the benchmark.
 
 ### Compare with the paper
 
@@ -79,6 +85,40 @@ uv run scripts/compare_paper.py --save     # also copy metrics, timings and comp
 ```
 
 Commit `results/da3_bench/`; it is our record of the baseline numbers.
+
+### What the benchmark measures
+
+Each scene is evaluated in three modes:
+
+- **Pose** (paper Table 2): the model gets only the images and predicts a camera per frame. After alignment to the ground truth, the relative pose errors between frames are scored as AUC@3° (strict) and AUC@30° (loose), in %.
+- **Recon without GT pose** (Table 3): the predicted depth maps and cameras are fused into a mesh (TSDF fusion) and compared with the ground-truth scan. The score is the F1 score in % (precision: are the predicted points close to the true surface; recall: is the true surface covered). DTU reports the Chamfer distance in mm instead (lower is better). This tests depth and cameras together.
+- **Recon with GT pose** (Table 3): the same, but the ground-truth cameras are given to the model as input and used for fusion, so it mostly tests the depth maps.
+
+| Dataset | What it is | Scenes, frames per scene | Modes |
+|---|---|---|---|
+| HiRoom | high-resolution indoor rooms | 30, 10–23 | all three |
+| ETH3D | high-resolution multi-view stereo (DSLR, indoor and outdoor, laser-scanned ground truth) | 11, 14–76 | all three |
+| DTU | small objects in a lab, robot-arm camera, structured-light scans | DTU-64: 13 scenes for pose; DTU-49: 22 × 49 views for recon | pose / recon |
+| 7-Scenes | Microsoft's Kinect RGB-D indoor scenes, made for camera relocalization | 7, 100 | all three |
+| ScanNet++ | high-quality indoor scans (laser scanner, DSLR, iPhone), recalibrated by the DA3 authors | 20, 100 | all three |
+
+At most 100 frames per scene are used. One model is 206 forward passes (103 scenes, each without and with GT pose).
+
+### Our results
+
+We ran the full benchmark for DA3-SMALL, DA3-BASE and DA3-LARGE-1.1 (October 2026, RTX 3080). Per-dataset numbers next to the paper's are in `results/da3_bench/<model>/comparison.md`. Most metrics are within ±1.5 points (pose) and ±3 F1 (recon) of the paper, and larger models are better: LARGE-1.1 > BASE > SMALL on every dataset and mode, except 7-Scenes recon with GT pose, where BASE (49.8 F1) beats LARGE-1.1 (48.2). The larger differences are:
+
+- **ScanNet++ pose is lower for all three models**: SMALL AUC@30 −3.6, BASE AUC@3 −4.9 and AUC@30 −2.6, LARGE-1.1 AUC@3 −3.6. Because all sizes are affected, this probably comes from the data or the evaluation, not from one checkpoint. Not investigated yet.
+- **LARGE-1.1 differs in both directions**: DTU pose AUC@3 +7.7, ETH3D pose AUC@3 +2.6, 7-Scenes recon without GT pose −5.9 F1.
+- Smaller ones inside the tolerance, e.g. BASE HiRoom recon without GT pose −2.5 F1 and SMALL ETH3D recon without GT pose −2.6 F1.
+
+### Why our numbers don't match the paper exactly
+
+- **The released code and data aren't exactly what the paper used.** The DA3 repo's own expected DA3-GIANT results (`docs/BENCHMARK.md` in the submodule) already differ from the paper by up to about 3 F1, so even the authors' setup doesn't reproduce the paper exactly. The ScanNet++ data, for example, was recalibrated.
+- **Checkpoints:** the `-1.1` checkpoints were retrained after a training bug fix. The paper's LARGE numbers probably come from the deprecated `DA3-LARGE`, which would explain why LARGE-1.1 deviates more, and in both directions. This is not verified yet (it would need a `DA3-LARGE` run).
+- **Hardware and library versions:** inference runs in bf16, and a different GPU or different CUDA/cuDNN kernels change the depth maps slightly. The RANSAC alignment and TSDF fusion can amplify such small changes into visible metric differences, especially AUC@3 and F1 on scenes where the result is borderline.
+
+Our own changes don't cause the differences. The pipeline is deterministic on our machine (repeated forward passes are bit-identical), the evaluation uses fixed seeds (42), and our patches (parallel KDTree queries, one fusion worker, `scripts/da3_lowmem.py`) were checked to give identical outputs.
 
 ## References
 
