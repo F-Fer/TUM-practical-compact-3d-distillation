@@ -5,4 +5,8 @@
 .idea
 .vscode
 
-__pychache__
+__pycache__
+.venv/
+
+# Benchmark data, predictions and logs (large, machine-local)
+workspace/
