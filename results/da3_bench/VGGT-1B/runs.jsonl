@@ -1,0 +1,1 @@
+{"started": "2026-10-26T16:15:54", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "facebook/VGGT-1B", "overrides": ["inference.num_fusion_workers=1"], "wall_s": 6680.496693834022}
