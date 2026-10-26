@@ -5,6 +5,10 @@ Usage (from anywhere; paths are resolved relative to the repo root):
 
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.datasets=[hiroom]
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.eval_only=true
+    uv run scripts/run_bench.py facebook/VGGT-1B eval.datasets=[hiroom]
+
+<model> is a DA3 checkpoint or one of the baselines in baselines.MODELS (VGGT, Pi3, DéjàView),
+which replace DepthAnything3 in the evaluator.
 
 Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is given:
     model_results/, metric_results/   written by the DA3 evaluator
@@ -34,6 +38,7 @@ KDTree.query = functools.partialmethod(KDTree.query, workers=-1)
 os.environ.setdefault("DA3_LOG_LEVEL", "WARN")
 from depth_anything_3.api import DepthAnything3  # noqa: E402
 
+import baselines  # noqa: E402
 import da3_lowmem  # noqa: E402
 
 # Keeps the backbone's output layers in CPU memory (bit-identical outputs); without it
@@ -48,14 +53,14 @@ def append_jsonl(path, record):
         f.write(json.dumps(record) + "\n")
 
 
-def install_timing_hooks(work_dir):
-    """Wrap DepthAnything3.forward/inference to record time and peak memory per call."""
+def install_timing_hooks(cls, work_dir):
+    """Wrap cls.forward/inference (DepthAnything3 or a baseline) to record time and peak memory per call."""
     timings_path = os.path.join(work_dir, "timings.jsonl")
     results_dir = os.path.join(work_dir, "model_results")
     last_forward = {}
 
-    orig_forward = DepthAnything3.forward
-    orig_inference = DepthAnything3.inference
+    orig_forward = cls.forward
+    orig_inference = cls.inference
 
     def forward(self, image, *args, **kwargs):
         torch.cuda.synchronize()
@@ -86,8 +91,8 @@ def install_timing_hooks(work_dir):
         )
         return out
 
-    DepthAnything3.forward = forward
-    DepthAnything3.inference = inference
+    cls.forward = forward
+    cls.inference = inference
 
 
 def main():
@@ -102,7 +107,12 @@ def main():
         os.path.join("workspace", "evaluation", os.path.basename(model.rstrip("/"))),
     )
     os.makedirs(work_dir, exist_ok=True)
-    install_timing_hooks(work_dir)
+    if model in baselines.MODELS:
+        # the evaluator builds its model with DepthAnything3.from_pretrained(model.path).to(device)
+        DepthAnything3.from_pretrained = staticmethod(baselines.load)
+        install_timing_hooks(baselines.MODELS[model], work_dir)
+    else:
+        install_timing_hooks(DepthAnything3, work_dir)
 
     run = {
         "started": datetime.now().isoformat(timespec="seconds"),

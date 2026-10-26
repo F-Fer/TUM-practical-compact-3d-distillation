@@ -10,7 +10,7 @@ Requirements: an NVIDIA GPU with driver ≥ 530 (CUDA 12.1 wheels), [uv](https:/
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
 cd TUM-practical-compact-3d-distillation
 # in an existing clone: git submodule update --init
-uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3 and VGGT from third_party/)
+uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3, VGGT and Pi3 from third_party/)
 ```
 
 Third-party code lives in git submodules under `third_party/` and isn't modified; our code is in `scripts/`.
@@ -59,6 +59,29 @@ To benchmark several models one after another, use `scripts/run_bench_loop.sh`. 
 scripts/run_bench_loop.sh "eval.datasets=[hiroom]"    # quick check of the whole loop
 tmux new -d -s bench scripts/run_bench_loop.sh        # full benchmark of all models in the loop
 ```
+
+### Other models: VGGT, π³, DéjàView
+
+`run_bench.py` also runs three non-DA3 models on the same benchmark, through adapters in `scripts/baselines.py` that write the same `results.npz` files:
+
+| Model id | Model | Params | License | Peak GPU memory at 100 frames |
+|---|---|---|---|---|
+| `facebook/VGGT-1B` | [VGGT](https://github.com/facebookresearch/vggt) | 1.26B | CC BY-NC 4.0 | 7.1 GiB |
+| `yyfz233/Pi3` | [π³](https://github.com/yyfz/Pi3) | 959M | BSD-2 (academic use) | 7.5 GiB |
+| `nvidia/dvlt` | [DéjàView](https://github.com/nv-tlabs/dvlt), K = 12 steps | 117M | NVIDIA, non-commercial | 3.9 GiB |
+
+```sh
+uv run scripts/run_bench.py nvidia/dvlt "eval.datasets=[hiroom]"
+tmux new -d -s bench 'MODELS="nvidia/dvlt yyfz233/Pi3 facebook/VGGT-1B" scripts/run_bench_loop.sh'
+```
+
+- Each model gets its own preprocessing (VGGT: width 518; π³: about 255k pixels; DéjàView: longest side 504) and runs in bf16 autocast like DA3.
+- None of them takes camera poses as input. In "recon with GT pose" their depth maps are fused with the GT cameras, as for the baselines in the DA3 paper.
+- To fit 100 frames into 10 GB, VGGT and π³ run their transformer weights in bf16 instead of fp32 (the heads stay fp32). On 24 frames this changes depth by about 0.1% on average and the extrinsics by at most 1e-3. VGGT also keeps its 4 intermediate layers in CPU memory (`scripts/vggt_lowmem.py`, outputs unchanged), and DéjàView decodes 8 frames at a time instead of 128 (outputs unchanged). VGGT and π³ don't fit at 100 frames on the 8 GB RTX 3070.
+- π³ predicts no intrinsics; they are fitted to its local point map (principal point at the image center).
+- DéjàView isn't installed as a package (its pins require numpy 2, DA3 requires numpy < 2); `baselines.py` imports it from `third_party/dvlt/src`.
+
+`compare_paper.py` compares VGGT and π³ with their rows in the DA3 paper's Tables 2 and 3. DéjàView isn't in those tables, so only our numbers are shown.
 
 To check on a tmux run, use `tmux attach -t bench` and detach with Ctrl-b d, or follow a log with `tail -f workspace/bench_DA3-BASE.log`.
 
