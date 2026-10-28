@@ -111,6 +111,29 @@ uv run scripts/compare_paper.py --save     # also copy metrics, timings and comp
 
 Commit `results/da3_bench/`; it is our record of the baseline numbers.
 
+### Visualize reconstructions
+
+`scripts/visualize.py` renders the saved predictions of one scene for several models. It needs a finished benchmark run of each model (`workspace/evaluation/<model>/`), but no GPU and no model inference. It supports HiRoom and DTU.
+
+```sh
+# input views, GT, and DA3-SMALL / DA3-LARGE-1.1 in image colours and coloured by error
+uv run scripts/visualize.py hiroom 20241230/828770/cam_sampled_06 --models DA3-SMALL DA3-LARGE-1.1 --color both
+# all six models (default), coloured by error
+uv run scripts/visualize.py dtu scan24 --color error
+```
+
+It writes two PNGs to `results/figures/`.
+
+| Option | Meaning |
+|---|---|
+| `--models` | run directory names in `workspace/evaluation/` (default: `DA3-SMALL DA3-BASE DA3-LARGE-1.1 VGGT-1B Pi3 dvlt`) |
+| `--color rgb` | image colours (DTU clouds have none and are coloured by height) |
+| `--color error` | each point coloured by the distance to the nearest GT point: grey is correct, red is ≥ 10 cm (HiRoom) or ≥ 5 mm (DTU) |
+| `--color both` | one column per model: image colours above, error below; the first column is the input views above the GT |
+| `--mode posed` | the clouds fused with the GT cameras instead of the predicted ones (default `unposed`) |
+| `--elev`, `--dist` | viewpoint: elevation in degrees (default 35) and distance factor (default 1) |
+| `--point-size` | rendered point size in pixels (default 2) |
+
 ### What the benchmark measures
 
 Each scene is evaluated in three modes:
