@@ -17,6 +17,9 @@ import os
 import sys
 import time
 
+# Fragmentation of the CUDA allocator wastes memory on the 8-10 GB GPUs; must be set before CUDA init
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import cv2
 import numpy as np
 import pycolmap
