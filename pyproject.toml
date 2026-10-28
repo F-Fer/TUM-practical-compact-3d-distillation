@@ -4,10 +4,13 @@ version = "0.1.0"
 description = "Compact feed-forward 3D reconstruction + test-time optimization (TUM practical, Project 07)"
 requires-python = "==3.11.*"
 dependencies = [
-    # cu121 wheels: run on NVIDIA drivers >= 530 (CUDA 12.1+)
-    "torch==2.5.1",
-    "torchvision==0.20.1",
-    "xformers==0.0.28.post3",
+    # Linux: cu121 wheels, run on NVIDIA drivers >= 530 (CUDA 12.1+)
+    "torch==2.5.1; sys_platform != 'darwin'",
+    "torchvision==0.20.1; sys_platform != 'darwin'",
+    # macOS: newer versions for MPS support
+    "torch==2.14.1; sys_platform == 'darwin'",
+    "torchvision==0.29.1; sys_platform == 'darwin'",
+    "xformers==0.0.28.post3; sys_platform == 'linux'",
     "depth-anything-3",
     "huggingface_hub[cli]",
     # imported by DA3 but missing from its package metadata
@@ -24,12 +27,18 @@ dependencies = [
     "pycolmap==3.10.0",
 ]
 
+[dependency-groups]
+dev = ["ipykernel"]  # Jupyter kernel for notebooks; uv sync installs this group by default
+
 [tool.uv]
 package = false
+# DA3 requires xformers unconditionally, but there are no macOS wheels and DA3 falls back
+# to plain PyTorch without it (model/dinov2/layers/swiglu_ffn.py)
+override-dependencies = ["xformers==0.0.28.post3; sys_platform == 'linux'"]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu121" }
-torchvision = { index = "pytorch-cu121" }
+torch = { index = "pytorch-cu121", marker = "sys_platform == 'linux'" }
+torchvision = { index = "pytorch-cu121", marker = "sys_platform == 'linux'" }
 xformers = { index = "pytorch-cu121" }
 depth-anything-3 = { path = "third_party/Depth-Anything-3", editable = true }
 vggt = { path = "third_party/vggt", editable = true }

@@ -13,6 +13,8 @@ cd TUM-practical-compact-3d-distillation
 uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3 and VGGT from third_party/)
 ```
 
+On macOS, `uv sync` works too and installs the CPU/MPS build of torch without xformers. That is enough for notebooks on saved predictions (select `.venv` as the kernel), not for benchmark runs.
+
 Third-party code lives in git submodules under `third_party/` and isn't modified; our code is in `scripts/`.
 
 Don't upgrade `open3d` past 0.19.0. In 0.20.0, TSDF fusion produces empty meshes, and the reconstruction metrics silently drop to F1 ≈ 1%.
