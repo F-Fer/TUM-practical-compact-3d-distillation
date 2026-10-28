@@ -1,0 +1,1 @@
+{"started": "2026-10-26T12:38:36", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "nvidia/dvlt", "overrides": ["eval.datasets=[hiroom]", "inference.num_fusion_workers=1", "workspace.work_dir=workspace/evaluation/pilot_dvlt"], "wall_s": 471.13075405702693}

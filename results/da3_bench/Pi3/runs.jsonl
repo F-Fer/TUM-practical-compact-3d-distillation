@@ -1,0 +1,1 @@
+{"started": "2026-10-26T14:26:07", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "yyfz233/Pi3", "overrides": ["inference.num_fusion_workers=1"], "wall_s": 6582.148869547993}

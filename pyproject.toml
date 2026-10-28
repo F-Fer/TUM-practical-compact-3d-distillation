@@ -15,6 +15,16 @@ dependencies = [
     "scikit-learn",
     # 0.20.0 ScalableTSDFVolume integrates nothing (empty meshes -> broken recon metrics)
     "open3d==0.19.0",
+    # VGGT: model, VGGSfM tracker and COLMAP glue for bundle adjustment (vggt/dependency/)
+    "vggt",
+    "lightglue",  # ALIKED/SuperPoint/SIFT keypoints for the tracker's query points
+    "hydra-core",  # imported (unused) by vggt's VGGSfM tracker; caps omegaconf < 2.4
+    # vggt's np_to_pycolmap.py uses the 3.10 API (removed in 3.12 with rigs/frames).
+    # This breaks DA3's COLMAP export (utils/export/colmap.py), which the benchmark doesn't use.
+    "pycolmap==3.10.0",
+    # baselines (scripts/baselines.py)
+    "pi3",
+    "accelerate",  # imported by DéjàView (third_party/dvlt, put on sys.path, not installed)
 ]
 
 [tool.uv]
@@ -25,6 +35,10 @@ torch = { index = "pytorch-cu121" }
 torchvision = { index = "pytorch-cu121" }
 xformers = { index = "pytorch-cu121" }
 depth-anything-3 = { path = "third_party/Depth-Anything-3", editable = true }
+vggt = { path = "third_party/vggt", editable = true }
+pi3 = { path = "third_party/Pi3", editable = true }
+# the fork VGGT's requirements_demo.txt points to
+lightglue = { git = "https://github.com/jytime/LightGlue.git", rev = "2f23ca2ea9638cecad7f7220795210fc6b8353c3" }
 
 [[tool.uv.index]]
 name = "pytorch-cu121"

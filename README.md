@@ -10,12 +10,14 @@ Requirements: an NVIDIA GPU with driver ≥ 530 (CUDA 12.1 wheels), [uv](https:/
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
 cd TUM-practical-compact-3d-distillation
 # in an existing clone: git submodule update --init
-uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3 from third_party/)
+uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3, VGGT and Pi3 from third_party/)
 ```
 
 Third-party code lives in git submodules under `third_party/` and isn't modified; our code is in `scripts/`.
 
 Don't upgrade `open3d` past 0.19.0. In 0.20.0, TSDF fusion produces empty meshes, and the reconstruction metrics silently drop to F1 ≈ 1%.
+
+`pycolmap` is pinned to 3.10.0 because VGGT's bundle adjustment code uses its API, which was removed in 3.12. This breaks DA3's COLMAP export, which the benchmark doesn't use.
 
 ## DA3 benchmark
 
@@ -58,6 +60,29 @@ scripts/run_bench_loop.sh "eval.datasets=[hiroom]"    # quick check of the whole
 tmux new -d -s bench scripts/run_bench_loop.sh        # full benchmark of all models in the loop
 ```
 
+### Other models: VGGT, π³, DéjàView
+
+`run_bench.py` also runs three non-DA3 models on the same benchmark, through adapters in `scripts/baselines.py` that write the same `results.npz` files:
+
+| Model id | Model | Params | License | Peak GPU memory at 100 frames |
+|---|---|---|---|---|
+| `facebook/VGGT-1B` | [VGGT](https://github.com/facebookresearch/vggt) | 1.26B | CC BY-NC 4.0 | 7.1 GiB |
+| `yyfz233/Pi3` | [π³](https://github.com/yyfz/Pi3) | 959M | BSD-2 (academic use) | 7.5 GiB |
+| `nvidia/dvlt` | [DéjàView](https://github.com/nv-tlabs/dvlt), K = 12 steps | 117M | NVIDIA, non-commercial | 3.9 GiB |
+
+```sh
+uv run scripts/run_bench.py nvidia/dvlt "eval.datasets=[hiroom]"
+tmux new -d -s bench 'MODELS="nvidia/dvlt yyfz233/Pi3 facebook/VGGT-1B" scripts/run_bench_loop.sh'
+```
+
+- Each model gets its own preprocessing (VGGT: width 518; π³: about 255k pixels; DéjàView: longest side 504) and runs in bf16 autocast like DA3.
+- None of them takes camera poses as input. In "recon with GT pose" their depth maps are fused with the GT cameras, as for the baselines in the DA3 paper.
+- To fit 100 frames into 10 GB, VGGT and π³ run their transformer weights in bf16 instead of fp32 (the heads stay fp32). On 24 frames this changes depth by about 0.1% on average and the extrinsics by at most 1e-3. VGGT also keeps its 4 intermediate layers in CPU memory (`scripts/vggt_lowmem.py`, outputs unchanged), and DéjàView decodes 8 frames at a time instead of 128 (outputs unchanged). VGGT and π³ don't fit at 100 frames on the 8 GB RTX 3070.
+- π³ predicts no intrinsics; they are fitted to its local point map (principal point at the image center).
+- DéjàView isn't installed as a package (its pins require numpy 2, DA3 requires numpy < 2); `baselines.py` imports it from `third_party/dvlt/src`.
+
+`compare_paper.py` compares VGGT and π³ with their rows in the DA3 paper's Tables 2 and 3. DéjàView isn't in those tables, so only our numbers are shown.
+
 To check on a tmux run, use `tmux attach -t bench` and detach with Ctrl-b d, or follow a log with `tail -f workspace/bench_DA3-BASE.log`.
 
 ### What is saved where
@@ -85,6 +110,29 @@ uv run scripts/compare_paper.py --save     # also copy metrics, timings and comp
 ```
 
 Commit `results/da3_bench/`; it is our record of the baseline numbers.
+
+### Visualize reconstructions
+
+`scripts/visualize.py` renders the saved predictions of one scene for several models. It needs a finished benchmark run of each model (`workspace/evaluation/<model>/`), but no GPU and no model inference. It supports HiRoom and DTU.
+
+```sh
+# input views, GT, and DA3-SMALL / DA3-LARGE-1.1 in image colours and coloured by error
+uv run scripts/visualize.py hiroom 20241230/828770/cam_sampled_06 --models DA3-SMALL DA3-LARGE-1.1 --color both
+# all six models (default), coloured by error
+uv run scripts/visualize.py dtu scan24 --color error
+```
+
+It writes two PNGs to `results/figures/`.
+
+| Option | Meaning |
+|---|---|
+| `--models` | run directory names in `workspace/evaluation/` (default: `DA3-SMALL DA3-BASE DA3-LARGE-1.1 VGGT-1B Pi3 dvlt`) |
+| `--color rgb` | image colours (DTU clouds have none and are coloured by height) |
+| `--color error` | each point coloured by the distance to the nearest GT point: grey is correct, red is ≥ 10 cm (HiRoom) or ≥ 5 mm (DTU) |
+| `--color both` | one column per model: image colours above, error below; the first column is the input views above the GT |
+| `--mode posed` | the clouds fused with the GT cameras instead of the predicted ones (default `unposed`) |
+| `--elev`, `--dist` | viewpoint: elevation in degrees (default 35) and distance factor (default 1) |
+| `--point-size` | rendered point size in pixels (default 2) |
 
 ### What the benchmark measures
 
