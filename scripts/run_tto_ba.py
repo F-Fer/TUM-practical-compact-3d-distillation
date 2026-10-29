@@ -77,8 +77,13 @@ def track(image_files, pred, cfg, device):
     conf_sq = np.ones((N, L, L), np.float32);       conf_sq[:, :H, :W] = conf
     points_sq = np.zeros((N, L, L, 3), np.float32); points_sq[:, :H, :W] = points
 
+    # VGGT's demo runs the tracker in bf16 (fp16 before Ampere)
+    if device.type == "cuda":
+        autocast = torch.autocast("cuda", dtype=torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16)
+    else:
+        autocast = contextlib.nullcontext()
     # the tracker prints per query frame
-    with torch.no_grad(), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    with torch.no_grad(), autocast, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         tracks, vis, _, points3d, colors = predict_tracks(
             images.to(device), conf=conf_sq, points_3d=points_sq, keypoint_extractor="aliked+sp",
             max_query_pts=cfg["max_query_pts"], query_frame_num=min(cfg["query_frames"], N),
