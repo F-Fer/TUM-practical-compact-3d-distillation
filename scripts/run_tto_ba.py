@@ -158,7 +158,12 @@ def main():
             gt = dict(np.load(os.path.join(exports, "gt_meta.npz"), allow_pickle=True))
             pred = dict(np.load(os.path.join(exports, "mini_npz", "results.npz")))
 
-            ext, K, info = refine_scene(gt["image_files"], pred, cfg, device)
+            try:
+                ext, K, info = refine_scene(gt["image_files"], pred, cfg, device)
+            except Exception as e:  # not stored, so a rerun retries it
+                print(f"[run_tto_ba] {dataset} {i + 1}/{len(scenes)} {scene} FAILED: {e!r}")
+                torch.cuda.empty_cache()
+                continue
 
             out = os.path.join(dst, "model_results", dataset, scene, "unposed", "exports", "mini_npz")
             os.makedirs(out, exist_ok=True)
