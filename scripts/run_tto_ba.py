@@ -36,6 +36,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "datasets": "",  # comma-separated, default: all in <src>/model_results
     "max_scenes": 0,  # per dataset, 0 = all
+    "scenes": "",  # comma-separated scene names, default: all
     "query_frames": 8,
     "max_query_pts": 4096,
     "max_points": 163840,  # tracker chunk size, lower it if memory runs out
@@ -157,6 +158,8 @@ def main():
         scenes = sorted(os.path.dirname(p) for p, _, _ in os.walk(data_dir) if os.path.basename(p) == "unposed")
         for i, scene_dir in enumerate(scenes[: cfg["max_scenes"] or None]):
             scene = os.path.relpath(scene_dir, data_dir)
+            if cfg["scenes"] and scene not in cfg["scenes"].split(","):
+                continue
             if scene in metrics:
                 continue
             exports = os.path.join(scene_dir, "unposed", "exports")
