@@ -6,9 +6,13 @@ Usage (from anywhere; paths are resolved relative to the repo root):
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.datasets=[hiroom]
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.eval_only=true
     uv run scripts/run_bench.py facebook/VGGT-1B eval.datasets=[hiroom]
+    uv run scripts/run_bench.py --frame-seed 1 depth-anything/DA3-SMALL eval.datasets=[scannetpp] ...
 
 <model> is a DA3 checkpoint or one of the baselines in baselines.MODELS (VGGT, Pi3, DéjàView),
 which replace DepthAnything3 in the evaluator.
+
+--frame-seed N replaces the fixed seed (42) of the evaluator's frame sampling, which picks 100
+random frames in scenes with more (7-Scenes, ScanNet++). Use it with its own workspace.work_dir.
 
 Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is given:
     model_results/, metric_results/   written by the DA3 evaluator
@@ -20,6 +24,7 @@ import functools
 import json
 import os
 import platform
+import random
 import runpy
 import sys
 import time
@@ -95,10 +100,26 @@ def install_timing_hooks(cls, work_dir):
     cls.inference = inference
 
 
+def set_frame_seed(seed):
+    """Make the evaluator's _sample_frames, which calls random.seed(42) before shuffling the frame
+    indices, use `seed` instead. Nothing else in depth_anything_3 calls random.seed."""
+    orig_seed = random.seed
+
+    def seed_fn(a=None, *args, **kwargs):
+        return orig_seed(seed if a == 42 else a, *args, **kwargs)
+
+    random.seed = seed_fn
+
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1].startswith("-"):
+    args = sys.argv[1:]
+    frame_seed = None
+    if args[:1] == ["--frame-seed"]:
+        frame_seed, args = int(args[1]), args[2:]
+        set_frame_seed(frame_seed)
+    if not args or args[0].startswith("-"):
         sys.exit(__doc__)
-    model, overrides = sys.argv[1], sys.argv[2:]
+    model, overrides = args[0], args[1:]
     sys.stdout.reconfigure(line_buffering=True)  # per-scene metric lines show up in redirected logs
     os.chdir(REPO_ROOT)  # the evaluator resolves workspace/benchmark_dataset relative to cwd
 
@@ -121,6 +142,7 @@ def main():
         "torch": torch.__version__,
         "model": model,
         "overrides": overrides,
+        "frame_seed": frame_seed,
     }
     sys.argv = ["depth_anything_3.bench.evaluator", f"model.path={model}", f"workspace.work_dir={work_dir}"]
     sys.argv += [o for o in overrides if not o.startswith("workspace.work_dir=")]
