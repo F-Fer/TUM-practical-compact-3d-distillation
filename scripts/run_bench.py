@@ -13,6 +13,8 @@ which replace DepthAnything3 in the evaluator.
 
 --frame-seed N replaces the fixed seed (42) of the evaluator's frame sampling, which picks 100
 random frames in scenes with more (7-Scenes, ScanNet++). Use it with its own workspace.work_dir.
+--ransac-seed N likewise replaces the seed (42) of the RANSAC pose alignment in the recon modes;
+with eval.eval_only=true it re-scores existing predictions (copy them into the new work_dir).
 
 Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is given:
     model_results/, metric_results/   written by the DA3 evaluator
@@ -111,12 +113,30 @@ def set_frame_seed(seed):
     random.seed = seed_fn
 
 
+def set_ransac_seed(seed):
+    """Make the RANSAC Sim(3) alignment of the recon modes, which every dataset calls with
+    random_state=42 (10 iterations on random halves of the poses), use `seed` instead."""
+    from depth_anything_3.utils import pose_align
+
+    orig_ransac = pose_align._ransac_align_sim3
+
+    def ransac(*args, random_state=None, **kwargs):
+        return orig_ransac(*args, random_state=seed, **kwargs)
+
+    pose_align._ransac_align_sim3 = ransac
+
+
 def main():
     args = sys.argv[1:]
-    frame_seed = None
-    if args[:1] == ["--frame-seed"]:
-        frame_seed, args = int(args[1]), args[2:]
-        set_frame_seed(frame_seed)
+    frame_seed = ransac_seed = None
+    while args[:1] in (["--frame-seed"], ["--ransac-seed"]):
+        if args[0] == "--frame-seed":
+            frame_seed = int(args[1])
+            set_frame_seed(frame_seed)
+        else:
+            ransac_seed = int(args[1])
+            set_ransac_seed(ransac_seed)
+        args = args[2:]
     if not args or args[0].startswith("-"):
         sys.exit(__doc__)
     model, overrides = args[0], args[1:]
@@ -143,6 +163,7 @@ def main():
         "model": model,
         "overrides": overrides,
         "frame_seed": frame_seed,
+        "ransac_seed": ransac_seed,
     }
     sys.argv = ["depth_anything_3.bench.evaluator", f"model.path={model}", f"workspace.work_dir={work_dir}"]
     sys.argv += [o for o in overrides if not o.startswith("workspace.work_dir=")]

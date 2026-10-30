@@ -3,8 +3,12 @@
 The evaluator only calls api.inference(image_files, [extrinsics, intrinsics], export_dir=...) and
 scores exports/mini_npz/results.npz, of which it reads depth, extrinsics (world-to-camera, 3x4)
 and intrinsics, all at the resolution of the depth maps (it rescales them to the original
-images itself, separately in x and y). Each adapter runs its model with the model's own
-preprocessing and writes that file in DA3's format.
+images itself, separately in x and y). Each adapter writes that file in DA3's format.
+
+VGGT and Pi3 get DA3's own preprocessing (da3_preprocess), as the DA3 paper's baselines did: with
+it their pose AUC on HiRoom/ETH3D/DTU-64 matches Table 2 to <= 0.3, while each model's native
+preprocessing (VGGT width 518, Pi3 255k pixels, Lanczos) deviates by up to 3 points (checked
+2026-10-30). DéjàView, which isn't in the paper, keeps its own preprocessing.
 
 None of these models takes camera poses as input. In posed mode (recon_posed) the evaluator
 fuses the predicted depths with the GT poses after aligning the predicted poses to them, so the
@@ -14,7 +18,6 @@ GT extrinsics/intrinsics passed to inference() are ignored, as in the DA3 paper'
 """
 
 import json
-import math
 import os
 import sys
 
@@ -23,6 +26,17 @@ import torch
 from PIL import Image
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def da3_preprocess(image_files):
+    """DA3's InputProcessor as DepthAnything3.inference calls it (longest side 504 with cv2
+    INTER_AREA, each side resized to a multiple of 14), with its ImageNet normalization undone."""
+    from depth_anything_3.utils.io.input_processor import InputProcessor
+
+    images, _, _ = InputProcessor()(image_files, process_res=504, process_res_method="upper_bound_resize")
+    mean = torch.tensor(InputProcessor.NORMALIZE.mean)[:, None, None]
+    std = torch.tensor(InputProcessor.NORMALIZE.std)[:, None, None]
+    return (images * std + mean)[None]  # [1, S, 3, H, W] in [0, 1]
 
 
 class Baseline:
@@ -70,9 +84,7 @@ class VGGTBaseline(Baseline):
         self.model.aggregator.to(torch.bfloat16)
 
     def preprocess(self, image_files):
-        from vggt.utils.load_fn import load_and_preprocess_images
-
-        return load_and_preprocess_images(image_files)[None]  # width 518, crop mode (no crop for landscape)
+        return da3_preprocess(image_files)
 
     def forward(self, images):
         from vggt.utils.pose_enc import pose_encoding_to_extri_intri
@@ -92,8 +104,6 @@ class Pi3Baseline(Baseline):
     Pi3 predicts no intrinsics; they are fitted to its local point maps with the repo's own
     least-squares helper (principal point at the image center)."""
 
-    PIXEL_LIMIT = 255000  # default of pi3.utils.basic.load_images_as_tensor
-
     def __init__(self, model_id):
         from pi3.models.pi3 import Pi3
 
@@ -102,22 +112,7 @@ class Pi3Baseline(Baseline):
             module.to(torch.bfloat16)
 
     def preprocess(self, image_files):
-        # pi3.utils.basic.load_images_as_tensor only takes a directory, so its resize is repeated
-        # here: one target size from the first image, <= PIXEL_LIMIT pixels, multiple of 14
-        from torchvision.transforms.functional import to_tensor
-
-        images = [Image.open(f).convert("RGB") for f in image_files]
-        w_orig, h_orig = images[0].size
-        scale = math.sqrt(self.PIXEL_LIMIT / (w_orig * h_orig))
-        w_target, h_target = w_orig * scale, h_orig * scale
-        k, m = round(w_target / 14), round(h_target / 14)
-        while (k * 14) * (m * 14) > self.PIXEL_LIMIT:
-            if k / m > w_target / h_target:
-                k -= 1
-            else:
-                m -= 1
-        size = (max(1, k) * 14, max(1, m) * 14)
-        return torch.stack([to_tensor(img.resize(size, Image.Resampling.LANCZOS)) for img in images])[None]
+        return da3_preprocess(image_files)
 
     def forward(self, images):
         from pi3.utils.geometry import recover_intrinsic_from_rays_d
