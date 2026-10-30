@@ -4,10 +4,7 @@ version = "0.1.0"
 description = "Compact feed-forward 3D reconstruction + test-time optimization (TUM practical, Project 07)"
 requires-python = "==3.11.*"
 dependencies = [
-    # cu121 wheels: run on NVIDIA drivers >= 530 (CUDA 12.1+)
-    "torch==2.5.1",
-    "torchvision==0.20.1",
-    "xformers==0.0.28.post3",
+    # torch comes from one of the dependency groups below
     "depth-anything-3",
     "huggingface_hub[cli]",
     # imported by DA3 but missing from its package metadata
@@ -25,15 +22,39 @@ dependencies = [
     # baselines (scripts/baselines.py)
     "pi3",
     "accelerate",  # imported by DéjàView (third_party/dvlt, put on sys.path, not installed)
+    # replaces opencv-python (see override-dependencies): the tum2 nodes have no libGL.so.1
+    "opencv-python-headless",
 ]
+
+[dependency-groups]
+# local RTX 3070/3080 (default): cu121 wheels, run on NVIDIA drivers >= 530 (CUDA 12.1+)
+cu121 = ["torch==2.5.1", "torchvision==0.20.1", "xformers==0.0.28.post3"]
+# tum2 RTX 5090 (Blackwell, sm_120) needs CUDA 12.8+, i.e. torch >= 2.7
+# (uv sync --no-default-groups --group cu128). 2.7.0 rather than 2.7.1 because the
+# cu128 index has xformers only for 2.7.0 (DA3 requires xformers; markers can't depend
+# on dependency groups, so it can't be dropped for this group alone)
+cu128 = ["torch==2.7.0", "torchvision==0.22.0", "xformers==0.0.30"]
 
 [tool.uv]
 package = false
+default-groups = ["cu121"]
+conflicts = [[{ group = "cu121" }, { group = "cu128" }]]
+# drop opencv-python (required by DA3 and VGGT) for opencv-python-headless
+override-dependencies = ["opencv-python; python_version < '0'"]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu121" }
-torchvision = { index = "pytorch-cu121" }
-xformers = { index = "pytorch-cu121" }
+torch = [
+    { index = "pytorch-cu121", group = "cu121" },
+    { index = "pytorch-cu128", group = "cu128" },
+]
+torchvision = [
+    { index = "pytorch-cu121", group = "cu121" },
+    { index = "pytorch-cu128", group = "cu128" },
+]
+xformers = [
+    { index = "pytorch-cu121", group = "cu121" },
+    { index = "pytorch-cu128", group = "cu128" },
+]
 depth-anything-3 = { path = "third_party/Depth-Anything-3", editable = true }
 vggt = { path = "third_party/vggt", editable = true }
 pi3 = { path = "third_party/Pi3", editable = true }
@@ -43,4 +64,9 @@ lightglue = { git = "https://github.com/jytime/LightGlue.git", rev = "2f23ca2ea9
 [[tool.uv.index]]
 name = "pytorch-cu121"
 url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true

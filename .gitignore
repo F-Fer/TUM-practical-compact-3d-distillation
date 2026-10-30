@@ -6,8 +6,9 @@
 .vscode
 
 __pycache__
-.venv/
+.venv*/
 
 # Benchmark data, predictions and logs (large, machine-local)
-workspace/
+# no trailing slash: on tum2 it is a symlink to scratch
+/workspace
 results/figures/
