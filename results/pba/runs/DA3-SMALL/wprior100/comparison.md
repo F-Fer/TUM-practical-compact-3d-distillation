@@ -1,0 +1,30 @@
+| dataset | mode | n | metric | init_dev | wprior100 |
+|---|---|---|---|---|---|
+| dtu | pose | 4 | auc03 | nan | 0.7831 |
+| dtu | pose | 4 | auc05 | nan | 0.8685 |
+| dtu | pose | 4 | auc15 | nan | 0.9561 |
+| dtu | pose | 4 | auc30 | nan | 0.9780 |
+| dtu | recon_unposed | 4 | acc | nan | 3.9871 |
+| dtu | recon_unposed | 4 | comp | nan | 5.0307 |
+| dtu | recon_unposed | 4 | overall | nan | 4.5089 |
+| dtu64 | pose | 4 | auc03 | 0.2989 | 0.5076 |
+| dtu64 | pose | 4 | auc05 | 0.4933 | 0.6533 |
+| dtu64 | pose | 4 | auc15 | 0.8084 | 0.8743 |
+| dtu64 | pose | 4 | auc30 | 0.9037 | 0.9371 |
+| hiroom | pose | 10 | auc03 | 0.1063 | 0.3027 |
+| hiroom | pose | 10 | auc05 | 0.2266 | 0.4514 |
+| hiroom | pose | 10 | auc15 | 0.5673 | 0.7437 |
+| hiroom | pose | 10 | auc30 | 0.7545 | 0.8602 |
+| hiroom | recon_unposed | 10 | fscore | 0.2392 | 0.4689 |
+| hiroom | recon_unposed | 10 | acc | 0.1505 | 0.1021 |
+| hiroom | recon_unposed | 10 | comp | 0.1444 | 0.0871 |
+| hiroom | recon_unposed | 10 | overall | 0.1475 | 0.0946 |
+| 7scenes | pose | 2 | auc03 | 0.2928 | 0.3887 |
+| 7scenes | pose | 2 | auc05 | 0.4641 | 0.5582 |
+| 7scenes | pose | 2 | auc15 | 0.7784 | 0.8313 |
+| 7scenes | pose | 2 | auc30 | 0.8830 | 0.9129 |
+| 7scenes | recon_unposed | 2 | fscore | 0.5092 | 0.5769 |
+| 7scenes | recon_unposed | 2 | acc | 0.1024 | 0.1031 |
+| 7scenes | recon_unposed | 2 | comp | 0.0724 | 0.0695 |
+| 7scenes | recon_unposed | 2 | overall | 0.0874 | 0.0863 |
+
