@@ -1,0 +1,17 @@
+{
+ "courtyard": {
+  "forward_s": 2.5069216190604493,
+  "depth_ratio_median": 0.9889428019523621,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "delivery_area": {
+  "forward_s": 2.436033795005642,
+  "depth_ratio_median": 1.0273586511611938,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "electro": {
+  "forward_s": 2.5704335919581354,
+  "depth_ratio_median": 1.0023001432418823,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ }
+}

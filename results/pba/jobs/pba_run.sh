@@ -11,7 +11,7 @@ set -uo pipefail
 cd ~/TUM-practical-compact-3d-distillation
 PY=.venv/bin/python
 model=$1; name=$2; subset=$3; shift 3
-src=workspace/evaluation/$model
+src=${PBA_SRC:-workspace/evaluation/$model}
 dst=workspace/tto/$model/$name
 echo "== $(hostname) $model $name $subset $*"; date
 if [ "$subset" = dev ]; then

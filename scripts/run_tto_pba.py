@@ -42,10 +42,20 @@ DEFAULTS = {
     "nbr_mode": "top",  # top (most covisible) | spread (evenly over the covisibility ranking, see select_neighbors)
     "min_covis": 0.2,
     "samples": 4096,  # source pixels per frame and iteration
-    "levels": "8,4,2,1",  # blur sigma (px) of the coarse-to-fine levels, 0 = sharp
+    # coarse-to-fine levels, each [features:]sigma[:iters]: blur sigma (px, 0 = sharp), features default `features`
+    # (rgb | vgg | local | mid | final, the last three DA3 backbone tokens, see cache_da3_feats.py), iters default `iters`
+    "levels": "8,4,2,1",
     "iters": 100,  # per level (L-BFGS: iterations, each with one or more evaluations in the line search)
-    "optimizer": "adam",  # adam (fresh random samples per iteration) | lbfgs (fixed samples per level, strong Wolfe)
+    "optimizer": "adam",  # adam (fresh random samples per iteration) | lbfgs (fixed samples per level, strong Wolfe) | lm
     "lbfgs_samples": 4,  # L-BFGS: fixed samples per frame = lbfgs_samples * samples
+    "lm_levels": "",  # with optimizer=adam: comma-separated level indices run with LM instead (e.g. a final polish)
+    "lm_iters": 10,  # LM iterations of those levels
+    "lm_samples": 0,  # source pixels per frame and LM iteration, 0 = samples
+    "lm_lambda": 1e-3,  # LM: initial damping, relative to diag(J^T J)
+    "lm_lambda_min": 1e-7,  # LM: lower bound of the damping (keeps steps small along flat directions)
+    "lm_mu": 0.0,  # LM: additional Levenberg damping mu * mean(diag(J^T J)) * I: suppresses only weakly constrained directions
+    "lm_fixed": False,  # LM: same samples for all iterations of a level (deterministic objective) instead of fresh ones
+    "lm_chunk": 0,  # LM: source frames per Jacobian chunk, 0 = automatic (~1.5e8 Jacobian entries)
     "lr_rot": 1e-3,  # rad
     "lr_trans": 1e-3,  # in units of the median depth
     "lr_focal": 1e-3,  # log focal
@@ -54,10 +64,18 @@ DEFAULTS = {
     "focal": "shared",  # none | shared (one scale for all frames) | per_frame
     "focal_init": "pred",  # pred | median (replace per-frame focals with their median first)
     "depth_grid": 8,  # cells along the longer side of the log-depth correction grid, 0 = depth fixed
+    "depth_grid_fine": 0,  # cells of a second, finer log-depth grid added to the first, 0 = none
+    "fine_from": 2,  # level index from which the fine grid is optimised
+    "w_prior_fine": 1.0,  # w_prior of the fine grid
+    "depth_param": "grid",  # grid (log-depth correction grids) | head (fine-tune DA3's depth head per scene, Adam only)
+    "lr_head": 1e-5,
+    "head_frames": 8,  # head: frames whose depth is recomputed with gradients per iteration
+    "head_refresh": 20,  # head: iterations between recomputing all frames' depth (used for the other frames)
     "poses": True,  # optimise poses
     "w_photo": 1.0,
     "w_geo": 1.0,  # multi-view depth consistency
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
+    "w_pose": 0.0,  # keeps the pose updates (rotation in rad, translation in median depths) near zero (= DA3's poses)
     "w_focal": 0.0,  # keeps the log focal scale near zero (DA3's focal); focal and depth trade off on narrow-FOV scenes
     "huber_photo": 0.05,  # intensities in [0, 1]
     "huber_geo": 0.05,  # log depth
@@ -68,6 +86,15 @@ DEFAULTS = {
     "grad_weight": 1.0,  # sampling probability ~ |grad I|^grad_weight (0 = uniform)
     "features": "rgb",  # rgb (photometric) | vgg (feature-metric: VGG16 relu1_2 + relu2_2, PCA-reduced)
     "feat_dim": 16,
+    "token_dim": 32,  # DA3 token features: leading PCA channels used (cache has 64)
+    "token_stride": 7.0,  # DA3 token features: px between NCC patch samples (patch size 14)
+    "feat_cache": "",
+    "w_match": 0.0,  # reprojection error of mutual-nearest-neighbour DA3 token matches between neighbours (Adam levels only)
+    "match_layer": "local",
+    "match_levels": "0,1",  # level indices with the match term
+    "match_max": 128,  # matches per neighbour pair (best similarity)
+    "match_min_sim": 0.5,  # cosine similarity of the (PCA-reduced, normalised) tokens  # DA3 token cache dir (default workspace/tto/feats/<basename of src>)
+    "init_noise_deg": 0.0,  # rotate every camera but the first by this angle about a random axis (centre fixed), basin tests
     "init_from": "",  # work dir whose extrinsics/intrinsics replace DA3's (e.g. the sparse-BA output), depth stays DA3's
     "seed": 0,
     "save": True,  # write results.npz (False: only metrics)
@@ -181,6 +208,75 @@ def vgg_features(images, dim, chunk=2, scale=0.1):
     return out
 
 
+def token_features(path, layer, dim, H, W, device, scale=0.1):
+    """Cached DA3 patch tokens [N, 64, H/14, W/14] of one layer -> leading dim PCA channels, bilinearly upsampled
+    to [N, dim, H, W] (token centres at the patch centres) with per-channel RMS scale on average."""
+    f = torch.from_numpy(np.load(path)[layer][:, :dim]).float().to(device)
+    f = F.interpolate(f, size=(H, W), mode="bilinear", align_corners=False)
+    return f * (scale / f.pow(2).mean().sqrt())
+
+
+class HeadDepth:
+    """DA3's depth head on frozen backbone features of one scene, for depth_param=head."""
+
+    def __init__(self, api, image_files, head_state):
+        from depth_anything_3.utils.constants import EVAL_REF_VIEW_STRATEGY
+
+        self.head = api.model.head
+        self.head.load_state_dict(head_state)  # fresh weights for every scene
+        imgs_cpu = api._preprocess_inputs(list(image_files), None, None, 504, "upper_bound_resize")[0]
+        imgs = api._prepare_model_inputs(imgs_cpu, None, None)[0]
+        self.H, self.W = imgs.shape[-2:]
+        with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            feats, _ = api.model.backbone(imgs, cam_token=None, export_feat_layers=[], ref_view_strategy=EVAL_REF_VIEW_STRATEGY)
+        self.feats = [(f.float(), c.float()) for f, c in feats]
+        self.N = imgs.shape[1]
+
+    def __call__(self, idx):
+        with torch.autocast(device_type="cuda", enabled=False):
+            out = self.head([(f[:, idx], c[:, idx]) for f, c in self.feats], self.H, self.W, patch_start_idx=0)
+        return out["depth"].reshape(len(idx), self.H, self.W)
+
+    @torch.no_grad()
+    def all(self, chunk=16):
+        return torch.cat([self(torch.arange(i, min(i + chunk, self.N), device=self.feats[0][0].device)) for i in range(0, self.N, chunk)])
+
+
+@torch.no_grad()
+def token_matches(path, layer, nbrs, max_matches, min_sim, device):
+    """Mutual nearest neighbours of the cached DA3 tokens of each frame and its neighbours nbrs [N, k].
+    Returns source and target token centres (px) and a validity mask, each [N, k, max_matches] (best similarity first)."""
+    f = torch.from_numpy(np.load(path)[layer]).float().to(device)  # [N, C, h, w]
+    N, C, h, w = f.shape
+    f = F.normalize(f.flatten(2).transpose(1, 2), dim=-1)  # [N, h*w, C]
+    k = nbrs.shape[1]
+    centre_u = ((torch.arange(h * w, device=device) % w).float() + 0.5) * 14 - 0.5
+    centre_v = ((torch.arange(h * w, device=device) // w).float() + 0.5) * 14 - 0.5
+    out = torch.zeros(5, N, k, max_matches, device=device)
+    for i in range(N):
+        sim = torch.einsum("pc,kqc->kpq", f[i], f[nbrs[i]])  # [k, P, Q]
+        s12, nn12 = sim.max(2)  # best target for every source token
+        nn21 = sim.argmax(1)  # best source for every target token
+        mutual = nn21.gather(1, nn12) == torch.arange(h * w, device=device)[None]
+        score = torch.where(mutual & (s12 > min_sim), s12, torch.full_like(s12, -1))
+        top, src = score.topk(min(max_matches, h * w), dim=1)  # [k, Mm]
+        tgt = nn12.gather(1, src)
+        m = top > 0
+        out[:, i, :, : src.shape[1]] = torch.stack([centre_u[src], centre_v[src], centre_u[tgt], centre_v[tgt], m.float()])
+    return (*out, nbrs)
+
+
+def bilinear_weights(gu, gv, gh, gw):
+    """Flat cell indices [..., 4] and weights [..., 4] of bilinear interpolation on a gh x gw grid (as in bilinear_gather)."""
+    u0 = gu.floor().clamp(0, gw - 2)
+    v0 = gv.floor().clamp(0, gh - 2)
+    du, dv = gu - u0, gv - v0
+    base = v0.long() * gw + u0.long()
+    idx = torch.stack([base, base + 1, base + gw, base + gw + 1], -1)
+    w = torch.stack([(1 - du) * (1 - dv), du * (1 - dv), (1 - du) * dv, du * dv], -1)
+    return idx, w
+
+
 @torch.no_grad()
 def select_neighbors(depth, R, t, K, k, occ_thresh, mode="top", min_covis=0.2, n_grid=24):
     """Neighbours [N, k] of each frame by covisibility (fraction of its grid points seen unoccluded).
@@ -244,6 +340,9 @@ class PBA(torch.nn.Module):
         g = max(cfg["depth_grid"], 1)
         gh, gw = (g, max(2, round(g * W / H))) if H > W else (max(2, round(g * H / W)), g)
         self.grid = torch.nn.Parameter(torch.zeros(N, gh, gw, device=dev))
+        g = max(cfg["depth_grid_fine"], 1)
+        gh, gw = (g, max(2, round(g * W / H))) if H > W else (max(2, round(g * H / W)), g)
+        self.grid2 = torch.nn.Parameter(torch.zeros(N, gh, gw, device=dev))
         self.bright = torch.nn.Parameter(torch.zeros(N, 2, device=dev))  # log gain, bias
 
         # sampling mask: confident, not at the border
@@ -252,31 +351,41 @@ class PBA(torch.nn.Module):
         valid[(valid.flatten(1).float().mean(1) < 0.01)] = True  # frames with (almost) no confident pixels: use all
         valid[:, :2], valid[:, -2:], valid[:, :, :2], valid[:, :, -2:] = False, False, False, False
         self.register_buffer("valid", valid)
+        self.match = None  # token matches, see token_matches
+        self.depth_dense = None  # depth_param=head: current depth [N, H, W] (replaces depth0, with gradients on some frames)
 
     # --- current state
-    def poses(self):
-        dR = so3_exp(self.rot * self.free) if self.cfg["poses"] else torch.eye(3, device=self.R0.device).expand(self.N, 3, 3)
+    def poses(self, rot=None, trans=None):
+        rot = self.rot if rot is None else rot
+        trans = self.trans if trans is None else trans
+        dR = so3_exp(rot * self.free) if self.cfg["poses"] else torch.eye(3, device=self.R0.device).expand(self.N, 3, 3)
         R = dR @ self.R0
-        t = (dR @ self.t0[..., None])[..., 0] + (self.trans * self.free if self.cfg["poses"] else 0)
+        t = (dR @ self.t0[..., None])[..., 0] + (trans * self.free if self.cfg["poses"] else 0)
         return R, t
 
-    def intrinsics(self):
-        f = torch.exp(self.logf if self.cfg["focal"] != "none" else self.logf.detach() * 0).expand(self.N)
+    def intrinsics(self, logf=None):
+        logf = self.logf if logf is None else logf
+        f = torch.exp(logf if self.cfg["focal"] != "none" else logf.detach() * 0).expand(self.N)
         scale = 1 + torch.diag_embed(torch.stack([f - 1, f - 1, torch.zeros_like(f)], -1))  # only fx, fy
         return self.K0 * scale
 
     def grid_at(self, idx, u, v):
         """log-depth correction at pixel (u, v) of frame idx (bilinear, grid corners at the image corners)."""
-        if self.cfg["depth_grid"] <= 0:
-            return torch.zeros_like(u)
-        N, gh, gw = self.grid.shape
-        gu, gv = u * (gw - 1) / (self.W - 1), v * (gh - 1) / (self.H - 1)
-        return bilinear_gather(self.grid.reshape(1, -1), idx, gu, gv, gh, gw)[:, 0]
+        out = torch.zeros_like(u)
+        for grid, on in ((self.grid, self.cfg["depth_grid"] > 0), (self.grid2, self.cfg["depth_grid_fine"] > 0)):
+            if on:
+                N, gh, gw = grid.shape
+                gu, gv = u * (gw - 1) / (self.W - 1), v * (gh - 1) / (self.H - 1)
+                out = out + bilinear_gather(grid.reshape(1, -1), idx, gu, gv, gh, gw)[:, 0]
+        return out
 
     def dense_depth(self):
-        if self.cfg["depth_grid"] <= 0:
-            return self.depth0
-        corr = F.interpolate(self.grid[:, None], size=(self.H, self.W), mode="bilinear", align_corners=True)[:, 0]
+        if self.depth_dense is not None:
+            return self.depth_dense
+        corr = torch.zeros_like(self.depth0)
+        for grid, on in ((self.grid, self.cfg["depth_grid"] > 0), (self.grid2, self.cfg["depth_grid_fine"] > 0)):
+            if on:
+                corr = corr + F.interpolate(grid[:, None], size=(self.H, self.W), mode="bilinear", align_corners=True)[:, 0]
         return self.depth0 * torch.exp(corr)
 
     # --- residuals
@@ -290,7 +399,8 @@ class PBA(torch.nn.Module):
         R, t = self.poses()
         K = self.intrinsics()
         idx = torch.arange(N, device=u.device)[:, None].expand_as(u)
-        d_src = self.depth0[idx, v.long(), u.long()] * torch.exp(self.grid_at(idx.reshape(-1), u.reshape(-1), v.reshape(-1)).view_as(u))
+        base = self.depth0 if self.depth_dense is None else self.depth_dense
+        d_src = base[idx, v.long(), u.long()] * torch.exp(self.grid_at(idx.reshape(-1), u.reshape(-1), v.reshape(-1)).view_as(u))
         x = (u - K[:, None, 0, 2]) / K[:, None, 0, 0] * d_src
         y = (v - K[:, None, 1, 2]) / K[:, None, 1, 1] * d_src
         Xc = torch.stack([x, y, d_src], -1)  # [N, M, 3]
@@ -306,7 +416,7 @@ class PBA(torch.nn.Module):
 
         tgt = nbrs[:, :, None].expand_as(ut).reshape(-1)
         utf, vtf = ut.reshape(-1), vt.reshape(-1)
-        d_tgt = bilinear_gather(self.depth0.reshape(1, -1), tgt, utf, vtf, H, W)[:, 0] * torch.exp(self.grid_at(tgt, utf, vtf))
+        d_tgt = bilinear_gather(base.reshape(1, -1), tgt, utf, vtf, H, W)[:, 0] * torch.exp(self.grid_at(tgt, utf, vtf))
         d_tgt = d_tgt.view_as(z)
         visible = inside & (z.detach() < d_tgt.detach() * (1 + self.cfg["occ_thresh"]))
         geo = torch.log(zc) - torch.log(d_tgt.clamp_min(1e-4))
@@ -322,15 +432,19 @@ class PBA(torch.nn.Module):
         i_tgt = i_tgt * torch.exp(a[nbrs])[..., None, None] + b[nbrs][..., None, None]
         return i_tgt, i_src, geo, visible
 
-    def loss(self, u, v, nbrs, img_flat, stride=1.0):
+    def patch_samples(self, u, v, stride):
+        """Patch centres [n, P] -> 3x3 patches [n, 9P] (patch-major)."""
+        off = torch.tensor([-1.0, 0.0, 1.0], device=u.device) * stride
+        du, dv = off[None, :].expand(3, 3).reshape(-1), off[:, None].expand(3, 3).reshape(-1)
+        n = u.shape[0]
+        return (u[..., None] + du).clamp(0, self.W - 1).reshape(n, -1), (v[..., None] + dv).clamp(0, self.H - 1).reshape(n, -1)
+
+    def loss(self, u, v, nbrs, img_flat, stride=1.0, match=False):
         cfg = self.cfg
         if cfg["photo_loss"] == "ncc":
             # u, v are patch centres [N, P]; expand to 3x3 patches [N, 9P]
-            off = torch.tensor([-1.0, 0.0, 1.0], device=u.device) * stride
-            du, dv = off[None, :].expand(3, 3).reshape(-1), off[:, None].expand(3, 3).reshape(-1)
-            N, P = u.shape
-            u = (u[..., None] + du).clamp(0, self.W - 1).reshape(N, -1)
-            v = (v[..., None] + dv).clamp(0, self.H - 1).reshape(N, -1)
+            P = u.shape[1]
+            u, v = self.patch_samples(u, v, stride)
         i_tgt, i_src, geo, mask = self.residuals(u, v, nbrs, img_flat)
         m = mask.float()
         denom = m.sum().clamp_min(1)
@@ -346,8 +460,90 @@ class PBA(torch.nn.Module):
             l_photo = (huber(i_tgt - i_src, cfg["huber_photo"]).mean(-1) * m).sum() / denom
         l_geo = (huber(geo, cfg["huber_geo"]) * m).sum() / denom
         l_prior = (self.grid**2).mean() if cfg["depth_grid"] > 0 else torch.zeros((), device=u.device)
+        if cfg["depth_grid_fine"] > 0:
+            l_prior = l_prior + cfg["w_prior_fine"] / max(cfg["w_prior"], 1e-12) * (self.grid2**2).mean()
         total = cfg["w_photo"] * l_photo + cfg["w_geo"] * l_geo + cfg["w_prior"] * l_prior + cfg["w_focal"] * (self.logf**2).mean()
-        return total, {"photo": l_photo.detach(), "geo": l_geo.detach(), "prior": l_prior.detach(), "visible": m.mean()}
+        if cfg["w_pose"] > 0:
+            total = total + cfg["w_pose"] * ((self.rot * self.free) ** 2 + (self.trans * self.free) ** 2).mean()
+        parts = {"photo": l_photo.detach(), "geo": l_geo.detach(), "prior": l_prior.detach(), "visible": m.mean()}
+        if match and self.match is not None:
+            l_match = self.match_loss()
+            total = total + cfg["w_match"] * l_match
+            parts["match"] = l_match.detach()
+        return total, parts
+
+    def match_loss(self, delta=0.5):
+        """Huber reprojection error (in token units, 14 px) of the token matches: source token centres lifted with
+        the current depth and projected into the matched neighbour."""
+        mu, mv, tu, tv, mm, nb = self.match  # [N, k, Mm] each, nb [N, k]
+        N = mu.shape[0]
+        R, t = self.poses()
+        K = self.intrinsics()
+        idx = torch.arange(N, device=mu.device)[:, None, None].expand_as(mu)
+        d = self.depth0[idx, mv.long(), mu.long()] * torch.exp(self.grid_at(idx.reshape(-1), mu.reshape(-1), mv.reshape(-1)).view_as(mu))
+        x = (mu - K[:, None, None, 0, 2]) / K[:, None, None, 0, 0] * d
+        y = (mv - K[:, None, None, 1, 2]) / K[:, None, None, 1, 1] * d
+        Xw = (torch.stack([x, y, d], -1) - t[:, None, None]) @ R[:, None]  # [N, k, Mm, 3]
+        Xt = Xw @ R[nb].transpose(-1, -2) + t[nb][:, :, None]
+        z = Xt[..., 2].clamp_min(1e-4)
+        Kt = K[nb]
+        ut = Kt[..., None, 0, 0] * Xt[..., 0] / z + Kt[..., None, 0, 2]
+        vt = Kt[..., None, 1, 1] * Xt[..., 1] / z + Kt[..., None, 1, 2]
+        e = torch.sqrt((ut - tu) ** 2 + (vt - tv) ** 2 + 1e-12) / 14
+        return (huber(e, delta) * mm).sum() / mm.sum().clamp_min(1)
+
+    def lm_residuals(self, rot_s, trans_s, rot_t, trans_t, logf, ds, dt, src, u, v, nbrs, img_flat, S):
+        """Residuals of the source frames src [n] (u, v [n, P*S], S samples per patch) for Levenberg-Marquardt.
+
+        The poses enter twice, for the source and for the target role, so that the forward-mode derivative w.r.t.
+        one component of all frames at once is the derivative w.r.t. that component of each residual's own source
+        (or target) frame. ds [n, P] and dt [n, k, P] are per-patch log-depth offsets of the source and target depth
+        (zero), whose derivatives are mapped onto the depth grid cells with the bilinear weights of the patch centres.
+        Returns the photometric residual [n, k, P, D] (NCC: difference of the normalised patches, so that half its
+        squared norm is 1 - NCC; Huber: per channel), the geometric one [n, k, P, S], the visibility [n, k, P, S] and
+        the warped pixels [n, k, P*S] (the last two without derivatives).
+        """
+        H, W = self.H, self.W
+        n, M = u.shape
+        P, k = M // S, nbrs.shape[1]
+        R_s, t_s = self.poses(rot_s, trans_s)
+        R_t, t_t = self.poses(rot_t, trans_t)
+        K = self.intrinsics(logf)
+        idx = src[:, None].expand_as(u)
+        logd = self.grid_at(idx.reshape(-1), u.reshape(-1), v.reshape(-1)).view_as(u) + ds.repeat_interleave(S, 1)
+        d_src = self.depth0[idx, v.long(), u.long()] * torch.exp(logd)
+        Ks = K[src]
+        x = (u - Ks[:, None, 0, 2]) / Ks[:, None, 0, 0] * d_src
+        y = (v - Ks[:, None, 1, 2]) / Ks[:, None, 1, 1] * d_src
+        Xw = (torch.stack([x, y, d_src], -1) - t_s[src][:, None]) @ R_s[src]
+        Rt, tt, Kt = R_t[nbrs], t_t[nbrs], K[nbrs]
+        Xt = Xw[:, None] @ Rt.transpose(-1, -2) + tt[:, :, None]  # [n, k, M, 3]
+        z = Xt[..., 2]
+        zc = z.clamp_min(1e-4)
+        ut = Kt[..., None, 0, 0] * Xt[..., 0] / zc + Kt[..., None, 0, 2]
+        vt = Kt[..., None, 1, 1] * Xt[..., 1] / zc + Kt[..., None, 1, 2]
+        inside = (z > 1e-4) & (ut >= 0) & (ut <= W - 1) & (vt >= 0) & (vt <= H - 1)
+        ut, vt = ut.clamp(0, W - 1), vt.clamp(0, H - 1)
+        tgt = nbrs[:, :, None].expand_as(ut).reshape(-1)
+        utf, vtf = ut.reshape(-1), vt.reshape(-1)
+        logd_t = self.grid_at(tgt, utf, vtf) + dt.repeat_interleave(S, -1).reshape(-1)
+        d_tgt = (bilinear_gather(self.depth0.reshape(1, -1), tgt, utf, vtf, H, W)[:, 0] * torch.exp(logd_t)).view_as(z)
+        visible = inside & (z < d_tgt * (1 + self.cfg["occ_thresh"]))
+        geo = torch.log(zc) - torch.log(d_tgt.clamp_min(1e-4))
+        C = img_flat.shape[0]
+        a = bilinear_gather(img_flat, idx.reshape(-1), u.reshape(-1), v.reshape(-1), H, W).reshape(n, 1, P, S * C)
+        b = bilinear_gather(img_flat, tgt, utf, vtf, H, W).reshape(n, k, P, S * C)
+        if self.cfg["features"] == "rgb" and self.cfg["photo_loss"] == "huber":  # affine brightness as in residuals (fixed)
+            ga, gb = (self.bright.detach() * self.free).unbind(1)
+            a = a * torch.exp(ga[src])[:, None, None, None] + gb[src][:, None, None, None]
+            b = b * torch.exp(ga[nbrs])[..., None, None] + gb[nbrs][..., None, None]
+        if S > 1:
+            a = a - a.mean(-1, keepdim=True)
+            b = b - b.mean(-1, keepdim=True)
+            a = a / ((a * a).sum(-1, keepdim=True) + 1e-8).sqrt()
+            b = b / ((b * b).sum(-1, keepdim=True) + 1e-8).sqrt()
+        photo = b - a
+        return photo, geo.view(n, k, P, S), visible.view(n, k, P, S).detach(), ut.detach(), vt.detach()
 
 
 def sampling_probs(img, valid, grad_weight):
@@ -378,7 +574,173 @@ def eval_photo(model, nbrs, img_flat, n=8192, seed=1):
     }
 
 
-def refine_scene(image_files, pred, cfg, device):
+def lm_layout(model):
+    """Global parameter indices: poses of frames 1..N-1 (rot, trans), the shared log focal, the depth grid cells.
+    Fixed parameters point to the dummy index T (last row/column of the system, dropped before solving)."""
+    cfg, N = model.cfg, model.N
+    if cfg["focal"] == "per_frame":
+        sys.exit("optimizer=lm supports focal=shared|none")
+    n_pose = 6 * (N - 1) if cfg["poses"] else 0
+    n_grid = model.grid[0].numel() if cfg["depth_grid"] > 0 else 0
+    T = n_pose + 1 + N * n_grid  # (the fine depth grid is too large for a dense system and stays fixed in LM levels)
+    dev = model.grid.device
+    pose_idx = torch.full((N, 6), T, dtype=torch.long, device=dev)
+    if cfg["poses"]:
+        pose_idx[1:] = torch.arange(n_pose, device=dev).view(N - 1, 6)
+    focal_idx = n_pose if cfg["focal"] == "shared" else T
+    return {"T": T, "pose": pose_idx, "focal": focal_idx, "grid0": n_pose + 1, "n_grid": n_grid}
+
+
+def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
+    """Gauss-Newton system (J^T W J, J^T W r) of the IRLS-weighted objective of model.loss at the current
+    parameters, for patch samples u, v [N, P*S]. Jacobians by forward-mode AD, chunked over source frames."""
+    cfg, N, H, W = model.cfg, model.N, model.H, model.W
+    T, k = layout["T"], nbrs.shape[1]
+    P = u.shape[1] // S
+    gh, gw = model.grid.shape[1:]
+    irls = lambda r, d: torch.where(r.abs() < d, 1 / d, 1 / r.abs().clamp_min(1e-12))  # noqa: E731
+    p = [x.detach() for x in (model.rot, model.trans, model.rot, model.trans, model.logf)]
+
+    # normalisers of the photometric (patches visible in all samples / visible samples) and geometric terms
+    chunks = [torch.arange(i, min(i + chunk, N), device=u.device) for i in range(0, N, chunk)]
+    n_patch, n_vis = 0.0, 0.0
+    with torch.no_grad():
+        for src in chunks:
+            zero_s, zero_t = u.new_zeros(len(src), P), u.new_zeros(len(src), k, P)
+            _, _, vis, _, _ = model.lm_residuals(*p, zero_s, zero_t, src, u[src], v[src], nbrs[src], img_flat, S)
+            n_patch += float(vis.all(-1).sum()) if S > 1 else float(vis.sum())
+            n_vis += float(vis.sum())
+    n_patch, n_vis = max(n_patch, 1.0), max(n_vis, 1.0)
+
+    Hm = torch.zeros((T + 1) * (T + 1), device=u.device)
+    g = torch.zeros(T + 1, device=u.device)
+    for src in chunks:
+        n = len(src)
+        zero_s, zero_t = u.new_zeros(n, P), u.new_zeros(n, k, P)
+        primals = (*p, zero_s, zero_t)
+        f = lambda *q: model.lm_residuals(*q, src, u[src], v[src], nbrs[src], img_flat, S)[:2]  # noqa: E731
+        with torch.no_grad():
+            photo, geo, vis, ut, vt = model.lm_residuals(*primals, src, u[src], v[src], nbrs[src], img_flat, S)
+            tangents = []  # one per column: rot_s, trans_s, rot_t, trans_t (3 each), logf, ds, dt
+            for a in range(7):
+                for c in range(3 if a < 4 else 1):
+                    t = [torch.zeros_like(x) for x in primals]
+                    if a < 4:
+                        t[a][:, c] = 1
+                    else:
+                        t[a].fill_(1)
+                    tangents.append(t)
+            tangents = [torch.stack([t[i] for t in tangents]) for i in range(len(primals))]
+            # all 15 forward-mode derivatives in one vectorised pass (2.3x faster than a loop, identical)
+            jp, jg = torch.func.vmap(lambda *t: torch.func.jvp(f, primals, t)[1])(*tangents)
+            jp, jg = jp.movedim(0, -1), jg.movedim(0, -1)  # [n, k, P, D, 15], [n, k, P, S, 15]
+            # weights of 0.5 * w * r^2
+            m = vis.float()
+            if S > 1:
+                wp = (cfg["w_photo"] * m.amin(-1) / n_patch)[..., None].expand_as(photo)
+            else:
+                wp = cfg["w_photo"] * m / (n_vis * photo.shape[-1]) * irls(photo, cfg["huber_photo"])
+            wg = cfg["w_geo"] * m / n_vis * irls(geo, cfg["huber_geo"])
+
+            # expand the per-patch depth offsets onto the 4 grid cells around the source / warped patch centre
+            uc, vc = u[src].view(n, P, S).mean(-1), v[src].view(n, P, S).mean(-1)
+            cs, ws = bilinear_weights(uc * (gw - 1) / (W - 1), vc * (gh - 1) / (H - 1), gh, gw)  # [n, P, 4]
+            utc, vtc = ut.view(n, k, P, S).mean(-1), vt.view(n, k, P, S).mean(-1)
+            ct, wt = bilinear_weights(utc * (gw - 1) / (W - 1), vtc * (gh - 1) / (H - 1), gh, gw)  # [n, k, P, 4]
+            ws = ws[:, None].expand(n, k, P, 4)
+            nc = 21
+
+            def expand(J):  # [n, k, P, D, 15] -> [n, k, P, D, 21]
+                return torch.cat([J[..., :13], J[..., 13:14] * ws[..., None, :], J[..., 14:15] * wt[..., None, :]], -1)
+
+            jp, jg = expand(jp), expand(jg)
+            G = torch.einsum("nkpdi,nkpd,nkpdj->nkpij", jp, wp, jp) + torch.einsum("nkpdi,nkpd,nkpdj->nkpij", jg, wg, jg)
+            b = torch.einsum("nkpdi,nkpd,nkpd->nkpi", jp, wp, photo) + torch.einsum("nkpdi,nkpd,nkpd->nkpi", jg, wg, geo)
+
+            idx = torch.empty(n, k, P, nc, dtype=torch.long, device=u.device)
+            idx[..., :6] = layout["pose"][src][:, None, None]
+            idx[..., 6:12] = layout["pose"][nbrs[src]][:, :, None]
+            idx[..., 12] = layout["focal"]
+            if layout["n_grid"]:
+                idx[..., 13:17] = layout["grid0"] + src[:, None, None, None] * layout["n_grid"] + cs[:, None]
+                idx[..., 17:21] = layout["grid0"] + nbrs[src][:, :, None, None] * layout["n_grid"] + ct
+            else:
+                idx[..., 13:] = T
+            idx = idx.reshape(-1, nc)
+            Hm.index_add_(0, (idx[:, :, None] * (T + 1) + idx[:, None, :]).reshape(-1), G.reshape(-1))
+            g.index_add_(0, idx.reshape(-1), b.reshape(-1))
+            del jp, jg, G, b, idx
+
+    Hm = Hm.view(T + 1, T + 1)[:T, :T].double()
+    g = g[:T].double()
+    if layout["n_grid"]:  # prior w_prior * mean(grid^2) = 0.5 * (2 w_prior / numel) * grid^2
+        sl = slice(layout["grid0"], T)
+        w = 2 * cfg["w_prior"] / model.grid.numel()
+        Hm[sl, sl] += w * torch.eye(T - layout["grid0"], device=u.device, dtype=Hm.dtype)
+        g[sl] += w * model.grid.detach().reshape(-1).double()
+    if cfg["w_pose"] > 0 and cfg["poses"]:  # w_pose * mean(rot^2 + trans^2) over N x 3 entries each
+        n6 = 6 * (N - 1)
+        w = 2 * cfg["w_pose"] / (3 * N)
+        Hm[:n6, :n6] += w * torch.eye(n6, device=u.device, dtype=Hm.dtype)
+        g[:n6] += w * torch.cat([model.rot.detach()[1:], model.trans.detach()[1:]], 1).reshape(-1).double()
+    if layout["focal"] < T and cfg["w_focal"] > 0:
+        Hm[layout["focal"], layout["focal"]] += 2 * cfg["w_focal"]
+        g[layout["focal"]] += 2 * cfg["w_focal"] * float(model.logf.detach()[0])
+    return Hm, g
+
+
+@torch.no_grad()
+def lm_apply(model, layout, delta):
+    """Add delta [T] to the parameters."""
+    N, T = model.N, layout["T"]
+    delta = delta.float()
+    if model.cfg["poses"]:
+        d = delta[: 6 * (N - 1)].view(N - 1, 6)
+        model.rot[1:] += d[:, :3]
+        model.trans[1:] += d[:, 3:]
+    if layout["focal"] < T:
+        model.logf += delta[layout["focal"]]
+    if layout["n_grid"]:
+        model.grid += delta[layout["grid0"] :].view_as(model.grid)
+
+
+def lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam, max_tries=6):
+    """One Levenberg-Marquardt iteration on fixed samples (patch centres u, v [N, P]). Returns the new damping,
+    the loss before and after and whether a step was accepted."""
+    U, V = model.patch_samples(u, v, stride) if S > 1 else (u, v)
+    with torch.no_grad():
+        cost0 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+    Hm, g = lm_normal_equations(model, U, V, nbrs, img_flat, S, layout, chunk)
+    diag = Hm.diagonal().clamp_min(1e-12 * float(Hm.diagonal().max()) + 1e-30)
+    if model.cfg["lm_mu"] > 0:
+        Hm = Hm + model.cfg["lm_mu"] * float(diag.mean()) * torch.eye(len(diag), device=Hm.device, dtype=Hm.dtype)
+    params = (model.rot, model.trans, model.logf, model.grid, model.grid2)
+    state = [x.detach().clone() for x in params]
+    for _ in range(max_tries):
+        L, info = torch.linalg.cholesky_ex(Hm + torch.diag(lam * diag))
+        if int(info) == 0:
+            delta = -torch.cholesky_solve(g[:, None], L)[:, 0]
+            lm_apply(model, layout, delta)
+            with torch.no_grad():
+                cost1 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+            if cost1 < cost0:
+                # the Gauss-Newton model overestimates the curvature of the (large-residual) objective: try twice the step
+                lm_apply(model, layout, delta)
+                with torch.no_grad():
+                    cost2 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+                lam_min = model.cfg["lm_lambda_min"]
+                if cost2 < cost1:
+                    return max(lam / 3, lam_min), cost0, cost2, True
+                lm_apply(model, layout, -delta)
+                return max(lam / 3, lam_min), cost0, cost1, True
+            with torch.no_grad():
+                for x, s in zip(params, state):
+                    x.copy_(s)
+        lam *= 4
+    return lam, cost0, cost0, False
+
+
+def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_state=None):
     torch.manual_seed(cfg["seed"])
     np.random.seed(cfg["seed"])
     if device.type == "cuda":
@@ -409,25 +771,69 @@ def refine_scene(image_files, pred, cfg, device):
         {"params": [model.logf], "lr": cfg["lr_focal"]},
         {"params": [model.grid], "lr": cfg["lr_depth"]},
         {"params": [model.bright], "lr": cfg["lr_bright"]},
+        {"params": [model.grid2], "lr": cfg["lr_depth"]},
     ]
-    levels = [float(s) for s in cfg["levels"].split(",") if s]  # empty: no optimisation (reference run)
+    levels = []  # empty: no optimisation (reference run)
+    for spec in cfg["levels"].split(","):
+        if spec:
+            parts = spec.split(":")
+            if parts[0].replace(".", "").isdigit():
+                parts.insert(0, cfg["features"])
+            levels.append((parts[0], float(parts[1]), int(parts[2]) if len(parts) > 2 else cfg["iters"]))
     M = cfg["samples"]
     hist = []
     start = time.perf_counter()
-    feats = vgg_features(images, cfg["feat_dim"]) if cfg["features"] == "vgg" and levels else images
-    for level, sigma in enumerate(levels):
-        img = gaussian_blur(feats, sigma)
+    feat_maps = {"rgb": images}
+    head = None
+    if cfg["depth_param"] == "head" and levels:
+        head = HeadDepth(api, image_files, head_state)
+        cache = head.all() / model.scale
+        info["head_init_diff"] = float((cache - model.depth0).abs().mean() / model.depth0.abs().mean())
+        groups.append({"params": list(head.head.parameters()), "lr": cfg["lr_head"]})
+    if cfg["w_match"] > 0 and levels:
+        model.match = token_matches(feat_path, cfg["match_layer"], nbrs, cfg["match_max"], cfg["match_min_sim"], device)
+        info["matches_per_pair"] = float(model.match[4].sum(-1).mean())
+    layout = lm_layout(model) if cfg["optimizer"] == "lm" else None
+    lam = max(cfg["lm_lambda"], cfg["lm_lambda_min"])
+    for level, (feat_name, sigma, iters) in enumerate(levels):
+        if feat_name not in feat_maps:
+            if feat_name == "vgg":
+                feat_maps[feat_name] = vgg_features(images, cfg["feat_dim"])
+            else:  # DA3 backbone tokens
+                feat_maps[feat_name] = token_features(feat_path, feat_name, cfg["token_dim"], H, W, device)
+        img = gaussian_blur(feat_maps[feat_name], sigma)
         img_flat = img.permute(1, 0, 2, 3).reshape(img.shape[1], -1)
         # a pool of candidate pixels per frame, drawn once per level (multinomial over all pixels is slow)
         probs = sampling_probs(gaussian_blur(images, sigma), model.valid, cfg["grad_weight"])
         pool = torch.multinomial(probs, 16 * M, replacement=True)
         stride = cfg["patch_stride"] * max(1.0, sigma)
+        if feat_name in ("local", "mid", "final"):
+            stride = max(stride, cfg["token_stride"])
         n_pix = M if cfg["photo_loss"] == "huber" else M // 9  # with NCC, M samples = M/9 patches of 9 pixels
+        fine = cfg["depth_grid_fine"] > 0 and level >= cfg["fine_from"]
+        next(g for g in groups if g["params"][0] is model.grid2)["lr"] = cfg["lr_depth"] if fine else 0.0
+        use_lm = cfg["optimizer"] == "lm" or str(level) in cfg["lm_levels"].split(",")
+        if use_lm:
+            layout = layout or lm_layout(model)
+            iters = iters if cfg["optimizer"] == "lm" else cfg["lm_iters"]
+            S = 9 if cfg["photo_loss"] == "ncc" else 1
+            D = S * img_flat.shape[0] + S
+            if cfg["lm_samples"]:
+                n_pix = cfg["lm_samples"] // S
+                pool = torch.multinomial(probs, 4 * cfg["lm_samples"], replacement=True)
+            chunk = cfg["lm_chunk"] or max(1, int(1.5e8 / (k * n_pix * D * 21)))
+            for it in range(iters):
+                if it == 0 or not cfg["lm_fixed"]:
+                    pix = pool.gather(1, torch.randint(0, pool.shape[1], (N, n_pix), device=device))
+                    u, v = (pix % W).float(), (pix // W).float()
+                lam, c0, c1, ok = lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam)
+                hist.append({"level": level, "it": it, "loss": c0, "loss_after": c1, "lambda": lam, "accepted": ok, "t": time.perf_counter() - start})
+            continue
         if cfg["optimizer"] == "lbfgs":
             pix = pool[:, : cfg["lbfgs_samples"] * n_pix]
             u, v = (pix % W).float(), (pix // W).float()
             params = [p for g in groups for p in g["params"]]
-            opt = torch.optim.LBFGS(params, lr=1, max_iter=cfg["iters"], history_size=20, line_search_fn="strong_wolfe",
+            opt = torch.optim.LBFGS(params, lr=1, max_iter=iters, history_size=20, line_search_fn="strong_wolfe",
                                     tolerance_grad=1e-10, tolerance_change=1e-12)
             evals = []
 
@@ -442,17 +848,27 @@ def refine_scene(image_files, pred, cfg, device):
             hist.append({"level": level, "evals": len(evals), "loss_first": evals[0].item(), "loss": evals[-1].item()})
             continue
         opt = torch.optim.Adam([dict(g) for g in groups])  # fresh state and learning rates per level
-        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda it: 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * it / cfg["iters"])))
-        for it in range(cfg["iters"]):
+        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda it: 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * it / iters)))
+        for it in range(iters):
             pix = pool.gather(1, torch.randint(0, pool.shape[1], (N, n_pix), device=device))
             u, v = (pix % W).float(), (pix // W).float()
-            loss, parts = model.loss(u, v, nbrs, img_flat, stride)
+            if head is not None:
+                if it % cfg["head_refresh"] == 0:
+                    cache = head.all() / model.scale
+                sub = torch.randperm(N, device=device)[: cfg["head_frames"]]
+                d_sub = head(sub) / model.scale
+                model.depth_dense = cache.index_put((sub,), d_sub)
+            loss, parts = model.loss(u, v, nbrs, img_flat, stride, match=str(level) in cfg["match_levels"].split(","))
+            if head is not None:  # depth prior relative to DA3's prediction (also fixes the scale gauge)
+                loss = loss + cfg["w_prior"] * ((torch.log(d_sub.clamp_min(1e-6)) - torch.log(model.depth0[sub])) ** 2).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
             sched.step()
-            if it % 20 == 0 or it == cfg["iters"] - 1:
-                hist.append({"level": level, "it": it, "loss": loss.item(), **{k: v.item() for k, v in parts.items()}})
+            if it % 20 == 0 or it == iters - 1:
+                hist.append({"level": level, "it": it, "loss": loss.item(), **{k: v.item() for k, v in parts.items()}, "t": time.perf_counter() - start})
+    if head is not None:
+        model.depth_dense = head.all() / model.scale
     if device.type == "cuda":
         torch.cuda.synchronize()
     opt_s = time.perf_counter() - start
@@ -491,6 +907,13 @@ def main():
         json.dump(cfg, f, indent=2)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    api = head_state = None
+    if cfg["depth_param"] == "head":
+        from depth_anything_3.api import DepthAnything3
+
+        name = os.path.basename(os.path.normpath(src))
+        api = DepthAnything3.from_pretrained(f"depth-anything/{name}").to(device).eval()
+        head_state = {k: v.clone() for k, v in api.model.head.state_dict().items()}
     results_dir = os.path.join(src, "model_results")
     datasets = [d for d in cfg["datasets"].split(",") if d] or sorted(os.listdir(results_dir))
 
@@ -525,8 +948,17 @@ def main():
                 ext[:, :, 3] *= spread(pred["extrinsics"]) / max(spread(ext), 1e-12)
                 pred.update(extrinsics=ext, intrinsics=other["intrinsics"].astype(np.float32))
 
+            if cfg["init_noise_deg"] > 0:
+                rng = np.random.default_rng(cfg["seed"] + 1)
+                ext = pred["extrinsics"].astype(np.float64).copy()
+                for f in range(1, len(ext)):
+                    axis = rng.normal(size=3)
+                    Rn = cv2.Rodrigues(axis / np.linalg.norm(axis) * np.deg2rad(cfg["init_noise_deg"]))[0]
+                    ext[f] = Rn @ ext[f]  # R' = Rn R, t' = Rn t keeps the camera centre
+                pred["extrinsics"] = ext.astype(np.float32)
+            feat_path = os.path.join(cfg["feat_cache"] or os.path.join("workspace/tto/feats", os.path.basename(os.path.normpath(src))), dataset, scene + ".npz")
             try:
-                out, info, hist = refine_scene(gt["image_files"], pred, cfg, device)
+                out, info, hist = refine_scene(gt["image_files"], pred, cfg, device, feat_path, api, head_state)
             except torch.cuda.OutOfMemoryError as e:  # not stored, so a rerun retries it
                 print(f"[run_tto_pba] {dataset} {i + 1}/{len(scenes)} {scene} FAILED: {e!r}")
                 torch.cuda.empty_cache()

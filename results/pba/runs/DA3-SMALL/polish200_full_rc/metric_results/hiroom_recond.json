@@ -1,0 +1,152 @@
+{
+ "20241230/828738/cam_sampled_08": {
+  "forward_s": 0.3294177090283483,
+  "depth_ratio_median": 0.9754853248596191,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828744/cam_sampled_04": {
+  "forward_s": 0.2799669519299641,
+  "depth_ratio_median": 1.0117801427841187,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828745/cam_sampled_05": {
+  "forward_s": 0.2746036179596558,
+  "depth_ratio_median": 1.021875262260437,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828749/cam_sampled_12": {
+  "forward_s": 0.30767250701319426,
+  "depth_ratio_median": 1.0075390338897705,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828750/cam_sampled_08": {
+  "forward_s": 0.26687390299048275,
+  "depth_ratio_median": 1.0068747997283936,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828757/cam_sampled_06": {
+  "forward_s": 0.26684853504411876,
+  "depth_ratio_median": 0.9970815777778625,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828760/cam_sampled_04": {
+  "forward_s": 0.26505356398411095,
+  "depth_ratio_median": 1.0391392707824707,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828761/cam_sampled_11": {
+  "forward_s": 0.3164957360131666,
+  "depth_ratio_median": 0.9893890619277954,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828763/cam_sampled_12": {
+  "forward_s": 0.2630878359777853,
+  "depth_ratio_median": 0.9938622117042542,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828766/cam_sampled_10": {
+  "forward_s": 0.4245022659888491,
+  "depth_ratio_median": 1.026989221572876,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828769/cam_sampled_11": {
+  "forward_s": 0.3509282539598644,
+  "depth_ratio_median": 1.0139517784118652,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828770/cam_sampled_06": {
+  "forward_s": 0.5062274760566652,
+  "depth_ratio_median": 1.0334981679916382,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828774/cam_sampled_23": {
+  "forward_s": 0.21309671900235116,
+  "depth_ratio_median": 1.1201069355010986,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828777/cam_sampled_10": {
+  "forward_s": 0.2737149950116873,
+  "depth_ratio_median": 1.0107884407043457,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828782/cam_sampled_09": {
+  "forward_s": 0.2931541909929365,
+  "depth_ratio_median": 1.046800136566162,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828784/cam_sampled_03": {
+  "forward_s": 0.1916127250296995,
+  "depth_ratio_median": 0.9942760467529297,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828785/cam_sampled_12": {
+  "forward_s": 0.23190568492282182,
+  "depth_ratio_median": 0.9920222759246826,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828786/cam_sampled_10": {
+  "forward_s": 0.20391990698408335,
+  "depth_ratio_median": 1.014188528060913,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828788/cam_sampled_13": {
+  "forward_s": 0.3129017250612378,
+  "depth_ratio_median": 1.0156452655792236,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828790/cam_sampled_04": {
+  "forward_s": 0.2801202650880441,
+  "depth_ratio_median": 1.103042721748352,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828791/cam_sampled_12": {
+  "forward_s": 0.39484964997973293,
+  "depth_ratio_median": 1.0239734649658203,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828792/cam_sampled_10": {
+  "forward_s": 0.32043403293937445,
+  "depth_ratio_median": 0.9914427995681763,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828794/cam_sampled_10": {
+  "forward_s": 0.3449451280757785,
+  "depth_ratio_median": 0.9934877157211304,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828805/cam_sampled_06": {
+  "forward_s": 0.3434195900335908,
+  "depth_ratio_median": 1.010915994644165,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828811/cam_sampled_02": {
+  "forward_s": 0.48403875797521323,
+  "depth_ratio_median": 0.9879823327064514,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828812/cam_sampled_10": {
+  "forward_s": 0.29798915795981884,
+  "depth_ratio_median": 1.0198910236358643,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828815/cam_sampled_04": {
+  "forward_s": 0.3296715730102733,
+  "depth_ratio_median": 1.0410410165786743,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828816/cam_sampled_14": {
+  "forward_s": 0.44935006205923855,
+  "depth_ratio_median": 1.0143978595733643,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828824/cam_sampled_08": {
+  "forward_s": 0.25709154491778463,
+  "depth_ratio_median": 1.0108846426010132,
+  "focal_roundtrip_err": 0.0
+ },
+ "20241230/828825/cam_sampled_07": {
+  "forward_s": 0.24602006003260612,
+  "depth_ratio_median": 0.97902512550354,
+  "focal_roundtrip_err": 0.0
+ }
+}
