@@ -110,6 +110,13 @@ VGGT's IMC results show how much optimization adds on top of a feed-forward pred
 
 Evaluation conventions both papers use: predictions are aligned to ground truth with a Sim(3) transform before scoring. Pointmap quality is reported as Rel. L2 and inlier ratio (relative point error < 3%). Pose quality is AUC@3°/AUC@30° (VGGT also uses AUC@10° on IMC).
 
+### TTO status (2026-11-02)
+
+- **Photometric BA** (`photometric-ba` branch, Finn; `scripts/run_tto_pba.py`, reports in `results/pba/`): optimises poses, a shared focal length and a coarse log-depth grid on photometric/VGG-feature NCC. On the full benchmark it lifts every model (HiRoom AUC@3 SMALL 9.4 → 45.7, BASE 19.0 → 57.4, LARGE 59.7 → 82.8; ~18 s per scene, a "fast" hybrid with LM polish ~2-6 s). LARGE + a cheap TTO beats SMALL/BASE with any TTO. `results/views/REPORT.md`: quality saturates at 32-64 input views, larger models gain more from views.
+- **Track-based BA** (`scripts/run_tto_ba.py`, `scripts/tracks_roma.py`): tracks from VGGSfM (`tracker=vggsfm`, 2-4 s per frame, 30-380 s per scene) or RoMa v2 (`tracker=roma`, ~1 s per pair at `precise`) + pycolmap BA. Results are in `<dst>/metric_results/<dataset>_ba.json`; `scripts/eval_tto.py` and `scripts/compare_tto.py` (from Finn's branch) score and tabulate them like the PBA runs.
+- **What went wrong with RoMa and what fixes it** (checked on two local HiRoom scenes, `turbo`, MPS): RoMa's matches are accurate (median epipolar error 0.25 px against GT poses), but BA dropped them. DA3's own geometry can be far off (focal 554 px vs 436 px true), so the reprojection gate (`max_reproj=8` against DA3's projection) removed the good tracks and BA was skipped. pycolmap's default BA loss is `TRIVIAL`, so the few wrong matches that pass dominated. Use `max_reproj=1000000 loss=cauchy loss_scale=0.25 vis_thresh=0.5 shared_camera=true`. On the 11-frame scene AUC@30/@3 goes 0.74/0.11 → 0.99/0.92 (VGGSfM BA: 0.79/0.31). Frames that no query frame sees get no constraints, so `extra_queries` turns them into queries; a 23-frame wide-baseline scene still needs 8 queries and reaches 0.92/0.28 (VGGSfM 0.79/0.49). The sweep to run on the GPU machines is `scripts/run_tto_roma_loop.sh <model> <datasets>`.
+- With the defaults (gate 8 px, trivial loss) the VGGSfM BA lowers the better models (LARGE HiRoom AUC@3 59.7 → 25) and is skipped on many ScanNet++ scenes, so the old `DA3-*-ba` runs are not representative of what track-based BA can do.
+
 ### Depth Anything 3
 
 *Depth Anything 3: Recovering the Visual Space from Any Views* (arXiv 2511.10647, `docs/DA3.pdf`). Code is at https://github.com/ByteDance-Seed/Depth-Anything-3. These are the any-view checkpoints on Hugging Face, with parameter counts from the repo README:

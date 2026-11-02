@@ -10,14 +10,17 @@ tracker=roma needs RoMa v2 (third_party/RoMaV2, installed with `uv pip install -
 Scenes already in <dst work dir>/metric_results are skipped, so use a new <dst work dir> for every setting.
 
 Outputs go to <dst work dir>, mirroring <src work dir> with only the new data:
-    model_results/    refined extrinsics and intrinsics per scene (mini_npz/results.npz)
-    metric_results/   <dataset>_pose.json as written by the DA3 evaluator, with the timings added per scene
+    model_results/    refined extrinsics and intrinsics per scene (mini_npz/results.npz, with DA3's depth and conf
+                      copied over) and gt_meta.npz, so that scripts/eval_tto.py can score pose and reconstruction
+    metric_results/   <dataset>_ba.json: the evaluator's pose metrics, with the timings added per scene
+                      (not _pose.json, which eval_tto.py writes itself)
 """
 
 import contextlib
 import io
 import json
 import os
+import shutil
 import sys
 import time
 
@@ -42,14 +45,18 @@ DEFAULTS = {
     "max_scenes": 0,  # per dataset, 0 = all
     "scenes": "",  # comma-separated scene names, default: all
     "tracker": "vggsfm",  # or roma
-    "roma_setting": "base",  # turbo, fast, base or precise
+    "roma_setting": "precise",  # RoMa's default; turbo, fast, base or precise
     "query_frames": 8,
     "max_query_pts": 4096,
     "max_points": 163840,  # tracker chunk size, lower it if memory runs out
     "fine_tracking": True,
     "max_reproj": 8.0,  # px at 1024
     "min_inliers": 64,  # per frame, BA is skipped below this
+    "loss": "trivial",  # BA loss: trivial, soft_l1 or cauchy
+    "loss_scale": 1.0,  # px
     "vis_thresh": 0.2,
+    "extra_queries": 0,  # roma: extra query frames for frames that the others see poorly
+    "min_visible": 256,  # roma: visible tracks a frame needs to not become a query
     "shared_camera": False,
     "seed": 0,
 }
@@ -109,6 +116,8 @@ def adjust(pred, tracks, vis, points3d, colors, L, cfg):
         return None
     opts = pycolmap.BundleAdjustmentOptions()
     opts.print_summary = False
+    opts.loss_function_type = getattr(pycolmap.LossFunctionType, cfg["loss"].upper())
+    opts.loss_function_scale = cfg["loss_scale"]
     pycolmap.bundle_adjustment(rec, opts)
 
     ext = np.stack([rec.images[i + 1].cam_from_world.matrix() for i in range(N)]).astype(np.float32)
@@ -124,7 +133,7 @@ def refine_scene(image_files, pred, cfg, device):
     np.random.seed(cfg["seed"])
 
     # same keys for every scene, so that the evaluator's mean works
-    info = {"num_frames": len(pred["depth"]), "num_tracks": 0, "num_points": 0, "track_s": 0.0, "ba_s": 0.0, "peak_mem_gib": 0.0, "ba": 0}
+    info = {"num_frames": len(pred["depth"]), "num_tracks": 0, "num_points": 0, "track_s": 0.0, "ba_s": 0.0, "opt_s": 0.0, "peak_mem_gib": 0.0, "ba": 0}
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
@@ -142,10 +151,12 @@ def refine_scene(image_files, pred, cfg, device):
 
     start = time.perf_counter()
     result = adjust(pred, tracks, vis, points3d, colors, L, cfg)
+    info.update(ba_s=time.perf_counter() - start)
+    info["opt_s"] = info["track_s"] + info["ba_s"]  # the column compare_tto.py shows
     if result is None:
         return pred["extrinsics"], pred["intrinsics"], info
     ext, K, num_points = result
-    info.update(num_points=num_points, ba_s=time.perf_counter() - start, ba=1)
+    info.update(num_points=num_points, ba=1)
     return ext, K, info
 
 
@@ -162,7 +173,7 @@ def main():
 
     for dataset in datasets:
         data_dir = os.path.join(results_dir, dataset)
-        metric_path = os.path.join(dst, "metric_results", f"{dataset}_pose.json")
+        metric_path = os.path.join(dst, "metric_results", f"{dataset}_ba.json")
         metrics = json.load(open(metric_path)) if os.path.exists(metric_path) else {}
         metrics.pop("mean", None)  # recomputed after every scene, so an interrupted run can be resumed
 
@@ -186,7 +197,8 @@ def main():
 
             out = os.path.join(dst, "model_results", dataset, scene, "unposed", "exports", "mini_npz")
             os.makedirs(out, exist_ok=True)
-            np.savez(os.path.join(out, "results.npz"), extrinsics=ext, intrinsics=K)
+            np.savez(os.path.join(out, "results.npz"), depth=pred["depth"], conf=pred["conf"], extrinsics=ext, intrinsics=K)
+            shutil.copy(os.path.join(exports, "gt_meta.npz"), os.path.join(out, "..", "gt_meta.npz"))
 
             # same pose metric and json format as the evaluator
             pose = compute_pose(torch.from_numpy(as_homogeneous(ext)), torch.from_numpy(as_homogeneous(gt["extrinsics"])))

@@ -32,7 +32,10 @@ def track_roma(image_files, pred, cfg, device):
     model = _roma(cfg["roma_setting"])
     queries = np.unique(np.linspace(0, N - 1, min(cfg["query_frames"], N)).round().astype(int))
     all_tracks, all_vis, all_points, all_colors = [], [], [], []
-    for q in queries:
+    seen = np.zeros(N)  # visible tracks per frame
+    todo, extra, used = list(queries), [], {int(q) for q in queries}
+    while todo:
+        q = todo.pop(0)
         # confident pixels away from the border
         valid = conf[q] > np.median(conf[q])
         m = int(0.02 * min(H, W))
@@ -62,4 +65,12 @@ def track_roma(image_files, pred, cfg, device):
         all_vis.append(vis)
         all_points.append(points[q][ys[pick], xs[pick]])
         all_colors.append(imgs[q][ys[pick], xs[pick]])
+        seen += (vis > cfg["vis_thresh"]).sum(1)
+        # frames that no query sees well get no BA constraints, so they become queries themselves
+        if not todo and len(extra) < cfg["extra_queries"]:
+            weak = [j for j in np.argsort(seen) if j not in used and seen[j] < cfg["min_visible"]]
+            if weak:
+                extra.append(int(weak[0]))
+                todo.append(int(weak[0]))
+                used.add(int(weak[0]))
     return np.concatenate(all_tracks, 1), np.concatenate(all_vis, 1), np.concatenate(all_points), np.concatenate(all_colors), L
