@@ -29,6 +29,7 @@ POINTS = {
     "polish50": ("s", "Adam 4x50 + LM polish"),
     "polish200": ("D", "Adam 4x200 + LM polish"),
     "fastpolish50": ("P", "RGB Adam 4x50 + LM polish"),
+    "abl_P3_it25_lm5": ("X", "RGB Adam 4x25 + LM polish"),
     "lm10": ("^", "LM only (4x10)"),
 }
 
