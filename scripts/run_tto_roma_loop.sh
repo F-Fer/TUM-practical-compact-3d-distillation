@@ -21,12 +21,12 @@ declare -A CONFIGS=(
     [roma-turbo-q8]="$ROMA roma_setting=turbo query_frames=8"
     [roma-fast-q4]="$ROMA roma_setting=fast query_frames=4"
     [roma-base-q4]="$ROMA roma_setting=base query_frames=4"
-    [roma-precise-q4]="$ROMA roma_setting=precise query_frames=4"
-    [vggsfm-trivial]="tracker=vggsfm"
-    [vggsfm-cauchy]="tracker=vggsfm max_reproj=1000000 loss=cauchy loss_scale=0.25 shared_camera=true"
+    [roma-precise-q4]="$ROMA roma_setting=precise query_frames=4"  # 1280 px matching, needs > 10 GB
+    [vggsfm-trivial]="tracker=vggsfm max_points=40960"
+    [vggsfm-cauchy]="tracker=vggsfm max_reproj=1000000 loss=cauchy loss_scale=0.25 shared_camera=true max_points=40960"
 )
 configs=("$@")
-[ ${#configs[@]} -eq 0 ] && configs=(roma-turbo-q4 roma-turbo-q8 roma-fast-q4 roma-base-q4 roma-precise-q4 vggsfm-trivial vggsfm-cauchy)
+[ ${#configs[@]} -eq 0 ] && configs=(roma-turbo-q4 roma-turbo-q8 roma-fast-q4 roma-base-q4 vggsfm-trivial vggsfm-cauchy)
 
 src="workspace/evaluation/$model"
 runs=()
