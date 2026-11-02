@@ -15,6 +15,9 @@ Outputs go to <dst work dir>, mirroring <src work dir>:
                       plus a copy of gt_meta.npz, so that `run_bench.py ... eval.eval_only=true` scores them
     metric_results/   <dataset>_pose.json as written by the DA3 evaluator, with per-scene PBA stats added
                       (renamed to <dataset>_pba.json, so that the evaluator's eval_only run can write its own)
+
+With WANDB_PROJECT set (and WANDB_RUN_ID / WANDB_RESUME=allow to share a run between processes, as pba_run.sh
+does), every scene is also logged to wandb: its metrics, running dataset means and loss curve (see wandb_scene).
 """
 
 import json
@@ -896,6 +899,66 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
 
 
+# ---------------------------------------------------------------- wandb (optional)
+
+
+def wandb_start(src, dst, cfg):
+    """This process's wandb run, or None. Logging is on when WANDB_PROJECT is set: pba_run.sh sets it together with
+    WANDB_RUN_ID and WANDB_RESUME=allow, so its per-dataset processes and scripts/wandb_summary.py share one run.
+    A failing init (no login, no network) only disables logging."""
+    if not os.environ.get("WANDB_PROJECT") or os.environ.get("WANDB_MODE") == "disabled":
+        return None
+    try:
+        import wandb
+
+        config = {k: v for k, v in cfg.items() if k not in ("datasets", "max_scenes", "scenes")}  # differ per process
+        config.update(model=os.path.basename(os.path.normpath(src)), run=os.path.basename(os.path.normpath(dst)), dst=dst,
+                      slurm_job=os.environ.get("SLURM_JOB_ID", ""), host=os.uname().nodename)
+        return wandb.init(resume="allow", config=config)
+    except Exception as e:  # noqa: BLE001
+        print(f"[run_tto_pba] wandb init failed, not logging: {e!r}")
+        return None
+
+
+def wandb_scene(run, dst, dataset, scene, metrics, hist):
+    """One wandb step per optimised scene (step = scenes done in this run, counted from the metric files): the scene's
+    metrics, the running means of its dataset and its loss curve (photo/geo of the Adam levels, the LM cost)."""
+    import wandb
+
+    n = sum(len([k for k in json.load(open(os.path.join(dst, "metric_results", f))) if k != "mean"])
+            for f in os.listdir(os.path.join(dst, "metric_results")) if f.endswith("_pba.json"))
+    m, done = metrics[scene], list(metrics.values())
+    row = {
+        "progress/scenes": n,
+        "scene/auc03": m["auc03"], "scene/auc03_init": m["auc03_init"], "scene/auc03_gain": m["auc03"] - m["auc03_init"],
+        "scene/auc30": m["auc30"], "scene/auc30_gain": m["auc30"] - m["auc30_init"],
+        "scene/photo_ratio": m["photo_after"] / max(m["photo_before"], 1e-12),
+        "scene/geo_ratio": m["geo_after"] / max(m["geo_before"], 1e-12),
+        "scene/focal_err": m["focal_err"], "scene/opt_s": m["opt_s"], "scene/peak_mem_gib": m["peak_mem_gib"],
+        f"{dataset}/scenes": len(done),
+        **{f"{dataset}/{k}_mean": float(np.mean([v[k] for v in done])) for k in ("auc03", "auc03_init", "auc30", "auc30_init", "opt_s")},
+    }
+    its = {}  # global iteration = offset of the level + iteration within it
+    for h in hist:
+        if "it" in h:
+            its[h["level"]] = max(its.get(h["level"], 0), h["it"] + 1)
+    off, o = {}, 0
+    for lv in sorted(its):
+        off[lv], o = o, o + its[lv]
+    series = {}
+    for h in hist:
+        if "it" in h:
+            for key, name in ((("photo", "photo"), ("geo", "geo")) if "photo" in h else (("loss", "LM cost"),)):
+                xs, ys = series.setdefault(name, ([], []))
+                xs.append(off[h["level"]] + h["it"])
+                ys.append(h[key])
+    if series:
+        names = list(series)
+        row[f"curves/{dataset}/{scene.replace('/', '_')}"] = wandb.plot.line_series(
+            xs=[series[k][0] for k in names], ys=[series[k][1] for k in names], keys=names, title=f"{dataset} {scene}", xname="iteration")
+    run.log(row, step=n)
+
+
 def main():
     if len(sys.argv) < 3 or sys.argv[1].startswith("-"):
         sys.exit(__doc__)
@@ -905,6 +968,7 @@ def main():
     os.makedirs(dst, exist_ok=True)
     with open(os.path.join(dst, "pba_config.json"), "w") as f:
         json.dump(cfg, f, indent=2)
+    run = wandb_start(src, dst, cfg)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     api = head_state = None
@@ -981,6 +1045,11 @@ def main():
             Evaluator._dump_json(metric_path, {**metrics, "mean": Evaluator._mean_of_dicts(metrics.values())})
             with open(hist_path, "a") as f:
                 f.write(json.dumps({"scene": scene, "hist": hist}) + "\n")
+            if run is not None:
+                try:
+                    wandb_scene(run, dst, dataset, scene, metrics, hist)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[run_tto_pba] wandb logging failed: {e!r}")
             m = metrics[scene]
             print(
                 f"[run_tto_pba] {dataset} {i + 1}/{len(scenes)} {scene}: auc03 {m['auc03_init']:.3f}->{m['auc03']:.3f} "
@@ -991,6 +1060,8 @@ def main():
         if metrics:
             mean = Evaluator._mean_of_dicts(metrics.values())
             print(f"[run_tto_pba] {dataset} mean: " + " ".join(f"{k} {v:.4f}" for k, v in mean.items()))
+    if run is not None:
+        run.finish()
 
 
 if __name__ == "__main__":
