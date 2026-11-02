@@ -1,9 +1,13 @@
-"""Refine saved DA3 predictions with bundle adjustment (VGGT tracks + pycolmap).
+"""Refine saved DA3 predictions with bundle adjustment (VGGT or RoMa v2 tracks + pycolmap).
 
 Usage (from anywhere; paths are resolved relative to the repo root):
     uv run scripts/run_tto_ba.py <src work dir> <dst work dir> [overrides ...]
 
     uv run scripts/run_tto_ba.py workspace/evaluation/DA3-SMALL workspace/evaluation/DA3-SMALL-ba datasets=hiroom
+    uv run scripts/run_tto_ba.py workspace/evaluation/DA3-SMALL workspace/evaluation/DA3-SMALL-ba-roma datasets=hiroom tracker=roma
+
+tracker=roma needs RoMa v2 (third_party/RoMaV2, installed with `uv pip install --no-deps -e third_party/RoMaV2`).
+Scenes already in <dst work dir>/metric_results are skipped, so use a new <dst work dir> for every setting.
 
 Outputs go to <dst work dir>, mirroring <src work dir> with only the new data:
     model_results/    refined extrinsics and intrinsics per scene (mini_npz/results.npz)
@@ -37,6 +41,8 @@ DEFAULTS = {
     "datasets": "",  # comma-separated, default: all in <src>/model_results
     "max_scenes": 0,  # per dataset, 0 = all
     "scenes": "",  # comma-separated scene names, default: all
+    "tracker": "vggsfm",  # or roma
+    "roma_setting": "base",  # turbo, fast, base or precise
     "query_frames": 8,
     "max_query_pts": 4096,
     "max_points": 163840,  # tracker chunk size, lower it if memory runs out
@@ -123,7 +129,12 @@ def refine_scene(image_files, pred, cfg, device):
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     start = time.perf_counter()
-    tracks, vis, points3d, colors, L = track(image_files, pred, cfg, device)
+    if cfg["tracker"] == "roma":
+        from tracks_roma import track_roma
+
+        tracks, vis, points3d, colors, L = track_roma(image_files, pred, cfg, device)
+    else:
+        tracks, vis, points3d, colors, L = track(image_files, pred, cfg, device)
     if device.type == "cuda":
         torch.cuda.synchronize()
         info["peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
