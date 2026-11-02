@@ -92,6 +92,8 @@ def main():
                 for it, p in pts:
                     if fam == "v3":
                         ax.annotate("no PBA" if it == 0 else f"{it}", (p[0], p[k]), textcoords="offset points", xytext=(5, -11), fontsize=7.5, color="#52514e")
+                    elif it:  # dashed family: labels above the points, so they don't collide with the solid line's
+                        ax.annotate(f"{it}", (p[0], p[k]), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=7.5, color="#52514e", style="italic")
         for name, (marker, _) in POINTS.items():
             p = point(f"workspace/tto/{model}/{name}", forward)
             if p:
