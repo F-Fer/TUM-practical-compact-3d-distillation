@@ -1,0 +1,24 @@
+DA3-SMALL loss_B0_base|
+DA3-SMALL loss_D1_d01|huber_photo=0.01
+DA3-SMALL loss_D2_d02|huber_photo=0.02
+DA3-SMALL loss_D3_d10|huber_photo=0.1
+DA3-SMALL loss_D4_d20|huber_photo=0.2
+DA3-SMALL loss_K1_l2|photo_loss=l2
+DA3-SMALL loss_K2_cauchy05|photo_loss=cauchy huber_photo=0.05
+DA3-SMALL loss_K3_cauchy10|photo_loss=cauchy huber_photo=0.1
+DA3-SMALL loss_K4_gm05|photo_loss=gm huber_photo=0.05
+DA3-SMALL loss_K5_gm10|photo_loss=gm huber_photo=0.1
+DA3-SMALL loss_K6_tukey10|photo_loss=tukey huber_photo=0.1
+DA3-SMALL loss_K7_tukey20|photo_loss=tukey huber_photo=0.2
+DA3-SMALL loss_V1_gray|gray=true
+DA3-SMALL loss_V2_min|photo_agg=min
+DA3-SMALL loss_V3_nobright|bright=false
+DA3-SMALL loss_G1_hgeo02|huber_geo=0.02
+DA3-SMALL loss_G2_hgeo20|huber_geo=0.2
+DA3-SMALL loss_G3_wgeo0|w_geo=0
+DA3-SMALL loss_G4_wgeo3|w_geo=3
+DA3-SMALL loss_C1_d02gray_s0|huber_photo=0.02 gray=true seed=0
+DA3-SMALL loss_C1_d02gray_s1|huber_photo=0.02 gray=true seed=1
+DA3-SMALL loss_C1_d02gray_s2|huber_photo=0.02 gray=true seed=2
+DA3-BASE loss_C1_d02gray_s0|huber_photo=0.02 gray=true seed=0
+DA3-LARGE-1.1 loss_C1_d02gray_s0|huber_photo=0.02 gray=true seed=0

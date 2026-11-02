@@ -80,11 +80,16 @@ DEFAULTS = {
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
     "w_pose": 0.0,  # keeps the pose updates (rotation in rad, translation in median depths) near zero (= DA3's poses)
     "w_focal": 0.0,  # keeps the log focal scale near zero (DA3's focal); focal and depth trade off on narrow-FOV scenes
-    "huber_photo": 0.05,  # intensities in [0, 1]
+    "huber_photo": 0.05,  # scale of the photometric kernel (intensities in [0, 1])
     "huber_geo": 0.05,  # log depth
     "occ_thresh": 0.05,  # relative depth; a sample is occluded in the target if it lies further away
     "conf_quantile": 0.1,  # source pixels below this DA3 confidence quantile (per scene) are not sampled
-    "photo_loss": "huber",  # huber (per pixel, after affine brightness) | ncc (1 - NCC of 3x3 patches)
+    # per pixel (after affine brightness, kernel scale huber_photo, see robust()): huber | l2 | cauchy | gm | tukey;
+    # or ncc (1 - NCC of 3x3 patches)
+    "photo_loss": "huber",
+    "photo_agg": "mean",  # per-pixel losses: mean over the visible neighbours | min (the best neighbour, occlusion-robust)
+    "gray": False,  # rgb features: photometric term on the grey image (mean of the channels)
+    "bright": True,  # per-frame affine brightness (per-pixel losses on rgb)
     "patch_stride": 1.0,  # px between patch samples, multiplied by max(1, blur sigma)
     "grad_weight": 1.0,  # sampling probability ~ |grad I|^grad_weight (0 = uniform)
     "features": "rgb",  # rgb (photometric) | vgg (feature-metric: VGG16 relu1_2 + relu2_2, PCA-reduced)
@@ -164,6 +169,40 @@ def gaussian_blur(x, sigma):
 def huber(r, delta):
     a = r.abs()
     return torch.where(a < delta, 0.5 * r * r / delta, a - 0.5 * delta)
+
+
+def robust(r, c, kind="huber"):
+    """Robust kernel rho(r) with scale c. All equal 0.5 r^2 / c near 0 (the Huber's quadratic part), so only the
+    tails differ: huber (linear), l2 (quadratic), cauchy (logarithmic), gm = Geman-McClure (bounded, -> c / 2),
+    tukey (biweight: constant c / 6 beyond c, i.e. no gradient)."""
+    if kind == "huber":
+        return huber(r, c)
+    x2 = (r / c) ** 2
+    if kind == "l2":
+        return 0.5 * c * x2
+    if kind == "cauchy":
+        return 0.5 * c * torch.log1p(x2)
+    if kind == "gm":
+        return 0.5 * c * x2 / (1 + x2)
+    if kind == "tukey":
+        return c / 6 * (1 - (1 - x2.clamp(max=1)) ** 3)
+    raise ValueError(f"unknown kernel {kind}")
+
+
+def robust_weight(r, c, kind="huber"):
+    """IRLS weight rho'(r) / r of robust() (the LM levels minimise sum 0.5 w r^2 with these weights)."""
+    if kind == "huber":
+        return torch.where(r.abs() < c, 1 / c, 1 / r.abs().clamp_min(1e-12))
+    x2 = (r / c) ** 2
+    if kind == "l2":
+        return torch.full_like(r, 1 / c)
+    if kind == "cauchy":
+        return 1 / (c * (1 + x2))
+    if kind == "gm":
+        return 1 / (c * (1 + x2) ** 2)
+    if kind == "tukey":
+        return (1 - x2).clamp_min(0) ** 2 / c
+    raise ValueError(f"unknown kernel {kind}")
 
 
 # ---------------------------------------------------------------- scene
@@ -426,7 +465,7 @@ class PBA(torch.nn.Module):
 
         # affine brightness only for intensities with the Huber loss (NCC and features are invariant to it, and
         # Adam would turn its ~0 gradient into a random walk)
-        on = self.free[:, 0] * (self.cfg["features"] == "rgb" and self.cfg["photo_loss"] == "huber")
+        on = self.free[:, 0] * (self.cfg["features"] == "rgb" and self.cfg["photo_loss"] != "ncc" and self.cfg["bright"])
         a, b = self.bright[:, 0] * on, self.bright[:, 1] * on
         C = img_flat.shape[0]
         i_src = bilinear_gather(img_flat, idx.reshape(-1), u.reshape(-1), v.reshape(-1), H, W).view(N, 1, -1, C)
@@ -460,7 +499,13 @@ class PBA(torch.nn.Module):
             mp = m.reshape(*shp[:-1]).amin(-1)  # patch visible in all its samples
             l_photo = ((1 - ncc) * mp).sum() / mp.sum().clamp_min(1)
         else:
-            l_photo = (huber(i_tgt - i_src, cfg["huber_photo"]).mean(-1) * m).sum() / denom
+            e = robust(i_tgt - i_src, cfg["huber_photo"], cfg["photo_loss"]).mean(-1)  # [N, k, M]
+            if cfg["photo_agg"] == "min":  # the best visible neighbour of each sample
+                any_vis = mask.any(1)
+                e_min = torch.where(mask, e, torch.full_like(e, float("inf"))).amin(1)
+                l_photo = torch.where(any_vis, e_min, torch.zeros_like(e_min)).sum() / any_vis.sum().clamp_min(1)
+            else:
+                l_photo = (e * m).sum() / denom
         l_geo = (huber(geo, cfg["huber_geo"]) * m).sum() / denom
         l_prior = (self.grid**2).mean() if cfg["depth_grid"] > 0 else torch.zeros((), device=u.device)
         if cfg["depth_grid_fine"] > 0:
@@ -536,7 +581,7 @@ class PBA(torch.nn.Module):
         C = img_flat.shape[0]
         a = bilinear_gather(img_flat, idx.reshape(-1), u.reshape(-1), v.reshape(-1), H, W).reshape(n, 1, P, S * C)
         b = bilinear_gather(img_flat, tgt, utf, vtf, H, W).reshape(n, k, P, S * C)
-        if self.cfg["features"] == "rgb" and self.cfg["photo_loss"] == "huber":  # affine brightness as in residuals (fixed)
+        if self.cfg["features"] == "rgb" and self.cfg["photo_loss"] != "ncc" and self.cfg["bright"]:  # brightness as in residuals (fixed)
             ga, gb = (self.bright.detach() * self.free).unbind(1)
             a = a * torch.exp(ga[src])[:, None, None, None] + gb[src][:, None, None, None]
             b = b * torch.exp(ga[nbrs])[..., None, None] + gb[nbrs][..., None, None]
@@ -570,11 +615,25 @@ def eval_photo(model, nbrs, img_flat, n=8192, seed=1):
     i_tgt, i_src, geo, mask = model.residuals(u, v, nbrs, img_flat)
     photo = i_tgt - i_src
     m = mask.float()
-    return {
+    out = {
         "photo_l1": float((photo.abs().mean(-1) * m).sum() / m.sum()),
         "geo_l1": float((geo.abs() * m).sum() / m.sum()),
         "visible": float(m.mean()),
     }
+    # distribution of the photometric residuals of visible (sample, neighbour) pairs, for choosing the kernel:
+    # quantiles of |r| (mean over channels), robust sigma (1.4826 MAD of the signed per-channel residuals) and the
+    # fraction of pairs beyond 0.05 / 0.1 / 0.2
+    a = photo.abs().mean(-1)[mask]
+    if a.numel():
+        srt = a.sort().values
+        for q in (50, 75, 90, 95, 99):
+            out[f"photo_q{q}"] = float(srt[min(int(q / 100 * len(srt)), len(srt) - 1)])
+        r = photo[mask].reshape(-1)
+        r = r[:: max(1, r.numel() // 4_000_000)]
+        out["photo_sigma"] = float(1.4826 * (r - r.median()).abs().median())
+        for t in (5, 10, 20):
+            out[f"photo_out{t:02d}"] = float((a > t / 100).float().mean())
+    return out
 
 
 def lm_layout(model):
@@ -601,7 +660,7 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
     T, k = layout["T"], nbrs.shape[1]
     P = u.shape[1] // S
     gh, gw = model.grid.shape[1:]
-    irls = lambda r, d: torch.where(r.abs() < d, 1 / d, 1 / r.abs().clamp_min(1e-12))  # noqa: E731
+    kind, agg_min = cfg["photo_loss"], cfg["photo_agg"] == "min" and S == 1
     p = [x.detach() for x in (model.rot, model.trans, model.rot, model.trans, model.logf)]
 
     # normalisers of the photometric (patches visible in all samples / visible samples) and geometric terms
@@ -611,7 +670,7 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
         for src in chunks:
             zero_s, zero_t = u.new_zeros(len(src), P), u.new_zeros(len(src), k, P)
             _, _, vis, _, _ = model.lm_residuals(*p, zero_s, zero_t, src, u[src], v[src], nbrs[src], img_flat, S)
-            n_patch += float(vis.all(-1).sum()) if S > 1 else float(vis.sum())
+            n_patch += float(vis.all(-1).sum()) if S > 1 else float(vis[..., 0].any(1).sum()) if agg_min else float(vis.sum())
             n_vis += float(vis.sum())
     n_patch, n_vis = max(n_patch, 1.0), max(n_vis, 1.0)
 
@@ -642,8 +701,12 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
             if S > 1:
                 wp = (cfg["w_photo"] * m.amin(-1) / n_patch)[..., None].expand_as(photo)
             else:
-                wp = cfg["w_photo"] * m / (n_vis * photo.shape[-1]) * irls(photo, cfg["huber_photo"])
-            wg = cfg["w_geo"] * m / n_vis * irls(geo, cfg["huber_geo"])
+                if agg_min:  # only the best visible neighbour of each sample (as in model.loss)
+                    e = robust(photo, cfg["huber_photo"], kind).mean(-1)  # [n, k, P]
+                    best = torch.where(vis[..., 0], e, torch.full_like(e, float("inf"))).argmin(1)  # [n, P]
+                    m = m * F.one_hot(best, k).permute(0, 2, 1)[..., None].float()
+                wp = cfg["w_photo"] * m / (n_patch * photo.shape[-1]) * robust_weight(photo, cfg["huber_photo"], kind)
+            wg = cfg["w_geo"] * vis.float() / n_vis * robust_weight(geo, cfg["huber_geo"])
 
             # expand the per-patch depth offsets onto the 4 grid cells around the source / warped patch centre
             uc, vc = u[src].view(n, P, S).mean(-1), v[src].view(n, P, S).mean(-1)
@@ -786,7 +849,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     M = cfg["samples"]
     hist = []
     start = time.perf_counter()
-    feat_maps = {"rgb": images}
+    feat_maps = {"rgb": images.mean(1, keepdim=True) if cfg["gray"] else images}
     head = None
     if cfg["depth_param"] == "head" and levels:
         head = HeadDepth(api, image_files, head_state)
@@ -812,7 +875,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         stride = cfg["patch_stride"] * max(1.0, sigma)
         if feat_name in ("local", "mid", "final"):
             stride = max(stride, cfg["token_stride"])
-        n_pix = M if cfg["photo_loss"] == "huber" else M // 9  # with NCC, M samples = M/9 patches of 9 pixels
+        n_pix = M if cfg["photo_loss"] != "ncc" else M // 9  # with NCC, M samples = M/9 patches of 9 pixels
         fine = cfg["depth_grid_fine"] > 0 and level >= cfg["fine_from"]
         next(g for g in groups if g["params"][0] is model.grid2)["lr"] = cfg["lr_depth"] if fine else 0.0
         use_lm = cfg["optimizer"] == "lm" or str(level) in cfg["lm_levels"].split(",")
@@ -889,6 +952,8 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         peak_mem_gib=torch.cuda.max_memory_allocated() / 2**30 if device.type == "cuda" else 0.0,
         photo_before=before["photo_l1"],
         photo_after=after["photo_l1"],
+        **{f"{k}_before": v for k, v in before.items() if k.startswith(("photo_q", "photo_sigma", "photo_out"))},
+        **{f"{k}_after": v for k, v in after.items() if k.startswith(("photo_q", "photo_sigma", "photo_out"))},
         geo_before=before["geo_l1"],
         geo_after=after["geo_l1"],
         visible_before=before["visible"],
@@ -936,6 +1001,7 @@ def wandb_scene(run, dst, dataset, scene, metrics, hist):
         "scene/geo_ratio": m["geo_after"] / max(m["geo_before"], 1e-12),
         "scene/focal_err": m["focal_err"], "scene/opt_s": m["opt_s"], "scene/peak_mem_gib": m["peak_mem_gib"],
         f"{dataset}/scenes": len(done),
+        **{f"resid/{k}": v for k, v in m.items() if k.startswith(("photo_q", "photo_sigma", "photo_out"))},
         **{f"{dataset}/{k}_mean": float(np.mean([v[k] for v in done])) for k in ("auc03", "auc03_init", "auc30", "auc30_init", "opt_s")},
     }
     its = {}  # global iteration = offset of the level + iteration within it
