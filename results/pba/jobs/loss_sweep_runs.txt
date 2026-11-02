@@ -22,3 +22,5 @@ DA3-SMALL loss_C1_d02gray_s1|huber_photo=0.02 gray=true seed=1
 DA3-SMALL loss_C1_d02gray_s2|huber_photo=0.02 gray=true seed=2
 DA3-BASE loss_C1_d02gray_s0|huber_photo=0.02 gray=true seed=0
 DA3-LARGE-1.1 loss_C1_d02gray_s0|huber_photo=0.02 gray=true seed=0
+DA3-BASE loss_V1_gray|gray=true
+DA3-LARGE-1.1 loss_V1_gray|gray=true

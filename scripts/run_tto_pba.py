@@ -88,7 +88,9 @@ DEFAULTS = {
     # or ncc (1 - NCC of 3x3 patches)
     "photo_loss": "huber",
     "photo_agg": "mean",  # per-pixel losses: mean over the visible neighbours | min (the best neighbour, occlusion-robust)
-    "gray": False,  # rgb features: photometric term on the grey image (mean of the channels)
+    # rgb features: photometric term on the grey image (mean of the channels). Default since 2026-11-02 (same quality
+    # on SMALL, 5-7% faster); runs before that used the colour image (their pba_config.json has no "gray" key)
+    "gray": True,
     "bright": True,  # per-frame affine brightness (per-pixel losses on rgb)
     "patch_stride": 1.0,  # px between patch samples, multiplied by max(1, blur sigma)
     "grad_weight": 1.0,  # sampling probability ~ |grad I|^grad_weight (0 = uniform)
