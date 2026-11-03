@@ -50,6 +50,7 @@ DEFAULTS = {
     "max_query_pts": 4096,
     "max_points": 163840,  # tracker chunk size, lower it if memory runs out
     "fine_tracking": True,
+    "autocast": True,  # run the VGGSfM tracker in bf16 (fp16 before Ampere) like VGGT's demo; false = fp32
     "max_reproj": 8.0,  # px at 1024
     "min_inliers": 64,  # per frame, BA is skipped below this
     "loss": "trivial",  # BA loss: trivial, soft_l1 or cauchy
@@ -59,6 +60,7 @@ DEFAULTS = {
     "min_visible": 256,  # roma: visible tracks a frame needs to not become a query
     "shared_camera": False,
     "seed": 0,
+    "metric_file": "ba",  # metric_results/<dataset>_<metric_file>.json; "pba" is what scripts/plot_compute.py reads
 }
 
 # pycolmap's BA and reconstruction logs are very verbose
@@ -92,7 +94,7 @@ def track(image_files, pred, cfg, device):
     points_sq = np.zeros((N, L, L, 3), np.float32); points_sq[:, :H, :W] = points
 
     # VGGT's demo runs the tracker in bf16 (fp16 before Ampere)
-    if device.type == "cuda":
+    if device.type == "cuda" and cfg["autocast"]:
         autocast = torch.autocast("cuda", dtype=torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16)
     else:
         autocast = contextlib.nullcontext()
@@ -126,6 +128,17 @@ def adjust(pred, tracks, vis, points3d, colors, L, cfg):
     return ext, K, rec.num_points3D()
 
 
+def centres(ext):
+    """Camera centres of world-to-camera [N, 3, 4] matrices."""
+    return -np.einsum("nji,nj->ni", ext[:, :3, :3], ext[:, :3, 3])
+
+
+def depth_scale(ext_old, ext_new):
+    """BA fixes the scene scale freely, so the refined cameras can be a different size than DA3's: ratio of their spreads."""
+    old, new = centres(ext_old), centres(ext_new)
+    return float(np.linalg.norm(new - new.mean(0)) / max(np.linalg.norm(old - old.mean(0)), 1e-9))
+
+
 def refine_scene(image_files, pred, cfg, device):
     """Track and adjust one scene; falls back to DA3's poses if BA is skipped."""
     # the query keypoints are subsampled at random
@@ -143,7 +156,17 @@ def refine_scene(image_files, pred, cfg, device):
 
         tracks, vis, points3d, colors, L = track_roma(image_files, pred, cfg, device)
     else:
-        tracks, vis, points3d, colors, L = track(image_files, pred, cfg, device)
+        # the tracker's memory scales with max_points, so halve it until the scene fits
+        while True:
+            try:
+                tracks, vis, points3d, colors, L = track(image_files, pred, cfg, device)
+                break
+            except torch.cuda.OutOfMemoryError:
+                if cfg["max_points"] <= 2560:
+                    raise
+                cfg = dict(cfg, max_points=cfg["max_points"] // 2)
+                torch.cuda.empty_cache()
+                print(f"[run_tto_ba] tracker out of memory, retrying with max_points={cfg['max_points']}")
     if device.type == "cuda":
         torch.cuda.synchronize()
         info["peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
@@ -173,7 +196,7 @@ def main():
 
     for dataset in datasets:
         data_dir = os.path.join(results_dir, dataset)
-        metric_path = os.path.join(dst, "metric_results", f"{dataset}_ba.json")
+        metric_path = os.path.join(dst, "metric_results", f"{dataset}_{cfg['metric_file']}.json")
         metrics = json.load(open(metric_path)) if os.path.exists(metric_path) else {}
         metrics.pop("mean", None)  # recomputed after every scene, so an interrupted run can be resumed
 
@@ -197,7 +220,8 @@ def main():
 
             out = os.path.join(dst, "model_results", dataset, scene, "unposed", "exports", "mini_npz")
             os.makedirs(out, exist_ok=True)
-            np.savez(os.path.join(out, "results.npz"), depth=pred["depth"], conf=pred["conf"], extrinsics=ext, intrinsics=K)
+            # the evaluator takes the scale from the poses, so DA3's depth has to follow the rescaling of the cameras
+            np.savez(os.path.join(out, "results.npz"), depth=pred["depth"] * depth_scale(pred["extrinsics"], ext), conf=pred["conf"], extrinsics=ext, intrinsics=K)
             shutil.copy(os.path.join(exports, "gt_meta.npz"), os.path.join(out, "..", "gt_meta.npz"))
 
             # same pose metric and json format as the evaluator
