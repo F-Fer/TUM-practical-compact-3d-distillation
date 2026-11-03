@@ -31,6 +31,7 @@ import cv2
 import numpy as np
 import pycolmap
 import torch
+from scipy.spatial.transform import Rotation, Slerp
 from depth_anything_3.bench.evaluator import Evaluator
 from depth_anything_3.bench.utils import compute_pose
 from depth_anything_3.utils.geometry import as_homogeneous
@@ -44,7 +45,7 @@ DEFAULTS = {
     "datasets": "",  # comma-separated, default: all in <src>/model_results
     "max_scenes": 0,  # per dataset, 0 = all
     "scenes": "",  # comma-separated scene names, default: all
-    "tracker": "vggsfm",  # or roma
+    "tracker": "vggsfm",  # roma, or none (DA3's own prediction, scored by the same pipeline as a baseline)
     "roma_setting": "precise",  # RoMa's default; turbo, fast, base or precise
     "query_frames": 8,
     "max_query_pts": 4096,
@@ -59,6 +60,10 @@ DEFAULTS = {
     "extra_queries": 0,  # roma: extra query frames for frames that the others see poorly
     "min_visible": 256,  # roma: visible tracks a frame needs to not become a query
     "shared_camera": False,
+    "refine_focal": True,  # false = BA keeps DA3's focal length
+    "pairs": 0,  # roma: match each query only to its k most covisible frames (by DA3's geometry), 0 = all
+    "query_offset": 0,  # roma: shift the query frames by this many frames
+    "shrink": 0.0,  # blend the refined cameras toward DA3's after BA (0 = off, 1 = DA3's cameras)
     "seed": 0,
     "metric_file": "ba",  # metric_results/<dataset>_<metric_file>.json; "pba" is what scripts/plot_compute.py reads
 }
@@ -120,17 +125,43 @@ def adjust(pred, tracks, vis, points3d, colors, L, cfg):
     opts.print_summary = False
     opts.loss_function_type = getattr(pycolmap.LossFunctionType, cfg["loss"].upper())
     opts.loss_function_scale = cfg["loss_scale"]
+    opts.refine_focal_length = cfg["refine_focal"]
     pycolmap.bundle_adjustment(rec, opts)
 
     ext = np.stack([rec.images[i + 1].cam_from_world.matrix() for i in range(N)]).astype(np.float32)
     cams = [rec.cameras[rec.images[i + 1].camera_id] for i in range(N)]
     K = np.stack([[[c.params[0], 0, c.params[1]], [0, c.params[0], c.params[2]], [0, 0, 1]] for c in cams]).astype(np.float32)
+    if cfg["shrink"] > 0:
+        ext, K = shrink_to_da3(pred, ext, K, cfg["shrink"])
     return ext, K, rec.num_points3D()
 
 
 def centres(ext):
     """Camera centres of world-to-camera [N, 3, 4] matrices."""
     return -np.einsum("nji,nj->ni", ext[:, :3, :3], ext[:, :3, 3])
+
+
+def shrink_to_da3(pred, ext, K, w):
+    """Express the refined cameras in DA3's world frame (similarity fit), then blend them toward DA3's by weight w."""
+    old = pred["extrinsics"]
+    # new -> DA3 world rotation Q: R_new Q^T ~ R_old for every frame
+    u, _, vt = np.linalg.svd(np.einsum("nji,njk->ik", ext[:, :3, :3], old[:, :3, :3]))
+    Q = (u @ np.diag([1, 1, np.linalg.det(u @ vt)]) @ vt).T
+    c_new, c_old = centres(ext), centres(old)
+    q = (c_new - c_new.mean(0)) @ Q.T
+    d = c_old - c_old.mean(0)
+    s = float((q * d).sum() / max((q * q).sum(), 1e-12))
+    c_al = s * q + c_old.mean(0)
+    R_al = ext[:, :3, :3] @ Q.T
+    out = np.zeros_like(ext)
+    for i in range(len(ext)):
+        rots = Rotation.from_matrix([R_al[i], old[i, :3, :3]])
+        R = Slerp([0, 1], rots)(w).as_matrix()
+        c = (1 - w) * c_al[i] + w * c_old[i]
+        out[i, :3, :3], out[i, :3, 3] = R, -R @ c
+    K = K.copy()
+    K[:, 0, 0] = K[:, 1, 1] = np.exp((1 - w) * np.log(K[:, 0, 0]) + w * np.log(pred["intrinsics"][:, 0, 0]))
+    return out, K
 
 
 def depth_scale(ext_old, ext_new):
@@ -150,6 +181,8 @@ def refine_scene(image_files, pred, cfg, device):
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
+    if cfg["tracker"] == "none":
+        return pred["extrinsics"], pred["intrinsics"], info
     start = time.perf_counter()
     if cfg["tracker"] == "roma":
         from tracks_roma import track_roma

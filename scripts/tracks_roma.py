@@ -19,6 +19,18 @@ def _roma(setting):
     return _models[setting]
 
 
+def covisible(pts, ext, K, hw, q, k):
+    """The k frames (other than q) that see the most of the query's 3D points, by DA3's cameras: set of indices."""
+    pts = pts[:: max(len(pts) // 1024, 1)]
+    cam = np.einsum("nij,pj->npi", ext[:, :3, :3], pts) + ext[:, None, :3, 3]
+    uv = np.einsum("nij,npj->npi", K, cam)
+    uv = uv[..., :2] / np.maximum(uv[..., 2:], 1e-6)
+    ok = (cam[..., 2] > 0) & (uv[..., 0] >= 0) & (uv[..., 0] < hw[1]) & (uv[..., 1] >= 0) & (uv[..., 1] < hw[0])
+    frac = ok.mean(1)
+    frac[q] = -1
+    return set(np.argsort(-frac)[:k].tolist())
+
+
 def track_roma(image_files, pred, cfg, device):
     """Same return values as track() in run_tto_ba.py: tracks [N, P, 2] in pixels, vis [N, P], points3d, colors, L."""
     depth, conf, ext, K = pred["depth"], pred["conf"], pred["extrinsics"], pred["intrinsics"]
@@ -30,7 +42,7 @@ def track_roma(image_files, pred, cfg, device):
     points = unproject_depth_map_to_point_map(depth[..., None], ext, K)
 
     model = _roma(cfg["roma_setting"])
-    queries = np.unique(np.linspace(0, N - 1, min(cfg["query_frames"], N)).round().astype(int))
+    queries = np.unique((np.linspace(0, N - 1, min(cfg["query_frames"], N)).round().astype(int) + cfg["query_offset"]) % N)
     all_tracks, all_vis, all_points, all_colors = [], [], [], []
     seen = np.zeros(N)  # visible tracks per frame
     todo, extra, used = list(queries), [], {int(q) for q in queries}
@@ -46,12 +58,15 @@ def track_roma(image_files, pred, cfg, device):
         # RoMa's warps are in [-1, 1] with pixel centres at +0.5, DA3's pixel indices have them at integers
         grid = torch.from_numpy(((xy + 0.5) / [W, H] * 2 - 1).astype(np.float32)).to(device)[None, None]
 
+        keep = covisible(points[q][ys[pick], xs[pick]], ext, K, (H, W), q, cfg["pairs"]) if cfg["pairs"] else None
         tracks = np.zeros((N, len(pick), 2), np.float32)
         vis = np.zeros((N, len(pick)), np.float32)
         img_q = images[q : q + 1].to(device)
         for j in range(N):
             if j == q:
                 tracks[j], vis[j] = xy, 1
+                continue
+            if keep is not None and j not in keep:
                 continue
             preds = model.match(img_q, images[j : j + 1].to(device))
             warp = preds["warp_AB"][0].permute(2, 0, 1)[None]
