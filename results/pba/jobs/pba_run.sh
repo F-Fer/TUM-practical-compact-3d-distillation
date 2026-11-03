@@ -34,5 +34,9 @@ ref=workspace/tto/$model/init_$subset
 recon=hiroom,7scenes,scannetpp,dtu
 $PY scripts/eval_tto.py $ref $dst ${PBA_DATASETS:-$recon} pose,recon_unposed --workers 2 2>&1 | grep -v -i -E "warning|it/s\]|s/it\]"
 [ -z "${PBA_DATASETS:-}" ] && $PY scripts/eval_tto.py $ref $dst dtu64,eth3d pose 2>&1 | grep -v -i -E "warning|it/s\]|s/it\]"
+# ETH3D recon (PBA_ETH3D_RECON=1): TSDF fusion of the full-resolution DSLR depth without depth cap, RAM-heavy, so one
+# scene at a time (see eth3d_rescore.sh for runs scored without it)
+[ -z "${PBA_DATASETS:-}" ] && [ "${PBA_ETH3D_RECON:-0}" = 1 ] && /usr/bin/time -f "[eth3d recon] %e s, max RSS %M KB" \
+  $PY scripts/eval_tto.py $ref $dst eth3d recon_unposed --workers 1 2>&1 | grep -v -i -E "warning|it/s\]|s/it\]"
 $PY scripts/wandb_summary.py $ref $dst 2>&1 | grep -v Warning
 date
