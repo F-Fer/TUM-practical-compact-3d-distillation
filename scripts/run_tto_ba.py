@@ -60,9 +60,15 @@ DEFAULTS = {
     "extra_queries": 0,  # roma: extra query frames for frames that the others see poorly
     "min_visible": 256,  # roma: visible tracks a frame needs to not become a query
     "shared_camera": False,
+    "camera": "pinhole",  # pinhole, or radial: one shared radial distortion parameter, estimated by BA (ETH3D's lenses are strongly distorted)
     "refine_focal": True,  # false = BA keeps DA3's focal length
     "pairs": 0,  # roma: match each query only to its k most covisible frames (by DA3's geometry), 0 = all
     "query_offset": 0,  # roma: shift the query frames by this many frames
+    "depth_fit": "none",  # how the depth follows the refined cameras: none = ratio of the camera spreads, median = same, robust to stray cameras, scene / frame / grid = fitted to BA's triangulated points (one scale / one per frame / a smooth correction per frame)
+    "fit_grid": 8,  # depth_fit=grid: nodes per side of the log-depth correction grid of each frame
+    "fit_ridge": 10.0,  # depth_fit=grid: pull of each node toward the frame's median scale, in tracks
+    "reject": 0.0,  # > 0: frames whose refined camera is further than this many times the median deviation from DA3's get DA3's camera
+    "cache_tracks": "",  # directory: save the tracks of every scene there and reuse them, so BA-only settings don't re-track
     "shrink": 0.0,  # blend the refined cameras toward DA3's after BA (0 = off, 1 = DA3's cameras)
     "seed": 0,
     "metric_file": "ba",  # metric_results/<dataset>_<metric_file>.json; "pba" is what scripts/plot_compute.py reads
@@ -113,7 +119,7 @@ def track(image_files, pred, cfg, device):
 
 
 def adjust(pred, tracks, vis, points3d, colors, L, cfg):
-    """Bundle-adjust cameras and points on the tracks: (extrinsics, intrinsics, #points), None if too few inliers."""
+    """Bundle-adjust cameras and points on the tracks: (extrinsics, intrinsics, #points, depth scales or None), None if too few inliers."""
     N = len(tracks)
     rec, _ = batch_np_matrix_to_pycolmap(
         points3d, pred["extrinsics"], pred["intrinsics"], tracks, np.array([L, L]), masks=vis > cfg["vis_thresh"],
@@ -121,8 +127,14 @@ def adjust(pred, tracks, vis, points3d, colors, L, cfg):
         shared_camera=cfg["shared_camera"], camera_type="SIMPLE_PINHOLE", points_rgb=colors)
     if rec is None:
         return None
+    if cfg["camera"] == "radial":
+        for cam in rec.cameras.values():  # VGGT's converter only builds SIMPLE_PINHOLE
+            params = list(cam.params)
+            cam.model = pycolmap.CameraModelId.SIMPLE_RADIAL
+            cam.params = params + [0.0]
     opts = pycolmap.BundleAdjustmentOptions()
     opts.print_summary = False
+    opts.refine_extra_params = cfg["camera"] == "radial"
     opts.loss_function_type = getattr(pycolmap.LossFunctionType, cfg["loss"].upper())
     opts.loss_function_scale = cfg["loss_scale"]
     opts.refine_focal_length = cfg["refine_focal"]
@@ -131,9 +143,66 @@ def adjust(pred, tracks, vis, points3d, colors, L, cfg):
     ext = np.stack([rec.images[i + 1].cam_from_world.matrix() for i in range(N)]).astype(np.float32)
     cams = [rec.cameras[rec.images[i + 1].camera_id] for i in range(N)]
     K = np.stack([[[c.params[0], 0, c.params[1]], [0, c.params[0], c.params[2]], [0, 0, 1]] for c in cams]).astype(np.float32)
-    if cfg["shrink"] > 0:
-        ext, K = shrink_to_da3(pred, ext, K, cfg["shrink"])
-    return ext, K, rec.num_points3D()
+    ratios = depth_ratios(rec, pred["depth"], cfg["depth_fit"], cfg["fit_grid"], cfg["fit_ridge"]) if cfg["depth_fit"] in ("scene", "frame", "grid") else None
+    if cfg["shrink"] > 0 or cfg["reject"] > 0:
+        ext, K, s = shrink_to_da3(pred, ext, K, cfg["shrink"], cfg["reject"])
+        if ratios is not None:
+            ratios = ratios * s  # the depth moves with the cameras into DA3's frame
+    return ext, K, rec.num_points3D(), ratios
+
+
+def track_depths(rec, depth):
+    """Per frame: pixel positions of the tracks BA triangulated, their depth in BA's frame and DA3's depth there."""
+    N, H, W = depth.shape
+    out = []
+    for i in range(N):
+        image = rec.images[i + 1]
+        R_t = image.cam_from_world.matrix()
+        xs, ys, zb, zd = [], [], [], []
+        for p in image.points2D:
+            if not p.has_point3D():
+                continue
+            x, y = p.xy
+            xi, yi = int(round(x)), int(round(y))
+            if 0 <= xi < W and 0 <= yi < H and depth[i, yi, xi] > 0:
+                z = R_t[2, :3] @ rec.points3D[p.point3D_id].xyz + R_t[2, 3]
+                if z > 0:
+                    xs.append(x), ys.append(y), zb.append(z), zd.append(depth[i, yi, xi])
+        out.append(tuple(np.array(v, np.float64) for v in (xs, ys, zb, zd)))
+    return out
+
+
+def fit_grid(xs, ys, logr, H, W, G, ridge):
+    """Smooth log-depth correction [H, W]: bilinear G x G grid, ridge regression toward the median, one outlier-trimmed refit."""
+    gx, gy = xs / (W - 1) * (G - 1), ys / (H - 1) * (G - 1)
+    x0, y0 = np.clip(gx.astype(int), 0, G - 2), np.clip(gy.astype(int), 0, G - 2)
+    fx, fy = gx - x0, gy - y0
+    B = np.zeros((len(xs), G * G))
+    rows = np.arange(len(xs))
+    for dx, dy, w in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+        np.add.at(B, (rows, (y0 + dy) * G + x0 + dx), w)
+    m = np.median(logr)
+    keep = np.ones(len(xs), bool)
+    for _ in range(2):
+        g = np.linalg.solve(B[keep].T @ B[keep] + ridge * np.eye(G * G), B[keep].T @ logr[keep] + ridge * m)
+        res = logr - B @ g
+        keep = np.abs(res - np.median(res)) < 3 * (1.4826 * np.median(np.abs(res - np.median(res))) + 1e-6)
+    grid = torch.from_numpy(g.reshape(1, 1, G, G).astype(np.float32))
+    return torch.nn.functional.interpolate(grid, size=(H, W), mode="bilinear", align_corners=True)[0, 0].numpy()
+
+
+def depth_ratios(rec, depth, mode, G=8, ridge=10.0):
+    """What takes DA3's depth to the depth of BA's 3D points: a scale per frame [N], or a correction map per frame [N, H, W] for mode grid."""
+    N, H, W = depth.shape
+    data = track_depths(rec, depth)
+    logr = [np.log(zb / zd) for _, _, zb, zd in data]
+    scene = np.median(np.concatenate(logr)) if any(len(r) for r in logr) else 0.0
+    if mode == "scene":
+        return np.full(N, np.exp(scene), np.float32)
+    if mode == "frame":
+        return np.exp([np.median(r) if len(r) >= 50 else scene for r in logr]).astype(np.float32)
+    maps = [np.exp(fit_grid(xs, ys, r, H, W, G, ridge)) if len(r) >= 50 else np.full((H, W), np.exp(scene)) for (xs, ys, _, _), r in zip(data, logr)]
+    return np.stack(maps).astype(np.float32)
 
 
 def centres(ext):
@@ -141,36 +210,54 @@ def centres(ext):
     return -np.einsum("nji,nj->ni", ext[:, :3, :3], ext[:, :3, 3])
 
 
-def shrink_to_da3(pred, ext, K, w):
-    """Express the refined cameras in DA3's world frame (similarity fit), then blend them toward DA3's by weight w."""
+def to_da3_frame(pred, ext):
+    """The refined cameras in DA3's world frame (similarity fit, robust to stray cameras): rotations, centres, scale."""
     old = pred["extrinsics"]
     # new -> DA3 world rotation Q: R_new Q^T ~ R_old for every frame
     u, _, vt = np.linalg.svd(np.einsum("nji,njk->ik", ext[:, :3, :3], old[:, :3, :3]))
     Q = (u @ np.diag([1, 1, np.linalg.det(u @ vt)]) @ vt).T
     c_new, c_old = centres(ext), centres(old)
-    q = (c_new - c_new.mean(0)) @ Q.T
-    d = c_old - c_old.mean(0)
-    s = float((q * d).sum() / max((q * q).sum(), 1e-12))
-    c_al = s * q + c_old.mean(0)
-    R_al = ext[:, :3, :3] @ Q.T
+    q = c_new @ Q.T
+    q -= np.median(q, 0)  # median after the rotation, so that both clouds are centred in DA3's frame
+    d = c_old - np.median(c_old, 0)
+    s = float(np.median(np.linalg.norm(d, axis=1)) / max(np.median(np.linalg.norm(q, axis=1)), 1e-12))
+    return ext[:, :3, :3] @ Q.T, s * q + np.median(c_old, 0), s
+
+
+def shrink_to_da3(pred, ext, K, w, reject=0.0):
+    """Blend the refined cameras toward DA3's by weight w (frames beyond `reject` times the median deviation: all the way).
+
+    Returns the cameras in DA3's world frame, the intrinsics and the scale of the move into that frame."""
+    old = pred["extrinsics"]
+    R_al, c_al, s = to_da3_frame(pred, ext)
+    c_old = centres(old)
+    dev = np.linalg.norm(c_al - c_old, axis=1)
+    wi = np.full(len(ext), w)
+    if reject > 0:
+        wi[dev > reject * max(np.median(dev), 1e-9)] = 1.0
     out = np.zeros_like(ext)
     for i in range(len(ext)):
         rots = Rotation.from_matrix([R_al[i], old[i, :3, :3]])
-        R = Slerp([0, 1], rots)(w).as_matrix()
-        c = (1 - w) * c_al[i] + w * c_old[i]
+        R = Slerp([0, 1], rots)(wi[i]).as_matrix()
+        c = (1 - wi[i]) * c_al[i] + wi[i] * c_old[i]
         out[i, :3, :3], out[i, :3, 3] = R, -R @ c
     K = K.copy()
-    K[:, 0, 0] = K[:, 1, 1] = np.exp((1 - w) * np.log(K[:, 0, 0]) + w * np.log(pred["intrinsics"][:, 0, 0]))
-    return out, K
+    if w > 0:
+        K[:, 0, 0] = K[:, 1, 1] = np.exp((1 - w) * np.log(K[:, 0, 0]) + w * np.log(pred["intrinsics"][:, 0, 0]))
+    return out, K, s
 
 
-def depth_scale(ext_old, ext_new):
-    """BA fixes the scene scale freely, so the refined cameras can be a different size than DA3's: ratio of their spreads."""
+def depth_scale(ext_old, ext_new, robust=False):
+    """BA fixes the scene scale freely, so the refined cameras can be a different size than DA3's: ratio of their spreads.
+
+    The spread is dominated by a single stray camera (one scene: 1.5e6x), robust=True uses the median distance to the median centre."""
     old, new = centres(ext_old), centres(ext_new)
+    if robust:
+        return float(np.median(np.linalg.norm(new - np.median(new, 0), axis=1)) / max(np.median(np.linalg.norm(old - np.median(old, 0), axis=1)), 1e-9))
     return float(np.linalg.norm(new - new.mean(0)) / max(np.linalg.norm(old - old.mean(0)), 1e-9))
 
 
-def refine_scene(image_files, pred, cfg, device):
+def refine_scene(image_files, pred, cfg, device, cache_file=None):
     """Track and adjust one scene; falls back to DA3's poses if BA is skipped."""
     # the query keypoints are subsampled at random
     torch.manual_seed(cfg["seed"])
@@ -182,9 +269,13 @@ def refine_scene(image_files, pred, cfg, device):
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     if cfg["tracker"] == "none":
-        return pred["extrinsics"], pred["intrinsics"], info
+        return pred["extrinsics"], pred["intrinsics"], info, None
     start = time.perf_counter()
-    if cfg["tracker"] == "roma":
+    if cache_file and os.path.exists(cache_file):
+        c = np.load(cache_file)
+        tracks, vis, points3d, colors, L = c["tracks"], c["vis"], c["points3d"], c["colors"], int(c["L"])
+        start -= float(c["track_s"])  # the tracking time of the run that made the cache
+    elif cfg["tracker"] == "roma":
         from tracks_roma import track_roma
 
         tracks, vis, points3d, colors, L = track_roma(image_files, pred, cfg, device)
@@ -204,16 +295,19 @@ def refine_scene(image_files, pred, cfg, device):
         torch.cuda.synchronize()
         info["peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
     info.update(num_tracks=int(tracks.shape[1]), track_s=time.perf_counter() - start)
+    if cache_file and not os.path.exists(cache_file):
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        np.savez(cache_file, tracks=tracks, vis=vis, points3d=points3d, colors=colors, L=L, track_s=info["track_s"])
 
     start = time.perf_counter()
     result = adjust(pred, tracks, vis, points3d, colors, L, cfg)
     info.update(ba_s=time.perf_counter() - start)
     info["opt_s"] = info["track_s"] + info["ba_s"]  # the column compare_tto.py shows
     if result is None:
-        return pred["extrinsics"], pred["intrinsics"], info
-    ext, K, num_points = result
+        return pred["extrinsics"], pred["intrinsics"], info, None
+    ext, K, num_points, ratios = result
     info.update(num_points=num_points, ba=1)
-    return ext, K, info
+    return ext, K, info, ratios
 
 
 def main():
@@ -245,7 +339,8 @@ def main():
             pred = dict(np.load(os.path.join(exports, "mini_npz", "results.npz")))
 
             try:
-                ext, K, info = refine_scene(gt["image_files"], pred, cfg, device)
+                cache = os.path.join(cfg["cache_tracks"], dataset, scene + ".npz") if cfg["cache_tracks"] else None
+                ext, K, info, ratios = refine_scene(gt["image_files"], pred, cfg, device, cache)
             except Exception as e:  # not stored, so a rerun retries it
                 print(f"[run_tto_ba] {dataset} {i + 1}/{len(scenes)} {scene} FAILED: {e!r}")
                 torch.cuda.empty_cache()
@@ -254,7 +349,7 @@ def main():
             out = os.path.join(dst, "model_results", dataset, scene, "unposed", "exports", "mini_npz")
             os.makedirs(out, exist_ok=True)
             # the evaluator takes the scale from the poses, so DA3's depth has to follow the rescaling of the cameras
-            np.savez(os.path.join(out, "results.npz"), depth=pred["depth"] * depth_scale(pred["extrinsics"], ext), conf=pred["conf"], extrinsics=ext, intrinsics=K)
+            np.savez(os.path.join(out, "results.npz"), depth=pred["depth"] * ((ratios[:, None, None] if ratios.ndim == 1 else ratios) if ratios is not None else depth_scale(pred["extrinsics"], ext, cfg["depth_fit"] == "median")), conf=pred["conf"], extrinsics=ext, intrinsics=K)
             shutil.copy(os.path.join(exports, "gt_meta.npz"), os.path.join(out, "..", "gt_meta.npz"))
 
             # same pose metric and json format as the evaluator
