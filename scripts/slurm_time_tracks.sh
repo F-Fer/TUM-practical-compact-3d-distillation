@@ -6,7 +6,7 @@
 #   e.g. sbatch scripts/slurm_time_tracks.sh DA3-SMALL
 # Writes to workspace/tto/<model>/{time_rad,time_depth_only,time_full_polish} of this checkout only.
 # Needs: the DA3 predictions and benchmark data (WORKSPACE_SRC, linked read-only, default: the workspace of
-# ~/TUM-practical-compact-3d-distillation) and a Python (PY, default .venv/bin/python) with the submodule third_party/RoMaV2 checked out,
+# ~/TUM-practical-compact-3d-distillation) and a Python (PY, default .venv/bin/python) with RoMa v2 (`import romav2`, installed by `uv sync`),
 # pycolmap 3.10 and the dependencies of scripts/run_tto_ba.py.
 #SBATCH --job-name=time_tracks
 #SBATCH --partition=rtx_5090

@@ -21,6 +21,8 @@ dependencies = [
     "pycolmap==3.10.0",
     # baselines (scripts/baselines.py)
     "pi3",
+    # RoMa v2 matcher for the track-based BA (scripts/tracks_roma.py)
+    "romav2",
     "accelerate",  # imported by DéjàView (third_party/dvlt, put on sys.path, not installed)
     # replaces opencv-python (see override-dependencies): the tum2 nodes have no libGL.so.1
     "opencv-python-headless",
@@ -44,8 +46,10 @@ package = false
 default-groups = ["cu121"]
 conflicts = [[{ group = "cu121" }, { group = "cu128" }, { group = "mac" }]]
 # drop opencv-python (required by DA3 and VGGT) for opencv-python-headless; DA3 requires xformers
-# unconditionally, but there are no macOS wheels, so only require it on Linux (the groups pin the version)
-override-dependencies = ["opencv-python; python_version < '0'", "xformers; sys_platform == 'linux'"]
+# unconditionally, but there are no macOS wheels, so only require it on Linux (the groups pin the version).
+# romav2 asks for torchvision >= 0.23 (the groups pin the version that matches their torch) and for the optional
+# CUDA kernel fused-local-corr, which we don't build (RoMa v2 runs without it)
+override-dependencies = ["opencv-python; python_version < '0'", "xformers; sys_platform == 'linux'", "torchvision", "fused-local-corr; python_version < '0'"]
 
 [tool.uv.sources]
 torch = [
@@ -63,6 +67,7 @@ xformers = [
 depth-anything-3 = { path = "third_party/Depth-Anything-3", editable = true }
 vggt = { path = "third_party/vggt", editable = true }
 pi3 = { path = "third_party/Pi3", editable = true }
+romav2 = { path = "third_party/RoMaV2", editable = true }
 # the fork VGGT's requirements_demo.txt points to
 lightglue = { git = "https://github.com/jytime/LightGlue.git", rev = "2f23ca2ea9638cecad7f7220795210fc6b8353c3" }
 

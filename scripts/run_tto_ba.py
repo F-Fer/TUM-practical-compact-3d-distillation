@@ -6,7 +6,7 @@ Usage (from anywhere; paths are resolved relative to the repo root):
     uv run scripts/run_tto_ba.py workspace/evaluation/DA3-SMALL workspace/evaluation/DA3-SMALL-ba datasets=hiroom
     uv run scripts/run_tto_ba.py workspace/evaluation/DA3-SMALL workspace/evaluation/DA3-SMALL-ba-roma datasets=hiroom tracker=roma
 
-tracker=roma needs RoMa v2 (the submodule third_party/RoMaV2, put on sys.path by tracks_roma.py; its own dependencies are in the environment).
+tracker=roma needs RoMa v2 (the submodule third_party/RoMaV2, installed by `uv sync` like the other submodules).
 Scenes already in <dst work dir>/metric_results are skipped, so use a new <dst work dir> for every setting.
 
 Outputs go to <dst work dir>, mirroring <src work dir> with only the new data:
