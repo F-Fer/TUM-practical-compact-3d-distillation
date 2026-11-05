@@ -1,0 +1,90 @@
+| dataset | mode | n | metric | init_dev | dino_final |
+|---|---|---|---|---|---|
+| hiroom | pose | 10 | auc03 | 0.1063 | 0.3252 |
+| hiroom | pose | 10 | auc05 | 0.2266 | 0.4638 |
+| hiroom | pose | 10 | auc15 | 0.5673 | 0.7382 |
+| hiroom | pose | 10 | auc30 | 0.7545 | 0.8542 |
+| hiroom | recon_unposed | 10 | fscore | 0.2392 | 0.4735 |
+| hiroom | recon_unposed | 10 | acc | 0.1505 | 0.1023 |
+| hiroom | recon_unposed | 10 | comp | 0.1444 | 0.0788 |
+| hiroom | recon_unposed | 10 | overall | 0.1475 | 0.0905 |
+| 7scenes | pose | 2 | auc03 | 0.2928 | 0.3680 |
+| 7scenes | pose | 2 | auc05 | 0.4641 | 0.5445 |
+| 7scenes | pose | 2 | auc15 | 0.7784 | 0.8271 |
+| 7scenes | pose | 2 | auc30 | 0.8830 | 0.9100 |
+| 7scenes | recon_unposed | 2 | fscore | 0.5092 | 0.5380 |
+| 7scenes | recon_unposed | 2 | acc | 0.1024 | 0.0972 |
+| 7scenes | recon_unposed | 2 | comp | 0.0724 | 0.0655 |
+| 7scenes | recon_unposed | 2 | overall | 0.0874 | 0.0813 |
+| scannetpp | pose | 3 | auc03 | 0.0593 | 0.1031 |
+| scannetpp | pose | 3 | auc05 | 0.1271 | 0.2142 |
+| scannetpp | pose | 3 | auc15 | 0.3685 | 0.4669 |
+| scannetpp | pose | 3 | auc30 | 0.5541 | 0.6390 |
+| scannetpp | recon_unposed | 3 | fscore | 0.1924 | 0.2573 |
+| scannetpp | recon_unposed | 3 | acc | 0.2067 | 0.1430 |
+| scannetpp | recon_unposed | 3 | comp | 0.2263 | 0.1897 |
+| scannetpp | recon_unposed | 3 | overall | 0.2165 | 0.1663 |
+| dtu | pose | 4 | auc03 | nan | 0.8196 |
+| dtu | pose | 4 | auc05 | nan | 0.8905 |
+| dtu | pose | 4 | auc15 | nan | 0.9633 |
+| dtu | pose | 4 | auc30 | nan | 0.9817 |
+| dtu | recon_unposed | 4 | acc | nan | 3.3167 |
+| dtu | recon_unposed | 4 | comp | nan | 4.2842 |
+| dtu | recon_unposed | 4 | overall | nan | 3.8005 |
+
+| dataset | mode | n | metric | init_dev | dino_final |
+|---|---|---|---|---|---|
+| dtu64 | pose | 4 | auc03 | 0.2989 | 0.6013 |
+| dtu64 | pose | 4 | auc05 | 0.4933 | 0.7273 |
+| dtu64 | pose | 4 | auc15 | 0.8084 | 0.9028 |
+| dtu64 | pose | 4 | auc30 | 0.9037 | 0.9514 |
+| eth3d | pose | 3 | auc03 | 0.0512 | 0.1666 |
+| eth3d | pose | 3 | auc05 | 0.1270 | 0.2737 |
+| eth3d | pose | 3 | auc15 | 0.3814 | 0.4940 |
+| eth3d | pose | 3 | auc30 | 0.5946 | 0.6725 |
+
+| dataset | mode | n | metric | init_dev | dino_final |
+|---|---|---|---|---|---|
+| hiroom | pose | 10 | auc03 | 0.1063 | 0.3252 |
+| hiroom | pose | 10 | auc05 | 0.2266 | 0.4638 |
+| hiroom | pose | 10 | auc15 | 0.5673 | 0.7382 |
+| hiroom | pose | 10 | auc30 | 0.7545 | 0.8542 |
+| hiroom | recon_unposed | 10 | fscore | 0.2392 | 0.4735 |
+| hiroom | recon_unposed | 10 | acc | 0.1505 | 0.1022 |
+| hiroom | recon_unposed | 10 | comp | 0.1444 | 0.0788 |
+| hiroom | recon_unposed | 10 | overall | 0.1475 | 0.0905 |
+| 7scenes | pose | 2 | auc03 | 0.2928 | 0.3680 |
+| 7scenes | pose | 2 | auc05 | 0.4641 | 0.5445 |
+| 7scenes | pose | 2 | auc15 | 0.7784 | 0.8271 |
+| 7scenes | pose | 2 | auc30 | 0.8830 | 0.9100 |
+| 7scenes | recon_unposed | 2 | fscore | 0.5092 | 0.5381 |
+| 7scenes | recon_unposed | 2 | acc | 0.1024 | 0.0969 |
+| 7scenes | recon_unposed | 2 | comp | 0.0724 | 0.0656 |
+| 7scenes | recon_unposed | 2 | overall | 0.0874 | 0.0813 |
+| scannetpp | pose | 3 | auc03 | 0.0593 | 0.1031 |
+| scannetpp | pose | 3 | auc05 | 0.1271 | 0.2142 |
+| scannetpp | pose | 3 | auc15 | 0.3685 | 0.4669 |
+| scannetpp | pose | 3 | auc30 | 0.5541 | 0.6390 |
+| scannetpp | recon_unposed | 3 | fscore | 0.1924 | 0.2576 |
+| scannetpp | recon_unposed | 3 | acc | 0.2067 | 0.1426 |
+| scannetpp | recon_unposed | 3 | comp | 0.2263 | 0.1901 |
+| scannetpp | recon_unposed | 3 | overall | 0.2165 | 0.1663 |
+| dtu | pose | 4 | auc03 | nan | 0.8196 |
+| dtu | pose | 4 | auc05 | nan | 0.8905 |
+| dtu | pose | 4 | auc15 | nan | 0.9633 |
+| dtu | pose | 4 | auc30 | nan | 0.9817 |
+| dtu | recon_unposed | 4 | acc | nan | 3.3167 |
+| dtu | recon_unposed | 4 | comp | nan | 4.2842 |
+| dtu | recon_unposed | 4 | overall | nan | 3.8005 |
+
+| dataset | mode | n | metric | init_dev | dino_final |
+|---|---|---|---|---|---|
+| dtu64 | pose | 4 | auc03 | 0.2989 | 0.6013 |
+| dtu64 | pose | 4 | auc05 | 0.4933 | 0.7273 |
+| dtu64 | pose | 4 | auc15 | 0.8084 | 0.9028 |
+| dtu64 | pose | 4 | auc30 | 0.9037 | 0.9514 |
+| eth3d | pose | 3 | auc03 | 0.0512 | 0.1666 |
+| eth3d | pose | 3 | auc05 | 0.1270 | 0.2737 |
+| eth3d | pose | 3 | auc15 | 0.3814 | 0.4940 |
+| eth3d | pose | 3 | auc30 | 0.5946 | 0.6725 |
+

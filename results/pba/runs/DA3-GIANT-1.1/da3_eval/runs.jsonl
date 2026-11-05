@@ -1,0 +1,1 @@
+{"started": "2026-11-02T21:26:38", "host": "VC17", "gpu": "NVIDIA GeForce RTX 5090", "torch": "2.7.0+cu128", "model": "depth-anything/DA3-GIANT-1.1", "overrides": ["eval.modes=[pose]"], "wall_s": 507.8390828490956}

@@ -1,0 +1,24 @@
+abl_L1_l421|levels=4,2,1 iters=67
+abl_L2_l21|levels=2,1 iters=100
+abl_L3_l1|levels=1 iters=200
+abl_L4_l168421|levels=16,8,4,2,1 iters=40
+abl_L5_l1x800|levels=1 iters=800
+abl_I1_it10|iters=10
+abl_I2_it100|iters=100
+abl_I3_coarse|levels=8:80,4:60,2:40,1:20
+abl_I4_fine|levels=8:20,4:40,2:60,1:80
+abl_P1_lm5only|levels=1 lm_levels=0 lm_iters=5 lm_samples=4096
+abl_P2_it10_lm5|iters=10 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096
+abl_P3_it25_lm5|iters=25 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096
+abl_P4_it50_lm2|iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=2 lm_samples=4096
+abl_P5_it50_lm10|iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=10 lm_samples=4096
+abl_P6_l21_lm5|levels=2,1,1 iters=100 lm_levels=2 lm_iters=5 lm_samples=4096
+abl_P7_l1_lm5|levels=1,1 iters=200 lm_levels=1 lm_iters=5 lm_samples=4096
+abl_H1_adam84_lm21|levels=8,4,2,1 iters=50 lm_levels=2,3 lm_iters=5 lm_samples=4096
+abl_H2_lm21only|optimizer=lm levels=2,1 iters=5 lm_samples=4096
+abl_N1_fast50_s1|iters=50 seed=1
+abl_N2_fast50_s2|iters=50 seed=2
+abl_N3_fpol50_s1|iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096 seed=1
+abl_N4_fpol50_s2|iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096 seed=2
+abl_L6_l1x400|levels=1 iters=400
+abl_L7_l1x1600|levels=1 iters=1600

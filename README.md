@@ -4,14 +4,36 @@ TUM, Practical Course: Generative AI - Project 07
 
 ## Setup
 
-Requirements: an NVIDIA GPU with driver ≥ 530 (CUDA 12.1 wheels), [uv](https://docs.astral.sh/uv/), and `unzip`.
+Requirements: an NVIDIA GPU, [uv](https://docs.astral.sh/uv/), and `unzip`. torch comes from one of two dependency groups in `pyproject.toml`: `cu121` (default, torch 2.5.1, driver ≥ 530) and `cu128` (torch 2.7.0, needed for the RTX 5090 on the TUM cluster).
 
 ```sh
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
 cd TUM-practical-compact-3d-distillation
 # in an existing clone: git submodule update --init
+```
+
+**Local machines (RTX 3070/3080, tum1):**
+
+```sh
 uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3, VGGT and Pi3 from third_party/)
 ```
+
+**TUM student cluster (tum2, SLURM, RTX 5090):**
+
+```sh
+uv sync --no-default-groups --group cu128       # torch 2.7.0 cu128
+echo 'export UV_NO_SYNC=1' >> ~/.bashrc         # otherwise `uv run` re-syncs the default cu121 group
+ln -s $SCRATCH/workspace workspace              # benchmark data doesn't fit in the home quota
+```
+
+On the cluster, run everything as a SLURM job (the login node has no GPU), e.g.
+
+```sh
+sbatch --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=06:00:00 --output=$SCRATCH/bench_%j.log \
+  --wrap "cd ~/TUM-practical-compact-3d-distillation && .venv/bin/python scripts/run_bench.py depth-anything/DA3-SMALL 'eval.modes=[pose]'"
+```
+
+Jobs are limited to 6 hours, so split long benchmarks by dataset or mode.
 
 Third-party code lives in git submodules under `third_party/` and isn't modified; our code is in `scripts/`.
 

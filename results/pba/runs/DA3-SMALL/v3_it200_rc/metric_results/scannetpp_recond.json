@@ -1,0 +1,17 @@
+{
+ "09c1414f1b": {
+  "forward_s": 2.232095326995477,
+  "depth_ratio_median": 0.9852421283721924,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "1ada7a0617": {
+  "forward_s": 2.2327589419437572,
+  "depth_ratio_median": 1.0282667875289917,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "21d970d8de": {
+  "forward_s": 2.163935062009841,
+  "depth_ratio_median": 0.9907377362251282,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ }
+}

@@ -1,0 +1,57 @@
+{
+ "courtyard": {
+  "forward_s": 2.357831405941397,
+  "depth_ratio_median": 1.0203468799591064,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "delivery_area": {
+  "forward_s": 2.3773577070096508,
+  "depth_ratio_median": 0.9937050342559814,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "electro": {
+  "forward_s": 2.3704211889998987,
+  "depth_ratio_median": 1.0230330228805542,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "facade": {
+  "forward_s": 5.083073699963279,
+  "depth_ratio_median": 1.0089929103851318,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "kicker": {
+  "forward_s": 1.941167541895993,
+  "depth_ratio_median": 1.0078157186508179,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "office": {
+  "forward_s": 1.579065763973631,
+  "depth_ratio_median": 1.0000756978988647,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "pipes": {
+  "forward_s": 0.7980147709604353,
+  "depth_ratio_median": 0.9923512935638428,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "playground": {
+  "forward_s": 2.034576464095153,
+  "depth_ratio_median": 1.0003986358642578,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "relief": {
+  "forward_s": 1.1288834130391479,
+  "depth_ratio_median": 0.9980590343475342,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "relief_2": {
+  "forward_s": 1.2651976100169122,
+  "depth_ratio_median": 1.005514144897461,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "terrains": {
+  "forward_s": 2.5892416239948943,
+  "depth_ratio_median": 0.998641312122345,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ }
+}

@@ -1,0 +1,12 @@
+cd ~/TUM-practical-compact-3d-distillation && /usr/bin/time -f "[bench] %e s, max RSS %M KB" .venv/bin/python scripts/run_bench.py depth-anything/DA3-GIANT-1.1 "eval.modes=[pose]" 2>&1 | grep -v -i -E "warning|it/s\]|s/it\]"
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 init_dev dev levels=
+touch workspace/tto/DA3-GIANT-1.1/init_dev/.done
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 fastpolish50 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 abl_P3_it25_lm5 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=25 levels=8,4,2,1,1 lm_levels=4 lm_iters=5 lm_samples=4096
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 fast_it50 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=50
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 fast_it200 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=200
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 polish50 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=50 levels=8,4,2,1,1 lm_levels=4 lm_iters=5
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 lm10 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 optimizer=lm iters=10
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 v3_it50 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=50
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 v3_it200 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=200
+WANDB_RUN_GROUP=giant PBA_ETH3D_RECON=1 bash $J/pba_run.sh DA3-GIANT-1.1 polish200 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=200 levels=8,4,2,1,1 lm_levels=4 lm_iters=5
