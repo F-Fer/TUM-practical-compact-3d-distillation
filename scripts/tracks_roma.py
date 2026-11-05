@@ -1,5 +1,8 @@
 """RoMa v2 as the tracker of run_tto_ba.py: dense matches from a few query frames to every other frame."""
 
+import os
+import sys
+
 import cv2
 import numpy as np
 import torch
@@ -11,6 +14,9 @@ _models = {}
 
 def _roma(setting):
     if setting not in _models:
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "third_party", "RoMaV2", "src")
+        if os.path.isdir(src) and src not in sys.path:  # the submodule, no install needed (its pyproject pins more than we want)
+            sys.path.append(src)
         from romav2 import RoMaV2
 
         model = RoMaV2()
