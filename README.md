@@ -4,7 +4,7 @@ TUM, Practical Course: Generative AI - Project 07
 
 ## Setup
 
-Requirements: an NVIDIA GPU, [uv](https://docs.astral.sh/uv/), and `unzip`. torch comes from one of two dependency groups in `pyproject.toml`: `cu121` (default, torch 2.5.1, driver ≥ 530) and `cu128` (torch 2.7.0, needed for the RTX 5090 on the TUM cluster).
+Requirements: an NVIDIA GPU (not on macOS), [uv](https://docs.astral.sh/uv/), and `unzip`. torch comes from one of three dependency groups in `pyproject.toml`: `cu121` (default, torch 2.5.1, driver ≥ 530), `cu128` (torch 2.7.0, needed for the RTX 5090 on the TUM cluster) and `mac`.
 
 ```sh
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
@@ -16,6 +16,12 @@ cd TUM-practical-compact-3d-distillation
 
 ```sh
 uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3, VGGT and Pi3 from third_party/)
+```
+
+**macOS (notebooks on saved predictions, no benchmark runs):**
+
+```sh
+uv sync --no-default-groups --group mac    # torch from PyPI (MPS/CPU), no xformers
 ```
 
 **TUM student cluster (tum2, SLURM, RTX 5090):**
@@ -186,10 +192,61 @@ We ran the full benchmark for DA3-SMALL, DA3-BASE and DA3-LARGE-1.1 (October 202
 ### Why our numbers don't match the paper exactly
 
 - **The released code and data aren't exactly what the paper used.** The DA3 repo's own expected DA3-GIANT results (`docs/BENCHMARK.md` in the submodule) already differ from the paper by up to about 3 F1, so even the authors' setup doesn't reproduce the paper exactly. The ScanNet++ data, for example, was recalibrated.
-- **Checkpoints:** the `-1.1` checkpoints were retrained after a training bug fix. The paper's LARGE numbers probably come from the deprecated `DA3-LARGE`, which would explain why LARGE-1.1 deviates more, and in both directions. This is not verified yet (it would need a `DA3-LARGE` run).
+- **Checkpoints:** the `-1.1` checkpoints were retrained after a training bug fix, and the paper's LARGE numbers come from the deprecated `DA3-LARGE`. On DTU-64 pose, `DA3-LARGE` gives AUC@3 70.16 against the paper's 70.20 (LARGE-1.1: 77.89), which explains the largest LARGE-1.1 deviation. We didn't rerun the other datasets with `DA3-LARGE` in full.
 - **Hardware and library versions:** inference runs in bf16, and a different GPU or different CUDA/cuDNN kernels change the depth maps slightly. The RANSAC alignment and TSDF fusion can amplify such small changes into visible metric differences, especially AUC@3 and F1 on scenes where the result is borderline.
 
 Our own changes don't cause the differences. The pipeline is deterministic on our machine (repeated forward passes are bit-identical), the evaluation uses fixed seeds (42), and our patches (parallel KDTree queries, one fusion worker, `scripts/da3_lowmem.py`) were checked to give identical outputs.
+
+## Test-time optimization (TTO)
+
+We refine the saved DA3 predictions (cameras and depth) without training and score them with the benchmark's own metrics, on a **dev subset** of 22 scenes (HiRoom 10, 7-Scenes 2, ScanNet++ 3, DTU-64 4, ETH3D 3), one seed. A TTO method reads `workspace/evaluation/<model>/`, writes a new run directory in the same layout and is scored by `scripts/eval_tto.py` (pose AUC, recon F1) and `scripts/eval_recon_aligned.py` (recon F1 after aligning the cloud to the GT). `scripts/compare_tto.py` and `scripts/tracks_table.py` tabulate runs.
+
+### Methods
+
+| Method | Script | What it does |
+|---|---|---|
+| Photometric BA ("polish") | `scripts/run_tto_pba.py` | optimises poses, a shared focal length and a coarse log-depth grid on photometric / VGG-feature NCC between neighbouring views: Adam, then a Levenberg-Marquardt polish. Reports in `results/pba/` |
+| Track-based BA | `scripts/run_tto_ba.py`, `scripts/tracks_roma.py` | tracks from RoMa v2 (`tracker=roma`) or VGGSfM (`tracker=vggsfm`), then pycolmap BA with a Cauchy loss (0.25 px). Configurations are named in `scripts/tto_configs.sh` |
+| Radial BA | `run_tto_ba.py camera=radial` | the same BA with a radial-distortion parameter. Needed on ETH3D, whose lenses are distorted |
+| Depth fit | `depth_fit=grid` | refits DA3's depth to the BA's 3D points, since BA changes the cameras but not the depth |
+| Depth-only polish | `run_tto_pba.py init_from=<BA run> poses=false focal=none` | photometric BA started from the BA cameras, cameras frozen, only the depth refined |
+| Anchored BA (own solver) | `scripts/ba_lm.py`, `scripts/run_tto_ba_truncated.py` | Levenberg-Marquardt BA with a Schur complement, same objective as pycolmap, with a prior on DA3's poses (`BA_PRIOR`) and an iteration cap (`BA_MAX_ITERS`) |
+
+Settings that matter for track-based BA (see `CLAUDE.md` for the reasons): `max_reproj=1000000` (no gate against DA3's own projection), `loss=cauchy loss_scale=0.25`, `shared_camera=true`, `extra_queries` for frames that no query frame sees, and a rescaling of the depth with the BA's poses (done by `run_tto_ba.py`; `scripts/rescale_depth.py` repairs older runs).
+
+```sh
+# tracks + radial BA (+ depth fit) on the dev subset, then the depth-only polish started from it
+scripts/run_tto_dev.sh DA3-SMALL                       # all dev configs (Slurm: scripts/slurm_dev_tto.sh)
+sbatch scripts/slurm_time_tracks.sh DA3-SMALL          # the best configs, timed on the RTX 5090 (submit from the repo root)
+sbatch scripts/slurm_time_vggsfm.sh DA3-SMALL          # VGGSfM + BA, timed on the RTX 5090
+.venv/bin/python scripts/tracks_table.py workspace/tto/DA3-SMALL/time_rad workspace/tto/DA3-SMALL/time_depth_only
+```
+
+### Results (dev subset; pose AUC@3 mean over the five datasets / raw recon F1 over HiRoom, 7-Scenes, ScanNet++)
+
+| Model | DA3 alone | photometric polish | tracks + radial BA + depth-only polish | tracks + radial BA + full polish |
+|---|---|---|---|---|
+| SMALL | 16.2 / 31.2 | 29.9 / 47.5 | **54.1** / 46.6 | 46.6 / **53.5** |
+| BASE | 27.1 / 45.2 | 43.2 / **60.6** | **54.3** / 48.5 | 49.6 / 59.3 |
+| LARGE-1.1 | 48.8 / 65.7 | 58.4 / 70.7 | 57.4 / 62.2 | 55.2 / 70.2 |
+
+- Track-based BA is what helps the small models' poses (SMALL 16 → 54) and the only method that fixes ETH3D once the lens is modelled. For LARGE-1.1 the photometric polish alone is as good or better, at about 1/20 of the cost.
+- Time per scene on the RTX 5090: RoMa tracks + radial BA about 37 s (the BA is CPU-bound), photometric polish about 1 s, VGGSfM + BA about 92-110 s. `results/figures/compute_pba_vs_tracks_ba.png` plots quality against compute for all of them.
+- Recon F1 barely follows pose quality; the photometric stage raises it because it also moves the depth, which track-based BA leaves at DA3's.
+
+### How many BA iterations are needed
+
+pycolmap 3.10 cannot set an iteration cap or tolerances, and every BA of the dev scenes ends with "Iterations 101, No convergence", i.e. it stops at COLMAP's limit of 100. To follow the iterations, `scripts/run_tto_ba_iterations.py` dumps the BA problem before each pycolmap call, `scripts/ba_lm.py` re-solves it with the same objective and exposes every iteration, and `scripts/ba_iteration_curves.py` scores the poses of every iteration (`results/figures/ba_iterations.png`). Our solver ends 2.3 AUC@3 below pycolmap on SMALL, so the curves show the shape of convergence, not pycolmap's exact numbers.
+
+- **SMALL**: the mean AUC@3 reaches 50 % of its final gain after 1 iteration, 95 % after 10 and 99 % after 15. A stop on the cost (it fell by less than 3e-3 over 5 iterations, about 18 iterations on average) loses 0.2 AUC@3 against 100 iterations.
+- **LARGE-1.1**: not monotonic. DA3's own poses are good, the BA gains about 12 AUC@3 within 2-3 iterations and then drifts back on several HiRoom scenes (e.g. 828763: 59 → 70 → 26 at iterations 0, 2, 100). A BA with a prior on DA3's poses (weight 100, 25 iterations) is the best LARGE-1.1 variant: 61.0 against 57.4 for pycolmap and 58.4 for the polish alone. The prior weight has to follow the model: 1000 blocks the corrections a weak start needs.
+- Our solver takes about 3.4 s per iteration on large scenes, so only very short runs are cheaper than pycolmap's 100 iterations; a faster solver is open work.
+
+The camera movement per iteration is shown in `results/figures/ba_cameras_*.png` / `.gif` (cameras coloured by their distance to the ground truth).
+
+### Limits
+
+One seed and 22 scenes, 2-4 per dataset except HiRoom. The DTU-64 pose score is saturated (100) for every BA run. Timings of the DA3 forward pass are from the RTX 3080; the TTO timings are from the RTX 5090.
 
 ## References
 
@@ -203,6 +260,9 @@ Our own changes don't cause the differences. The pipeline is deterministic on ou
 - **A survey on knowledge distillation: Recent advancements** (Moslemi et al., 2024): [doi.org/10.1016/j.mlwa.2024.100605](https://doi.org/10.1016/j.mlwa.2024.100605)
 
 ### Test-Time Optimization
+- **BA-T** (2026): [arXiv:2606.03287](https://arxiv.org/abs/2606.03287), a trained two-view latent BA layer; we used its idea of a cross-view correspondence term, not the model
+- **RoMa v2** (dense matcher used for the tracks): [arXiv:2511.15706](https://arxiv.org/abs/2511.15706)
+- **Test3R** (Yuan et al., 2025): [arXiv:2506.13750](https://arxiv.org/abs/2506.13750)
 
 ### Datasets
 

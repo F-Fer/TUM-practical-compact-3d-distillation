@@ -35,13 +35,17 @@ cu121 = ["torch==2.5.1", "torchvision==0.20.1", "xformers==0.0.28.post3"]
 # cu128 index has xformers only for 2.7.0 (DA3 requires xformers; markers can't depend
 # on dependency groups, so it can't be dropped for this group alone)
 cu128 = ["torch==2.7.0", "torchvision==0.22.0", "xformers==0.0.30"]
+# macOS (MPS/CPU torch from PyPI, no xformers; DA3 falls back to plain PyTorch without it): for notebooks on saved
+# predictions, not benchmark runs (uv sync --no-default-groups --group mac)
+mac = ["torch==2.14.1", "torchvision==0.29.1", "ipykernel"]
 
 [tool.uv]
 package = false
 default-groups = ["cu121"]
-conflicts = [[{ group = "cu121" }, { group = "cu128" }]]
-# drop opencv-python (required by DA3 and VGGT) for opencv-python-headless
-override-dependencies = ["opencv-python; python_version < '0'"]
+conflicts = [[{ group = "cu121" }, { group = "cu128" }, { group = "mac" }]]
+# drop opencv-python (required by DA3 and VGGT) for opencv-python-headless; DA3 requires xformers
+# unconditionally, but there are no macOS wheels, so only require it on Linux (the groups pin the version)
+override-dependencies = ["opencv-python; python_version < '0'", "xformers; sys_platform == 'linux'"]
 
 [tool.uv.sources]
 torch = [

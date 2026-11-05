@@ -16,7 +16,8 @@
 #SBATCH --time=02:00:00
 #SBATCH --output=%x_%j.log
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"   # Slurm runs a copy of this script, so submit from the repository root
+[ -f scripts/tto_configs.sh ] || { echo "not in the repository root: $PWD"; exit 1; }
 source scripts/tto_configs.sh
 model=$1
 
