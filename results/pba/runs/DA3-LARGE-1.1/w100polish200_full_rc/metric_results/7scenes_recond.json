@@ -1,0 +1,37 @@
+{
+ "chess": {
+  "forward_s": 4.879938769037835,
+  "depth_ratio_median": 0.9939689636230469,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "fire": {
+  "forward_s": 4.244295547017828,
+  "depth_ratio_median": 0.9906727075576782,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "heads": {
+  "forward_s": 4.2440978969680145,
+  "depth_ratio_median": 1.0032155513763428,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "office": {
+  "forward_s": 4.1536384540377185,
+  "depth_ratio_median": 1.0022028684616089,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "pumpkin": {
+  "forward_s": 4.1821748070651665,
+  "depth_ratio_median": 1.001510500907898,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "redkitchen": {
+  "forward_s": 4.157823138055392,
+  "depth_ratio_median": 1.0040757656097412,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "stairs": {
+  "forward_s": 4.156071661040187,
+  "depth_ratio_median": 0.9906579256057739,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ }
+}

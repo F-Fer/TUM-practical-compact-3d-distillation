@@ -1,0 +1,5 @@
+WANDB_RUN_GROUP=giant bash $J/pba_run.sh DA3-GIANT-1.1 v3_it800 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=800
+WANDB_RUN_GROUP=giant bash $J/pba_run.sh DA3-GIANT-1.1 fast_it400 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=400
+WANDB_RUN_GROUP=giant bash $J/pba_run.sh DA3-GIANT-1.1 fast_it800 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=800
+WANDB_RUN_GROUP=codecheck bash $J/pba_run.sh DA3-LARGE-1.1 chk_v3_it50 dev features=vgg photo_loss=ncc nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 iters=50
+WANDB_RUN_GROUP=codecheck bash $J/pba_run.sh DA3-LARGE-1.1 chk_fast_it50 dev nbr_mode=spread neighbors=10 lr_rot=3e-3 lr_trans=3e-3 lr_focal=3e-3 samples=1024 gray=false iters=50

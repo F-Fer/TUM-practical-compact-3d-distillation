@@ -5,6 +5,18 @@ Usage (from anywhere; paths are resolved relative to the repo root):
 
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.datasets=[hiroom]
     uv run scripts/run_bench.py depth-anything/DA3-SMALL eval.eval_only=true
+    uv run scripts/run_bench.py facebook/VGGT-1B eval.datasets=[hiroom]
+    uv run scripts/run_bench.py --frame-seed 1 depth-anything/DA3-SMALL eval.datasets=[scannetpp] ...
+
+<model> is a DA3 checkpoint or one of the baselines in baselines.MODELS (VGGT, Pi3, DéjàView),
+which replace DepthAnything3 in the evaluator.
+
+--frame-seed N replaces the fixed seed (42) of the evaluator's frame sampling, which picks 100
+random frames in scenes with more (7-Scenes, ScanNet++). Use it with its own workspace.work_dir.
+--ransac-seed N likewise replaces the seed (42) of the RANSAC pose alignment in the recon modes;
+with eval.eval_only=true it re-scores existing predictions (copy them into the new work_dir).
+--da3-preprocess gives VGGT and Pi3 DA3's preprocessing instead of their own, as in the DA3 paper's
+baselines (see baselines.py); the default work_dir then gets the suffix _da3pre.
 
 Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is given:
     model_results/, metric_results/   written by the DA3 evaluator
@@ -16,6 +28,7 @@ import functools
 import json
 import os
 import platform
+import random
 import runpy
 import sys
 import time
@@ -34,6 +47,7 @@ KDTree.query = functools.partialmethod(KDTree.query, workers=-1)
 os.environ.setdefault("DA3_LOG_LEVEL", "WARN")
 from depth_anything_3.api import DepthAnything3  # noqa: E402
 
+import baselines  # noqa: E402
 import da3_lowmem  # noqa: E402
 
 # Keeps the backbone's output layers in CPU memory (bit-identical outputs); without it
@@ -48,14 +62,14 @@ def append_jsonl(path, record):
         f.write(json.dumps(record) + "\n")
 
 
-def install_timing_hooks(work_dir):
-    """Wrap DepthAnything3.forward/inference to record time and peak memory per call."""
+def install_timing_hooks(cls, work_dir):
+    """Wrap cls.forward/inference (DepthAnything3 or a baseline) to record time and peak memory per call."""
     timings_path = os.path.join(work_dir, "timings.jsonl")
     results_dir = os.path.join(work_dir, "model_results")
     last_forward = {}
 
-    orig_forward = DepthAnything3.forward
-    orig_inference = DepthAnything3.inference
+    orig_forward = cls.forward
+    orig_inference = cls.inference
 
     def forward(self, image, *args, **kwargs):
         torch.cuda.synchronize()
@@ -86,23 +100,70 @@ def install_timing_hooks(work_dir):
         )
         return out
 
-    DepthAnything3.forward = forward
-    DepthAnything3.inference = inference
+    cls.forward = forward
+    cls.inference = inference
+
+
+def set_frame_seed(seed):
+    """Make the evaluator's _sample_frames, which calls random.seed(42) before shuffling the frame
+    indices, use `seed` instead. Nothing else in depth_anything_3 calls random.seed."""
+    orig_seed = random.seed
+
+    def seed_fn(a=None, *args, **kwargs):
+        return orig_seed(seed if a == 42 else a, *args, **kwargs)
+
+    random.seed = seed_fn
+
+
+def set_ransac_seed(seed):
+    """Make the RANSAC Sim(3) alignment of the recon modes, which every dataset calls with
+    random_state=42 (10 iterations on random halves of the poses), use `seed` instead."""
+    from depth_anything_3.utils import pose_align
+
+    orig_ransac = pose_align._ransac_align_sim3
+
+    def ransac(*args, random_state=None, **kwargs):
+        return orig_ransac(*args, random_state=seed, **kwargs)
+
+    pose_align._ransac_align_sim3 = ransac
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1].startswith("-"):
+    args = sys.argv[1:]
+    frame_seed = ransac_seed = None
+    while args[:1] in (["--frame-seed"], ["--ransac-seed"], ["--da3-preprocess"]):
+        opt = args.pop(0)
+        if opt == "--da3-preprocess":
+            baselines.PREPROCESS = "da3"
+        elif opt == "--frame-seed":
+            frame_seed = int(args.pop(0))
+            set_frame_seed(frame_seed)
+        else:
+            ransac_seed = int(args.pop(0))
+            set_ransac_seed(ransac_seed)
+    if not args or args[0].startswith("-"):
         sys.exit(__doc__)
-    model, overrides = sys.argv[1], sys.argv[2:]
+    model, overrides = args[0], args[1:]
+    if baselines.PREPROCESS == "da3" and not getattr(baselines.MODELS.get(model), "IN_DA3_PAPER", False):
+        sys.exit("--da3-preprocess only applies to the DA3 paper's baselines (VGGT, Pi3)")
     sys.stdout.reconfigure(line_buffering=True)  # per-scene metric lines show up in redirected logs
     os.chdir(REPO_ROOT)  # the evaluator resolves workspace/benchmark_dataset relative to cwd
 
     work_dir = next(
         (o.split("=", 1)[1] for o in overrides if o.startswith("workspace.work_dir=")),
-        os.path.join("workspace", "evaluation", os.path.basename(model.rstrip("/"))),
+        os.path.join(
+            "workspace",
+            "evaluation",
+            os.path.basename(model.rstrip("/")) + ("_da3pre" if baselines.PREPROCESS == "da3" else ""),
+        ),
     )
     os.makedirs(work_dir, exist_ok=True)
-    install_timing_hooks(work_dir)
+    if model in baselines.MODELS:
+        # the evaluator builds its model with DepthAnything3.from_pretrained(model.path).to(device)
+        DepthAnything3.from_pretrained = staticmethod(baselines.load)
+        install_timing_hooks(baselines.MODELS[model], work_dir)
+    else:
+        install_timing_hooks(DepthAnything3, work_dir)
 
     run = {
         "started": datetime.now().isoformat(timespec="seconds"),
@@ -111,6 +172,9 @@ def main():
         "torch": torch.__version__,
         "model": model,
         "overrides": overrides,
+        "frame_seed": frame_seed,
+        "ransac_seed": ransac_seed,
+        "preprocess": baselines.PREPROCESS if model in baselines.MODELS else None,
     }
     sys.argv = ["depth_anything_3.bench.evaluator", f"model.path={model}", f"workspace.work_dir={work_dir}"]
     sys.argv += [o for o in overrides if not o.startswith("workspace.work_dir=")]

@@ -1,0 +1,1 @@
+{"started": "2026-10-26T12:55:09", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "facebook/VGGT-1B", "overrides": ["eval.datasets=[hiroom]", "inference.num_fusion_workers=1", "workspace.work_dir=workspace/evaluation/pilot_VGGT-1B"], "wall_s": 597.5028394180117}

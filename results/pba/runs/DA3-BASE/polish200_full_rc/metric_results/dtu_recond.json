@@ -1,0 +1,112 @@
+{
+ "scan1": {
+  "forward_s": 2.1514356259722263,
+  "depth_ratio_median": 0.9980905652046204,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan10": {
+  "forward_s": 1.8947723500314169,
+  "depth_ratio_median": 1.0125950574874878,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan11": {
+  "forward_s": 1.9505515769706108,
+  "depth_ratio_median": 1.0042197704315186,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan110": {
+  "forward_s": 1.945330324000679,
+  "depth_ratio_median": 0.9920933842658997,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan114": {
+  "forward_s": 2.0003581609926187,
+  "depth_ratio_median": 0.9962413907051086,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan118": {
+  "forward_s": 1.9204709160258062,
+  "depth_ratio_median": 1.0026636123657227,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan12": {
+  "forward_s": 1.8049189830198884,
+  "depth_ratio_median": 0.9974281191825867,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan13": {
+  "forward_s": 1.8921050649951212,
+  "depth_ratio_median": 1.0009673833847046,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan15": {
+  "forward_s": 2.0044390850234777,
+  "depth_ratio_median": 0.9986400008201599,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan23": {
+  "forward_s": 2.0393164660199545,
+  "depth_ratio_median": 0.9980016350746155,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan24": {
+  "forward_s": 1.9273190050153062,
+  "depth_ratio_median": 1.0040576457977295,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan29": {
+  "forward_s": 1.6804075629916042,
+  "depth_ratio_median": 1.0099958181381226,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan32": {
+  "forward_s": 1.813310889992863,
+  "depth_ratio_median": 0.9977613687515259,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan33": {
+  "forward_s": 1.8190976589685306,
+  "depth_ratio_median": 1.0026695728302002,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan34": {
+  "forward_s": 2.0030773050384596,
+  "depth_ratio_median": 0.9993122220039368,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan4": {
+  "forward_s": 1.9818767079850659,
+  "depth_ratio_median": 0.995195209980011,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan48": {
+  "forward_s": 1.5205246459809132,
+  "depth_ratio_median": 1.0097543001174927,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan49": {
+  "forward_s": 1.7466316330246627,
+  "depth_ratio_median": 1.0014634132385254,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ },
+ "scan62": {
+  "forward_s": 1.718669391993899,
+  "depth_ratio_median": 0.9930404424667358,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan75": {
+  "forward_s": 1.7084413910051808,
+  "depth_ratio_median": 0.9905948638916016,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan77": {
+  "forward_s": 1.4378260499797761,
+  "depth_ratio_median": 1.0168695449829102,
+  "focal_roundtrip_err": 1.1920928955078125e-07
+ },
+ "scan9": {
+  "forward_s": 1.8953100530197844,
+  "depth_ratio_median": 0.9948211908340454,
+  "focal_roundtrip_err": 5.960464477539063e-08
+ }
+}

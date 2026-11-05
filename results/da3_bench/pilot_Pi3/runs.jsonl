@@ -1,0 +1,1 @@
+{"started": "2026-10-26T12:46:30", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "yyfz233/Pi3", "overrides": ["eval.datasets=[hiroom]", "inference.num_fusion_workers=1", "workspace.work_dir=workspace/evaluation/pilot_Pi3"], "wall_s": 515.2777645880124}

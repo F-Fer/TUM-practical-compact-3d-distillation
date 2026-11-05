@@ -1,0 +1,1 @@
+{"started": "2026-10-26T13:05:46", "host": "SL18", "gpu": "NVIDIA GeForce RTX 3080", "torch": "2.5.1+cu121", "model": "nvidia/dvlt", "overrides": ["inference.num_fusion_workers=1"], "wall_s": 4813.192662294023}

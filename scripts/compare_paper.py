@@ -3,7 +3,8 @@
 Usage:
     uv run scripts/compare_paper.py [run dir ...] [--save]
 
-Run dirs default to workspace/evaluation/*. With --save, each run's metric JSONs and
+Run dirs default to workspace/evaluation/*. Runs the paper doesn't report (e.g. DéjàView) are
+listed without the difference. With --save, each run's metric JSONs and
 timing logs are copied to results/da3_bench/<model>/ together with a comparison.md,
 so they can be committed.
 """
@@ -18,18 +19,26 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASETS = ["hiroom", "eth3d", "dtu", "7scenes", "scannetpp"]
 POSE_DATASET = {"dtu": "dtu64"}  # pose is evaluated on DTU-64, recon on DTU-49
 
-# Paper values in %, DTU Chamfer distance in mm.
+# Paper values in %, DTU Chamfer distance in mm, keyed by a substring of the run dir name.
 # Table 2: (AUC@3, AUC@30). Table 3: (without GT pose, with GT pose).
 PAPER = {
-    "large": {
+    "vggt": {
+        "pose": {"hiroom": (49.1, 88.0), "eth3d": (26.3, 80.8), "dtu": (79.2, 99.8), "7scenes": (23.9, 85.0), "scannetpp": (62.6, 95.1)},
+        "recon": {"hiroom": (56.7, 70.2), "eth3d": (57.2, 66.7), "dtu": (2.05, 1.44), "7scenes": (47.9, 51.4), "scannetpp": (66.4, 70.7)},
+    },
+    "pi3": {
+        "pose": {"hiroom": (67.0, 94.8), "eth3d": (35.2, 87.3), "dtu": (62.5, 94.9), "7scenes": (25.5, 86.3), "scannetpp": (50.7, 92.1)},
+        "recon": {"hiroom": (75.8, 85.0), "eth3d": (72.7, 80.6), "dtu": (3.28, 1.72), "7scenes": (44.2, 57.5), "scannetpp": (63.1, 73.3)},
+    },
+    "-large": {
         "pose": {"hiroom": (58.7, 94.2), "eth3d": (32.2, 86.9), "dtu": (70.2, 96.7), "7scenes": (29.2, 86.6), "scannetpp": (60.2, 94.7)},
         "recon": {"hiroom": (69.5, 87.1), "eth3d": (65.8, 75.2), "dtu": (2.08, 1.23), "7scenes": (56.3, 49.2), "scannetpp": (67.9, 75.7)},
     },
-    "base": {
+    "-base": {
         "pose": {"hiroom": (19.0, 83.2), "eth3d": (15.1, 74.6), "dtu": (60.1, 95.9), "7scenes": (20.1, 82.9), "scannetpp": (25.1, 83.4)},
         "recon": {"hiroom": (25.9, 71.4), "eth3d": (49.5, 66.7), "dtu": (2.87, 2.36), "7scenes": (49.9, 50.6), "scannetpp": (47.2, 67.8)},
     },
-    "small": {
+    "-small": {
         "pose": {"hiroom": (9.49, 75.2), "eth3d": (8.59, 62.1), "dtu": (30.6, 91.2), "7scenes": (14.0, 78.7), "scannetpp": (10.9, 71.9)},
         "recon": {"hiroom": (18.3, 52.2), "eth3d": (41.6, 63.4), "dtu": (5.83, 2.49), "7scenes": (41.0, 46.8), "scannetpp": (32.3, 53.8)},
     },
@@ -38,7 +47,7 @@ PAPER = {
 
 def paper_entry(model_name):
     name = model_name.lower()
-    return next((v for k, v in PAPER.items() if f"-{k}" in name), None)
+    return next((v for k, v in PAPER.items() if k in name), None)
 
 
 def load_mean(metric_dir, data, mode):
@@ -52,20 +61,21 @@ def load_mean(metric_dir, data, mode):
 def fmt(ours, paper):
     if ours is None:
         return "–"
-    return f"{ours:.2f} ({ours - paper:+.2f})"
+    return f"{ours:.2f}" if paper is None else f"{ours:.2f} ({ours - paper:+.2f})"
 
 
 def compare(run_dir):
     model = os.path.basename(run_dir.rstrip("/"))
     paper = paper_entry(model)
     metric_dir = os.path.join(run_dir, "metric_results")
-    if paper is None or not os.path.isdir(metric_dir):
+    if not os.path.isdir(metric_dir):
         return None
 
     rows = [
         f"## {model}",
         "",
-        "Ours (difference to paper). F1 and AUC in %, DTU Chamfer distance in mm.",
+        ("Ours (difference to paper)" if paper else "Ours (not in the paper)")
+        + ". F1 and AUC in %, DTU Chamfer distance in mm.",
         "",
         "| Metric | " + " | ".join(DATASETS) + " |",
         "|---" * (len(DATASETS) + 1) + "|",
@@ -74,14 +84,14 @@ def compare(run_dir):
         cells = []
         for d in DATASETS:
             m = load_mean(metric_dir, POSE_DATASET.get(d, d), "pose")
-            cells.append(fmt(m and 100 * m[key], paper["pose"][d][idx]))
+            cells.append(fmt(m and 100 * m[key], paper and paper["pose"][d][idx]))
         rows.append(f"| {label} | " + " | ".join(cells) + " |")
     for label, idx, mode in [("Recon w/o GT pose", 0, "recon_unposed"), ("Recon w/ GT pose", 1, "recon_posed")]:
         cells = []
         for d in DATASETS:
             m = load_mean(metric_dir, d, mode)
             value = m and (m["overall"] if d == "dtu" else 100 * m["fscore"])  # DTU is already in mm
-            cells.append(fmt(value, paper["recon"][d][idx]))
+            cells.append(fmt(value, paper and paper["recon"][d][idx]))
         rows.append(f"| {label} | " + " | ".join(cells) + " |")
 
     timings_path = os.path.join(run_dir, "timings.jsonl")
