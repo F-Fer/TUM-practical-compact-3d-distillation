@@ -15,7 +15,7 @@ cd TUM-practical-compact-3d-distillation
 **Local machines (RTX 3070/3080, tum1):**
 
 ```sh
-uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, Depth Anything 3, VGGT and Pi3 from third_party/)
+uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, DA3, VGGT, Pi3 and RoMa v2 from third_party/)
 ```
 
 **macOS (notebooks on saved predictions, no benchmark runs):**
@@ -30,7 +30,10 @@ uv sync --no-default-groups --group mac    # torch from PyPI (MPS/CPU), no xform
 uv sync --no-default-groups --group cu128       # torch 2.7.0 cu128
 echo 'export UV_NO_SYNC=1' >> ~/.bashrc         # otherwise `uv run` re-syncs the default cu121 group
 ln -s $SCRATCH/workspace workspace              # benchmark data doesn't fit in the home quota
+srun --partition=rtx_5090 --gres=gpu:1 .venv/bin/python -c "import torch, xformers, romav2; print(torch.__version__, torch.cuda.is_available())"   # 2.7.0+cu128 True
 ```
+
+Never run a plain `uv sync` there: it installs the cu121 group and replaces the cu128 torch, which can't run on the 5090.
 
 On the cluster, run everything as a SLURM job (the login node has no GPU), e.g.
 
@@ -199,30 +202,21 @@ Our own changes don't cause the differences. The pipeline is deterministic on ou
 
 ## Test-time optimization (TTO)
 
-We refine the saved DA3 predictions (cameras and depth) without training and score them with the benchmark's own metrics, on a **dev subset** of 22 scenes (HiRoom 10, 7-Scenes 2, ScanNet++ 3, DTU-64 4, ETH3D 3), one seed. A TTO method reads `workspace/evaluation/<model>/`, writes a new run directory in the same layout and is scored by `scripts/eval_tto.py` (pose AUC, recon F1) and `scripts/eval_recon_aligned.py` (recon F1 after aligning the cloud to the GT). `scripts/compare_tto.py` and `scripts/tracks_table.py` tabulate runs.
+We refine the saved DA3 predictions (cameras and depth) without training and score them with the benchmark's metrics on a dev subset of 22 scenes (HiRoom 10, 7-Scenes 2, ScanNet++ 3, DTU-64 4, ETH3D 3), one seed. A method reads `workspace/evaluation/<model>/` and writes a run directory in the same layout; `scripts/eval_tto.py` and `scripts/eval_recon_aligned.py` score it, `scripts/compare_tto.py` and `scripts/tracks_table.py` tabulate runs.
 
-### Methods
-
-| Method | Script | What it does |
-|---|---|---|
-| Photometric BA ("polish") | `scripts/run_tto_pba.py` | optimises poses, a shared focal length and a coarse log-depth grid on photometric / VGG-feature NCC between neighbouring views: Adam, then a Levenberg-Marquardt polish. Reports in `results/pba/` |
-| Track-based BA | `scripts/run_tto_ba.py`, `scripts/tracks_roma.py` | tracks from RoMa v2 (`tracker=roma`) or VGGSfM (`tracker=vggsfm`), then pycolmap BA with a Cauchy loss (0.25 px). Configurations are named in `scripts/tto_configs.sh` |
-| Radial BA | `run_tto_ba.py camera=radial` | the same BA with a radial-distortion parameter. Needed on ETH3D, whose lenses are distorted |
-| Depth fit | `depth_fit=grid` | refits DA3's depth to the BA's 3D points, since BA changes the cameras but not the depth |
-| Depth-only polish | `run_tto_pba.py init_from=<BA run> poses=false focal=none` | photometric BA started from the BA cameras, cameras frozen, only the depth refined |
-| Anchored BA (own solver) | `scripts/ba_lm.py`, `scripts/run_tto_ba_truncated.py` | Levenberg-Marquardt BA with a Schur complement, same objective as pycolmap, with a prior on DA3's poses (`BA_PRIOR`) and an iteration cap (`BA_MAX_ITERS`) |
-
-Settings that matter for track-based BA (see `CLAUDE.md` for the reasons): `max_reproj=1000000` (no gate against DA3's own projection), `loss=cauchy loss_scale=0.25`, `shared_camera=true`, `extra_queries` for frames that no query frame sees, and a rescaling of the depth with the BA's poses (done by `run_tto_ba.py`; `scripts/rescale_depth.py` repairs older runs).
+- **Photometric BA** (`scripts/run_tto_pba.py`, reports in `results/pba/`): poses, focal length and a coarse depth grid optimised on photometric/feature NCC, then an LM polish.
+- **Track-based BA** (`scripts/run_tto_ba.py`): RoMa v2 or VGGSfM tracks, then pycolmap BA with a Cauchy loss. Configurations are named in `scripts/tto_configs.sh`; `camera=radial` models lens distortion (needed on ETH3D) and `depth_fit=grid` refits the depth to the BA points. Using the BA's cameras, a depth-only polish (`run_tto_pba.py init_from=<run> poses=false focal=none`) refines only the depth.
+- **BA iterations** (own solver, `scripts/ba_lm.py` with `run_tto_ba_iterations.py`, `run_tto_ba_truncated.py`, `ba_iteration_curves.py`): pycolmap can't cap the iterations or expose them, so we re-solve the dumped BA problem with the same objective, optionally with a prior on DA3's poses.
 
 ```sh
-# tracks + radial BA (+ depth fit) on the dev subset, then the depth-only polish started from it
-scripts/run_tto_dev.sh DA3-SMALL                       # all dev configs (Slurm: scripts/slurm_dev_tto.sh)
-sbatch scripts/slurm_time_tracks.sh DA3-SMALL          # the best configs, timed on the RTX 5090 (submit from the repo root)
-sbatch scripts/slurm_time_vggsfm.sh DA3-SMALL          # VGGSfM + BA, timed on the RTX 5090
-.venv/bin/python scripts/tracks_table.py workspace/tto/DA3-SMALL/time_rad workspace/tto/DA3-SMALL/time_depth_only
+scripts/run_tto_dev.sh DA3-SMALL              # dev-subset runs (Slurm: scripts/slurm_dev_tto.sh)
+sbatch scripts/slurm_time_tracks.sh DA3-SMALL # best track configs, timed on the RTX 5090 (submit from the repo root)
+sbatch scripts/slurm_time_vggsfm.sh DA3-SMALL # VGGSfM + BA, timed on the RTX 5090
 ```
 
-### Results (dev subset; pose AUC@3 mean over the five datasets / raw recon F1 over HiRoom, 7-Scenes, ScanNet++)
+### Results
+
+Pose AUC@3 (mean over the five datasets) / raw recon F1 (HiRoom, 7-Scenes, ScanNet++):
 
 | Model | DA3 alone | photometric polish | tracks + radial BA + depth-only polish | tracks + radial BA + full polish |
 |---|---|---|---|---|
@@ -230,23 +224,9 @@ sbatch scripts/slurm_time_vggsfm.sh DA3-SMALL          # VGGSfM + BA, timed on t
 | BASE | 27.1 / 45.2 | 43.2 / **60.6** | **54.3** / 48.5 | 49.6 / 59.3 |
 | LARGE-1.1 | 48.8 / 65.7 | 58.4 / 70.7 | 57.4 / 62.2 | 55.2 / 70.2 |
 
-- Track-based BA is what helps the small models' poses (SMALL 16 → 54) and the only method that fixes ETH3D once the lens is modelled. For LARGE-1.1 the photometric polish alone is as good or better, at about 1/20 of the cost.
-- Time per scene on the RTX 5090: RoMa tracks + radial BA about 37 s (the BA is CPU-bound), photometric polish about 1 s, VGGSfM + BA about 92-110 s. `results/figures/compute_pba_vs_tracks_ba.png` plots quality against compute for all of them.
-- Recon F1 barely follows pose quality; the photometric stage raises it because it also moves the depth, which track-based BA leaves at DA3's.
-
-### How many BA iterations are needed
-
-pycolmap 3.10 cannot set an iteration cap or tolerances, and every BA of the dev scenes ends with "Iterations 101, No convergence", i.e. it stops at COLMAP's limit of 100. To follow the iterations, `scripts/run_tto_ba_iterations.py` dumps the BA problem before each pycolmap call, `scripts/ba_lm.py` re-solves it with the same objective and exposes every iteration, and `scripts/ba_iteration_curves.py` scores the poses of every iteration (`results/figures/ba_iterations.png`). Our solver ends 2.3 AUC@3 below pycolmap on SMALL, so the curves show the shape of convergence, not pycolmap's exact numbers.
-
-- **SMALL**: the mean AUC@3 reaches 50 % of its final gain after 1 iteration, 95 % after 10 and 99 % after 15. A stop on the cost (it fell by less than 3e-3 over 5 iterations, about 18 iterations on average) loses 0.2 AUC@3 against 100 iterations.
-- **LARGE-1.1**: not monotonic. DA3's own poses are good, the BA gains about 12 AUC@3 within 2-3 iterations and then drifts back on several HiRoom scenes (e.g. 828763: 59 → 70 → 26 at iterations 0, 2, 100). A BA with a prior on DA3's poses (weight 100, 25 iterations) is the best LARGE-1.1 variant: 61.0 against 57.4 for pycolmap and 58.4 for the polish alone. The prior weight has to follow the model: 1000 blocks the corrections a weak start needs.
-- Our solver takes about 3.4 s per iteration on large scenes, so only very short runs are cheaper than pycolmap's 100 iterations; a faster solver is open work.
-
-The camera movement per iteration is shown in `results/figures/ba_cameras_*.png` / `.gif` (cameras coloured by their distance to the ground truth).
-
-### Limits
-
-One seed and 22 scenes, 2-4 per dataset except HiRoom. The DTU-64 pose score is saturated (100) for every BA run. Timings of the DA3 forward pass are from the RTX 3080; the TTO timings are from the RTX 5090.
+- Track-based BA mainly helps the small models' poses; for LARGE-1.1 the photometric polish alone is as good at about 1/20 of the cost.
+- Per scene on the RTX 5090: RoMa tracks + radial BA about 37 s, polish about 1 s, VGGSfM + BA 92-110 s.
+- Every pycolmap BA stops at COLMAP's limit of 100 iterations ("No convergence"). SMALL reaches 95 % of its AUC@3 gain after about 10 iterations. LARGE-1.1 gains most within 2-3 iterations and then often drifts back; a prior on DA3's poses (weight 100, 25 iterations) gives the best LARGE-1.1 poses (61.0). Plots are generated into `results/figures/` (gitignored).
 
 ## References
 
