@@ -14,6 +14,7 @@ import statistics
 import sys
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 MODELS = {"DA3-SMALL": "#2a78d6", "DA3-BASE": "#eb6834", "DA3-LARGE-1.1": "#1baf7a"}  # categorical slots 1-3, as plot_compute.py
 VIEWS = ["2", "4", "8", "16", "32", "64", "all"]
@@ -151,29 +152,60 @@ def quality_figure(root, models, path, targets=False):
     fig.savefig(path, dpi=150)
 
 
+def label_points(ax, labels, radius=9):
+    """Write each (text, x, y) next to its marker, on the side farthest from all curves and the labels placed so far.
+
+    Call it after the layout is final: it works in display pixels."""
+    scale = ax.figure.dpi / 72  # pixels per point
+    segments = [(a, b) for line in ax.get_lines() for c in [ax.transData.transform(line.get_xydata())] for a, b in zip(c[:-1], c[1:])]
+    placed = []
+
+    def clearance(p):
+        d = [np.linalg.norm(p - a - np.clip(np.dot(p - a, b - a) / max(np.dot(b - a, b - a), 1e-9), 0, 1) * (b - a)) for a, b in segments]
+        return min(d + [np.linalg.norm(p - q) for q in placed])
+
+    for text, x, y in labels:
+        marker = ax.transData.transform((x, y))
+        half = np.array([2.2 * len(text), 3.5]) * scale  # half the size of the 7 pt text
+        corners = [half * s for s in ((0, 0), (-1, -1), (-1, 1), (1, -1), (1, 1))]
+        best, best_score = None, -1
+        for angle in np.deg2rad(range(-45, 315, 45)):  # first candidate: below right
+            offset = radius * np.array([np.cos(angle), np.sin(angle)])
+            box = [marker + offset * scale + c for c in corners]
+            if not all(ax.bbox.contains(*p) for p in box):
+                continue
+            score = min(clearance(p) for p in box)
+            if score > best_score:
+                best, best_score, best_box = offset, score, box
+        placed += best_box
+        ax.annotate(text, (x, y), textcoords="offset points", xytext=best, ha="center", va="center", fontsize=7, color=MUTED)
+
+
 def compute_figure(root, models, path):
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.4), facecolor=SURFACE)
+    """Quality vs. DA3 forward time, one curve per model, points labelled with N."""
+    quality = [("pose", "auc03", "Pose AUC@3 (%)"), ("pose", "auc30", "Pose AUC@30 (%)"),
+               ("recon_unposed", "fscore", "Recon F1 (%, unposed; needs N >= 3)")]
+    fig, axes = plt.subplots(1, len(quality), figsize=(14, 4.4), facecolor=SURFACE)
+    labels = {ax: [] for ax in axes}
     for model in models:
         t = timings(root, model)
         vs = [v for v in VIEWS if v in t]
-        xs = [x_of(v) for v in vs]
         kw = dict(color=MODELS[model], lw=2, marker="o", ms=5.5, mec=SURFACE, mew=1.2, label=model)
-        axes[0].plot(xs, [t[v][0] for v in vs], **kw)
-        axes[1].plot(xs, [t[v][1] for v in vs], **kw)
-        pts = [(t[v][0], pooled(root, model, f"n{v}", "pose", "auc03")) for v in vs]
-        pts = [(a, b) for a, b in pts if b is not None]
-        axes[2].plot(*zip(*pts), **kw)
-        for v, (a, b) in zip(vs, pts):
-            axes[2].annotate(str(x_of(v)), (a, b), textcoords="offset points", xytext=(4, -10), fontsize=7, color=MUTED)
-    style(axes[0], "DA3 forward time (s)")
-    axes[0].set_yscale("log")
-    style(axes[1], "Peak GPU memory (GiB, with da3_lowmem)")
-    style(axes[2], "Pose AUC@3 (%), 7S+SN++ vs. forward time (labels: N)", xlabel="DA3 forward time per scene (s), RTX 5090")
-    axes[2].set_xscale("log")
-    axes[2].set_xticks([0.03, 0.1, 0.3, 1, 3], ["0.03", "0.1", "0.3", "1", "3"])
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, fontsize=9)
+        for ax, (mode, key, _) in zip(axes, quality):
+            pts = [(v, t[v][0], pooled(root, model, f"n{v}", mode, key)) for v in vs]
+            pts = [p for p in pts if p[2] is not None]
+            ax.plot([p[1] for p in pts], [p[2] for p in pts], **kw)
+            labels[ax] += [(str(x_of(v)), a, b) for v, a, b in pts]
+    for ax, (_, _, title) in zip(axes, quality):
+        style(ax, f"{title}, 7S+SN++ (labels: N)", xlabel="DA3 forward time per scene (s), RTX 5090")
+        ax.set_xscale("log")
+        ax.set_xticks([0.05, 0.1, 0.2, 0.5, 1, 2, 5], ["0.05", "0.1", "0.2", "0.5", "1", "2", "5"])
+        ax.minorticks_off()
+    handles, names = axes[0].get_legend_handles_labels()
+    fig.legend(handles, names, loc="lower center", ncol=3, frameon=False, fontsize=9)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
+    for ax in axes:
+        label_points(ax, labels[ax])
     fig.savefig(path, dpi=150)
 
 
