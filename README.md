@@ -9,31 +9,15 @@ Requirements: an NVIDIA GPU (not on macOS), [uv](https://docs.astral.sh/uv/), an
 ```sh
 git clone --recurse-submodules git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git
 cd TUM-practical-compact-3d-distillation
-# in an existing clone: git submodule update --init
+scripts/setup_env.sh    # submodules + .venv with the torch group of this machine
 ```
 
-**Local machines (RTX 3070/3080, tum1):**
+The script picks `mac` on macOS (notebooks on saved predictions, no benchmark runs), `cu128` on the TUM cluster (tum2, RTX 5090) and `cu121` on the local RTX 3070/3080 machines (tum1); pass the group name to override it. It runs `uv sync --no-default-groups --group <group>`; never run a plain `uv sync` on tum2, it installs `cu121` and replaces the torch that works on the 5090. On the cluster also run:
 
 ```sh
-uv sync    # creates .venv (Python 3.11, torch 2.5.1 cu121, DA3, VGGT, Pi3 and RoMa v2 from third_party/)
-```
-
-**macOS (notebooks on saved predictions, no benchmark runs):**
-
-```sh
-uv sync --no-default-groups --group mac    # torch from PyPI (MPS/CPU), no xformers
-```
-
-**TUM student cluster (tum2, SLURM, RTX 5090):**
-
-```sh
-uv sync --no-default-groups --group cu128       # torch 2.7.0 cu128
 echo 'export UV_NO_SYNC=1' >> ~/.bashrc         # otherwise `uv run` re-syncs the default cu121 group
 ln -s $SCRATCH/workspace workspace              # benchmark data doesn't fit in the home quota
-srun --partition=rtx_5090 --gres=gpu:1 .venv/bin/python -c "import torch, xformers, romav2; print(torch.__version__, torch.cuda.is_available())"   # 2.7.0+cu128 True
 ```
-
-Never run a plain `uv sync` there: it installs the cu121 group and replaces the cu128 torch, which can't run on the 5090.
 
 On the cluster, run everything as a SLURM job (the login node has no GPU), e.g.
 

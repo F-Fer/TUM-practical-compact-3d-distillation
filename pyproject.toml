@@ -37,19 +37,23 @@ cu121 = ["torch==2.5.1", "torchvision==0.20.1", "xformers==0.0.28.post3"]
 # cu128 index has xformers only for 2.7.0 (DA3 requires xformers; markers can't depend
 # on dependency groups, so it can't be dropped for this group alone)
 cu128 = ["torch==2.7.0", "torchvision==0.22.0", "xformers==0.0.30"]
-# macOS (MPS/CPU torch from PyPI, no xformers; DA3 falls back to plain PyTorch without it): for notebooks on saved
-# predictions, not benchmark runs (uv sync --no-default-groups --group mac)
+# macOS (MPS/CPU torch from PyPI): for notebooks on saved predictions, not benchmark runs
+# (uv sync --no-default-groups --group mac --no-install-package xformers: DA3 requires xformers, which has no macOS
+# wheels, and falls back to plain PyTorch without it)
 mac = ["torch==2.14.1", "torchvision==0.29.1", "ipykernel"]
 
 [tool.uv]
 package = false
 default-groups = ["cu121"]
 conflicts = [[{ group = "cu121" }, { group = "cu128" }, { group = "mac" }]]
-# drop opencv-python (required by DA3 and VGGT) for opencv-python-headless; DA3 requires xformers
-# unconditionally, but there are no macOS wheels, so only require it on Linux (the groups pin the version).
-# romav2 asks for torchvision >= 0.23 (the groups pin the version that matches their torch) and for the optional
-# CUDA kernel fused-local-corr, which we don't build (RoMa v2 runs without it)
-override-dependencies = ["opencv-python; python_version < '0'", "xformers; sys_platform == 'linux'", "torchvision", "fused-local-corr; python_version < '0'"]
+# drop opencv-python (required by DA3 and VGGT) for opencv-python-headless
+override-dependencies = ["opencv-python; python_version < '0'"]
+# romav2 asks for torchvision >= 0.23 (the groups pin the matching version) and for the optional CUDA kernel
+# fused-local-corr, which we don't build (RoMa v2 runs without it): replace its declared dependencies
+# (an override of torchvision would also drop the groups' pins and index sources)
+dependency-metadata = [
+    { name = "romav2", version = "2.0.1", requires-dist = ["einops>=0.8.1", "pillow>=12.0.0", "rich>=14.2.0", "torch", "tqdm>=4.67.1"] },
+]
 
 [tool.uv.sources]
 torch = [
