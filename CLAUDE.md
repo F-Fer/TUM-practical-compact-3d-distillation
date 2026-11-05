@@ -4,16 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-The repository is git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. `main` holds the benchmark setup (DA3 plus the VGGT, π³ and DéjàView baselines, see "Setup and commands") and its committed results (`benchmarks` and `additional-benchmarks` are merged). The TTO work isn't merged yet. It lives on branches, and each one extends this file, so read `git show <branch>:CLAUDE.md` before working on one:
+The repository is git@github.com:F-Fer/TUM-practical-compact-3d-distillation.git. `main` holds:
 
-- `photometric-ba` (Finn): photometric bundle adjustment (`scripts/run_tto_pba.py`), TTO scoring and plot scripts (`eval_tto.py`, `compare_tto.py`, `plot_compute.py`, ...), results in `results/pba/` and `results/views/`, wandb logging, and the setup for tum2 (a `cu128` dependency group and a section on the cluster).
+- the benchmark setup (DA3 plus the VGGT, π³ and DéjàView baselines, see "Setup and commands") and its committed results (`benchmarks` and `additional-benchmarks` are merged);
+- Finn's photometric bundle adjustment (`photometric-ba` is merged): `scripts/run_tto_pba.py`, TTO scoring and plot scripts (`eval_tto.py`, `compare_tto.py`, `plot_compute.py`, ...), wandb logging, and the reports `results/pba/REPORT.md`, `REPORT2.md` and `results/views/REPORT.md` (per-run configs and comparisons in `results/pba/runs/`).
+
+The other work lives on branches, and each one extends this file, so read `git show <branch>:CLAUDE.md` before working on one:
+
 - `vggt-ba`, continued on `origin/roma-ba` (Antonin): track-based BA with pycolmap (`scripts/run_tto_ba.py`) on VGGSfM or RoMa v2 tracks (`third_party/RoMaV2`), a macOS environment for notebooks on saved predictions (`main`'s environment is Linux + CUDA only), and a "TTO status" section with the results so far.
 - `origin/distillation-test`: distillation experiments (`scripts/distill/`) from before the plan change.
 - `proposal`: also holds `proposal/`, the LaTeX project proposal (CVPR template, one file per section in `proposal/sec/`, bibliography in `proposal/main.bib`). It is written in Overleaf, and `preamble.tex` and `cvpr.sty` exist only there, so it doesn't compile locally as-is.
 
 The Beamer slides of the proposal presentation (22.10.26) aren't in any branch. The proposal and slides still describe the original distillation plan.
 
-Machines: tum1 (hostname `SL18`, RTX 3080 10 GB, 61 GB RAM) produced everything in `results/da3_bench/`. The other local GPU machine has an RTX 3070 (8 GB). tum2 is the TUM student SLURM cluster (RTX 5090s), documented on `photometric-ba`.
+Machines: tum1 (hostname `SL18`, RTX 3080 10 GB, 61 GB RAM) produced everything in `results/da3_bench/`. The other local GPU machine has an RTX 3070 (8 GB). tum2 is the TUM student SLURM cluster (RTX 5090s, see "tum2" below).
 
 `docs/` holds reference PDFs for the TUM research practical course **"Generative AI: From Diffusion to World Models"** (WS 2026/27, run by Umut Kocasari and Robin Borth). They are gitignored and downloaded by hand (`README.md` links some of them), so the set and the filenames differ between clones. Run `ls docs/` and match the files by title. The papers this file refers to:
 
@@ -124,7 +128,7 @@ We don't have enough compute to distill a large teacher properly, so we dropped 
 - **TTO:** we compare several TTO methods on top of each model. The candidates from the presentation refine cameras and depth maps using reprojection error on correspondences (sparse, robust to a poor initialization, e.g. bundle adjustment), photometric consistency (dense, needs a good initialization) or feature-metric consistency (dense, more robust to lighting and viewpoint). Test3R (`docs/Test3R.pdf`) is related work, though it optimizes network parameters rather than the outputs.
 - **Question:** at a matched compute budget (one forward pass plus T TTO iterations), which model size, TTO method and T give the best reconstruction? Can a smaller model with TTO match a larger model's feed-forward prediction?
 
-The benchmark reproduction (task of the week of 23.10.26) is done: DA3-SMALL, BASE and LARGE-1.1 and the VGGT, π³ and DéjàView baselines are in `results/da3_bench/`, and `README.md` discusses where they deviate from the paper. TTO is under way on the branches listed under "Current state".
+The benchmark reproduction (task of the week of 23.10.26) is done: DA3-SMALL, BASE and LARGE-1.1 and the VGGT, π³ and DéjàView baselines are in `results/da3_bench/`, and `README.md` discusses where they deviate from the paper. TTO: photometric BA is on `main`, and track-based BA is on Antonin's branches (see "Current state").
 
 Reference numbers (DéjàView Table 3, also on kickoff slide 34; 24 views, one A100, averaged over DTU, ETH3D, 7-Scenes, ScanNet++ and nuScenes):
 
