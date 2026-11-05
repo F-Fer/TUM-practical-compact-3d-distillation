@@ -1,9 +1,12 @@
-"""Quality vs. compute of DA3 models with and without PBA (dev subset).
+"""Quality vs. compute of DA3 models with and without TTO (dev subset).
 
 Usage: .venv/bin/python scripts/plot_compute.py <out.png> [model ...]
 
 Per model: the unrefined run (workspace/tto/<model>/init_dev), the PBA runs workspace/tto/<model>/<family>_it<T>
-for each family in FAMILIES (lines over T, the Adam iterations per level), and the single runs in POINTS (markers).
+for each family in FAMILIES (lines over T, the Adam iterations per level), and the single runs in POINTS (markers):
+a photometric PBA config and the track-based BA runs of scripts/run_tto_dev.sh (roma_turbo_q4/q8). A run that lacks
+one of the metric files is skipped with a message; run_tto_dev.sh scores recon without ETH3D, so its runs need
+`eval_tto.py workspace/evaluation/<model> <run> eth3d recon_unposed --workers 1` first.
 x = mean time per scene: DA3 forward (workspace/evaluation/<model>/timings.jsonl) + PBA optimisation (opt_s). If
 <run>_t exists (the same configuration re-timed alone on a GPU, e.g. because <run> shared its GPU), its opt_s is used;
 the first scene of each dataset (one-off warm-up of a fresh process) counts with the dataset's median time;
@@ -31,13 +34,12 @@ POSE = ["hiroom", "7scenes", "scannetpp", "dtu64", "eth3d"]
 RECON = ["hiroom", "7scenes", "scannetpp"]
 RECON_ALL = RECON + ["eth3d"]  # all F1 datasets (the DA3 paper's recon average)
 STYLE = "#a8a7a1"  # legend entries for line style / marker shape (not a series)
-FAMILIES = {"v3": ("-", "Adam, VGG+NCC (4 levels x T)"), "fast": ("--", "Adam, RGB Huber, 1024 px (4 x T)")}
+# v3: Adam on VGG features + NCC, 4 pyramid levels x T; fast: Adam on RGB with a Huber loss, 1024 px, 4 x T
+FAMILIES = {"v3": ("-", "Feature-metric (VGG+NCC)"), "fast": ("--", "Photometric (RGB Huber)")}
 POINTS = {
-    "polish50": ("s", "Adam 4x50 + LM polish"),
-    "polish200": ("D", "Adam 4x200 + LM polish"),
     "fastpolish50": ("P", "RGB Adam 4x50 + LM polish"),
-    "abl_P3_it25_lm5": ("X", "RGB Adam 4x25 + LM polish"),
-    "lm10": ("^", "LM only (4x10)"),
+    "roma_turbo_q4": ("^", "RoMa BA, 4 query frames"),
+    "roma_turbo_q8": ("s", "RoMa BA, 8 query frames"),
 }
 
 
@@ -76,6 +78,12 @@ def point(run, forward, recon=RECON):
     return sum(t) / len(t), 100 * auc, 100 * sum(f1) / len(f1)
 
 
+def missing(run, recon):
+    """The metric files point() needs that `run` lacks."""
+    names = [f"{d}_pba" for d in POSE] + [f"{d}_recon_unposed" for d in recon]
+    return [n for n in names if not os.path.exists(os.path.join(run, "metric_results", f"{n}.json"))]
+
+
 def main():
     os.chdir(REPO_ROOT)
     models = sys.argv[2:] or list(MODELS)
@@ -109,14 +117,17 @@ def main():
             for ax, k in zip(axes, (1, 2)):
                 ax.plot([init[0]], [init[k]], marker="o", ms=10, mfc="#fcfcfb", mec=color, mew=2.2, ls="none", zorder=5)
         for name, (marker, _) in POINTS.items():
-            p = point(f"workspace/tto/{model}/{name}", forward, RECON_ALL)
+            run = f"workspace/tto/{model}/{name}"
+            p = point(run, forward, RECON_ALL)
+            if p is None and os.path.isdir(run):
+                print(f"skip {run}: missing {', '.join(missing(run, RECON_ALL)) or 'scenes'}")
             if p:
                 for ax, k in zip(axes, (1, 2)):
                     ax.plot([p[0]], [p[k]], color=color, marker=marker, ms=8, mec="#0b0b0b", mew=0.8, ls="none", zorder=4)
         axes[0].plot([], [], color=color, lw=2, marker="o", ms=6, label=model)
     for ax, title in zip(axes, ("Pose AUC@3 (%), mean of 5 datasets", "Recon F1 (%), mean of HiRoom, 7-Scenes, ScanNet++, ETH3D")):
         ax.set_xscale("symlog", linthresh=1)
-        ax.set_xlabel("time per scene (s): DA3 forward + PBA, RTX 5090", color="#52514e")
+        ax.set_xlabel("time per scene (s): DA3 forward + TTO, RTX 5090", color="#52514e")
         ax.set_title(title, fontsize=10, color="#0b0b0b", loc="left")
         ax.set_facecolor("#fcfcfb")
         ax.grid(color="#e4e3df", lw=0.8)
@@ -125,15 +136,20 @@ def main():
         for s in ("left", "bottom"):
             ax.spines[s].set_color("#a8a7a1")
         ax.tick_params(colors="#52514e", labelsize=8)
-    axes[0].plot([], [], marker="o", ms=9, mfc="#fcfcfb", mec=STYLE, mew=2.2, ls="none", label="DA3 alone (no PBA)")
+    axes[0].plot([], [], marker="o", ms=9, mfc="#fcfcfb", mec=STYLE, mew=2.2, ls="none", label="DA3 alone (no TTO)")
     for fam, (ls, desc) in FAMILIES.items():
         axes[0].plot([], [], color=STYLE, lw=2, ls=ls, label=desc)
     for name, (marker, desc) in POINTS.items():
         axes[0].plot([], [], color=STYLE, marker=marker, ms=7, mec="#0b0b0b", mew=0.8, ls="none", label=desc)
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, fontsize=8)
-    fig.suptitle("PBA iterations per level (labels) and optimiser vs. model size, dev subset", fontsize=11, x=0.01, ha="left")
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.legend(handles, labels, loc="lower center", ncol=5, frameon=False, fontsize=8)
+    fig.suptitle(
+        "Quality vs. time per scene of test-time optimisation, dev subset (line labels: Adam iterations per level)",
+        fontsize=11,
+        x=0.01,
+        ha="left",
+    )
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
     fig.savefig(sys.argv[1], dpi=150)
     print(sys.argv[1])
 
