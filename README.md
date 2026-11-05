@@ -76,6 +76,7 @@ tmux new -d -s bench 'MODELS="nvidia/dvlt yyfz233/Pi3 facebook/VGGT-1B" scripts/
 ```
 
 - Each model gets its own preprocessing (VGGT: width 518; π³: about 255k pixels; DéjàView: longest side 504) and runs in bf16 autocast like DA3.
+- The DA3 paper ran VGGT and π³ with DA3's preprocessing instead (longest side 504). `uv run scripts/run_bench.py --da3-preprocess facebook/VGGT-1B ...` does the same and writes to `workspace/evaluation/VGGT-1B_da3pre/`. With it, our pose AUC matches the paper's Table 2 within 0.6 points; with native preprocessing it is off by up to 3. We use it to check our adapters, not for our own comparisons.
 - None of them takes camera poses as input. In "recon with GT pose" their depth maps are fused with the GT cameras, as for the baselines in the DA3 paper.
 - To fit 100 frames into 10 GB, VGGT and π³ run their transformer weights in bf16 instead of fp32 (the heads stay fp32). On 24 frames this changes depth by about 0.1% on average and the extrinsics by at most 1e-3. VGGT also keeps its 4 intermediate layers in CPU memory (`scripts/vggt_lowmem.py`, outputs unchanged), and DéjàView decodes 8 frames at a time instead of 128 (outputs unchanged). VGGT and π³ don't fit at 100 frames on the 8 GB RTX 3070.
 - π³ predicts no intrinsics; they are fitted to its local point map (principal point at the image center).

@@ -15,6 +15,8 @@ which replace DepthAnything3 in the evaluator.
 random frames in scenes with more (7-Scenes, ScanNet++). Use it with its own workspace.work_dir.
 --ransac-seed N likewise replaces the seed (42) of the RANSAC pose alignment in the recon modes;
 with eval.eval_only=true it re-scores existing predictions (copy them into the new work_dir).
+--da3-preprocess gives VGGT and Pi3 DA3's preprocessing instead of their own, as in the DA3 paper's
+baselines (see baselines.py); the default work_dir then gets the suffix _da3pre.
 
 Outputs go to workspace/evaluation/<model name>/ unless workspace.work_dir is given:
     model_results/, metric_results/   written by the DA3 evaluator
@@ -129,23 +131,31 @@ def set_ransac_seed(seed):
 def main():
     args = sys.argv[1:]
     frame_seed = ransac_seed = None
-    while args[:1] in (["--frame-seed"], ["--ransac-seed"]):
-        if args[0] == "--frame-seed":
-            frame_seed = int(args[1])
+    while args[:1] in (["--frame-seed"], ["--ransac-seed"], ["--da3-preprocess"]):
+        opt = args.pop(0)
+        if opt == "--da3-preprocess":
+            baselines.PREPROCESS = "da3"
+        elif opt == "--frame-seed":
+            frame_seed = int(args.pop(0))
             set_frame_seed(frame_seed)
         else:
-            ransac_seed = int(args[1])
+            ransac_seed = int(args.pop(0))
             set_ransac_seed(ransac_seed)
-        args = args[2:]
     if not args or args[0].startswith("-"):
         sys.exit(__doc__)
     model, overrides = args[0], args[1:]
+    if baselines.PREPROCESS == "da3" and not getattr(baselines.MODELS.get(model), "IN_DA3_PAPER", False):
+        sys.exit("--da3-preprocess only applies to the DA3 paper's baselines (VGGT, Pi3)")
     sys.stdout.reconfigure(line_buffering=True)  # per-scene metric lines show up in redirected logs
     os.chdir(REPO_ROOT)  # the evaluator resolves workspace/benchmark_dataset relative to cwd
 
     work_dir = next(
         (o.split("=", 1)[1] for o in overrides if o.startswith("workspace.work_dir=")),
-        os.path.join("workspace", "evaluation", os.path.basename(model.rstrip("/"))),
+        os.path.join(
+            "workspace",
+            "evaluation",
+            os.path.basename(model.rstrip("/")) + ("_da3pre" if baselines.PREPROCESS == "da3" else ""),
+        ),
     )
     os.makedirs(work_dir, exist_ok=True)
     if model in baselines.MODELS:
@@ -164,6 +174,7 @@ def main():
         "overrides": overrides,
         "frame_seed": frame_seed,
         "ransac_seed": ransac_seed,
+        "preprocess": baselines.PREPROCESS if model in baselines.MODELS else None,
     }
     sys.argv = ["depth_anything_3.bench.evaluator", f"model.path={model}", f"workspace.work_dir={work_dir}"]
     sys.argv += [o for o in overrides if not o.startswith("workspace.work_dir=")]
