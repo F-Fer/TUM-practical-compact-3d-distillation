@@ -111,7 +111,7 @@ def jac_fn(R0, t0, f0, k0, cx, cy, X0, uv):
 
 
 @torch.no_grad()
-def step(s, lam, chunk=400000):
+def step(s, lam, chunk=400000, schur="dense"):
     """One LM step at the current state: returns the proposed increments and the predicted cost reduction."""
     N, P, C = len(s["R"]), len(s["X"]), len(s["f"])
     img, pt = s["img"], s["pt"]
@@ -154,22 +154,29 @@ def step(s, lam, chunk=400000):
     Vinv = torch.linalg.inv(Vd)
     U = W @ Vinv[pt]  # [M, 8, 3]
     # Schur complement: S = Hcc - sum over points of W_p Vinv W_p^T, over all pairs of observations of the same point
-    order = torch.argsort(pt)
-    pt_s, counts = pt[order], torch.bincount(pt, minlength=P)
-    start = torch.cumsum(counts, 0) - counts
     S = Hcc.clone()
-    Ls = counts[pt_s]
-    total_pairs = int(Ls.sum())
-    pos = torch.cumsum(Ls, 0) - Ls
-    for a0 in range(0, M, 60000):
-        a1 = min(M, a0 + 60000)
-        a_rep = torch.repeat_interleave(ar(a0, a1), Ls[a0:a1])
-        within = ar(len(a_rep)) - (pos[a0:a1] - pos[a0])[a_rep - a0]
-        b = order[start[pt_s[a_rep]] + within]
-        a = order[a_rep]
-        for j in range(0, len(a), 500000):
-            aa, bb = a[j:j + 500000], b[j:j + 500000]
-            S.index_put_((idx[aa][:, :, None].expand(-1, -1, 8), idx[bb][:, None, :].expand(-1, 8, -1)), -(U[aa] @ W[bb].transpose(1, 2)), accumulate=True)
+    if schur == "dense":  # the camera-by-point matrix as one dense block (D+1 rows, 3P columns), so that the sum over the pairs is one product
+        Wd = torch.zeros((D + 1) * P * 3, dtype=DT, device=DEV)
+        Wd.index_add_(0, ((idx * P + pt[:, None]) * 3)[:, :, None].expand(-1, -1, 3).reshape(-1) + ar(3).repeat(8 * M), W.reshape(-1))
+        Wd = Wd.view(D + 1, P, 3)
+        Ud = torch.einsum("dpi,pij->dpj", Wd, Vinv)
+        S -= Ud.reshape(D + 1, 3 * P) @ Wd.reshape(D + 1, 3 * P).T
+        del Wd, Ud
+    else:  # the loop over all pairs of observations of a point (the same sum, slow: index_put_ with accumulate dominates)
+        order = torch.argsort(pt)
+        pt_s, counts = pt[order], torch.bincount(pt, minlength=P)
+        start = torch.cumsum(counts, 0) - counts
+        Ls = counts[pt_s]
+        pos = torch.cumsum(Ls, 0) - Ls
+        for a0 in range(0, M, 60000):
+            a1 = min(M, a0 + 60000)
+            a_rep = torch.repeat_interleave(ar(a0, a1), Ls[a0:a1])
+            within = ar(len(a_rep)) - (pos[a0:a1] - pos[a0])[a_rep - a0]
+            b = order[start[pt_s[a_rep]] + within]
+            a = order[a_rep]
+            for j in range(0, len(a), 500000):
+                aa, bb = a[j:j + 500000], b[j:j + 500000]
+                S.index_put_((idx[aa][:, :, None].expand(-1, -1, 8), idx[bb][:, None, :].expand(-1, 8, -1)), -(U[aa] @ W[bb].transpose(1, 2)), accumulate=True)
     Sd = S[:D, :D] + lam * torch.diag(torch.diagonal(Hcc[:D, :D]).clamp_min(eps))
     # right-hand side: -gc + sum_m U_m gp[p_m] (accumulated into the camera-side rows)
     corr = torch.zeros(D + 1, dtype=DT, device=DEV).index_add_(0, idx.reshape(-1), (U @ gp[pt][:, :, None])[:, :, 0].reshape(-1))
