@@ -32,7 +32,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from depth_anything_3.bench.evaluator import Evaluator
-from depth_anything_3.bench.utils import compute_pose
+from depth_anything_3.bench.utils import align_to_first_camera, compute_pose, se3_to_relative_pose_error
 from depth_anything_3.utils.geometry import as_homogeneous
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -96,6 +96,7 @@ DEFAULTS = {
     "grad_weight": 1.0,  # sampling probability ~ |grad I|^grad_weight (0 = uniform)
     "features": "rgb",  # rgb (photometric) | vgg (feature-metric: VGG16 relu1_2 + relu2_2, PCA-reduced)
     "feat_dim": 16,
+    "vgg_fast": False,  # keep the VGG network between scenes, larger batches, PCA by eigendecomposition (see vgg_features)
     "token_dim": 32,  # DA3 token features: leading PCA channels used (cache has 64)
     "token_stride": 7.0,  # DA3 token features: px between NCC patch samples (patch size 14)
     "feat_cache": "",
@@ -106,6 +107,26 @@ DEFAULTS = {
     "match_min_sim": 0.5,  # cosine similarity of the (PCA-reduced, normalised) tokens  # DA3 token cache dir (default workspace/tto/feats/<basename of src>)
     "init_noise_deg": 0.0,  # rotate every camera but the first by this angle about a random axis (centre fixed), basin tests
     "init_from": "",  # work dir whose extrinsics/intrinsics replace DA3's (e.g. the sparse-BA output), depth stays DA3's
+    "impl": "autograd",  # gradient of the Adam levels: autograd | analytic (pba_analytic.py: same objective, a third of the tensor operations)
+    "lm_impl": "jvp",  # Jacobians of the LM levels: jvp (forward-mode AD) | analytic (pba_analytic.py, per-pixel kernels only)
+    "lm_solver": "dense",  # lm_impl=analytic: dense (all unknowns) | dense32 (the same in single precision, Jacobi-scaled) | schur (eliminate the depth grid, without the coupling of the cells of different frames) | pcg
+    "lm_cg_iters": 20,  # lm_solver=pcg: at most this many conjugate-gradient iterations
+    "lm_cg_tol": 1e-3,  # lm_solver=pcg: relative residual
+    "lm_refactor": 1,  # lm_impl=analytic, dense solvers: new Gauss-Newton matrix every n iterations, the iterations between reuse its factorisation with a new gradient
+    "lm_stop": 0.0,  # lm_impl=analytic: stop the LM level when the cost on fixed held-out pixels falls by less than this fraction in an iteration, 0 = off
+    "lm_stop_samples": 2048,  # held-out source pixels per frame of lm_stop
+    "lm_w_geo": -1.0,  # lm_impl=analytic: w_geo of the LM levels, < 0: w_geo (with 0 and lm_solver=schur the elimination of the grid is exact)
+    "nbr_iter": 0,  # Adam: neighbours per frame used in an iteration (fresh random subset of the k), 0 = all
+    "strat_cells": 0,  # source pixels: equal sampling mass per cell of a grid with this many cells along the long side, 0 = off
+    "radial": False,  # analytic only: one shared radial distortion coefficient (division model), for images that are not undistorted (ETH3D)
+    "w_radial": 1e-3,  # keeps it near zero where the data do not determine it
+    "radial_max": 1.0,  # upper bound of the coefficient; 0 allows only barrel distortion
+    "radial_gate": 0.0,  # at the first LM level: if the coefficient is smaller than this in magnitude, set it to 0 and leave it out (no distortion in this scene)
+    "lr_radial": 1e-3,
+    "init_gt": "",  # start from the ground truth: pose | pose_focal (scale of the translations from DA3's camera spread), to test where the objective's minimum lies
+    "pool_once": False,  # draw the candidate pixels once (at the sharpest level's distribution) instead of per level
+    "pool_factor": 16,  # Adam: candidate pixels per frame drawn once per level = pool_factor * samples
+    "track_every": 0,  # record the poses and a held-out loss every n iterations (<dst>/metric_results/<dataset>_pba_track.jsonl)
     "seed": 0,
     "save": True,  # write results.npz (False: only metrics)
 }
@@ -216,13 +237,26 @@ def load_images(image_files, H, W):
     return torch.from_numpy(np.stack(imgs)).permute(0, 3, 1, 2).float() / 255
 
 
+_VGG_NET = {}  # vgg_fast: the network of this process, by device
+
+
 @torch.no_grad()
-def vgg_features(images, dim, chunk=2, scale=0.1):
+def vgg_features(images, dim, chunk=2, scale=0.1, fast=False):
     """VGG16 relu1_2 and relu2_2 (upsampled) of images [N, 3, H, W], PCA-reduced to dim channels whose
-    per-channel RMS is scale on average (comparable to intensities, so the same Huber threshold applies)."""
+    per-channel RMS is scale on average (comparable to intensities, so the same Huber threshold applies).
+    fast: keep the network between scenes, 8 frames per forward pass, PCA from the eigenvectors of the covariance instead
+    of an SVD of all samples (same subspace, the signs of the channels and the sampled pixels differ)."""
     import torchvision
 
-    vgg = torchvision.models.vgg16(weights="IMAGENET1K_V1").features[:9].to(images.device).eval()
+    key = str(images.device)
+    if fast and key in _VGG_NET:
+        vgg = _VGG_NET[key]
+    else:
+        vgg = torchvision.models.vgg16(weights="IMAGENET1K_V1").features[:9].to(images.device).eval()
+        if fast:
+            _VGG_NET[key] = vgg
+    if fast:
+        chunk = 8
     mean = torch.tensor([0.485, 0.456, 0.406], device=images.device)[:, None, None]
     std = torch.tensor([0.229, 0.224, 0.225], device=images.device)[:, None, None]
     H, W = images.shape[-2:]
@@ -241,14 +275,21 @@ def vgg_features(images, dim, chunk=2, scale=0.1):
         samples.append(f[:, :, idx].permute(0, 2, 1).reshape(-1, f.shape[1]))
     X = torch.cat(samples)
     mu = X.mean(0)
-    _, S, V = torch.linalg.svd(X - mu, full_matrices=False)
-    P = V[:dim].T  # [C, dim]
-    norm = scale / (S[:dim] ** 2 / len(X)).mean().sqrt()
+    if fast:
+        Xc = X - mu
+        ev, U = torch.linalg.eigh(Xc.T @ Xc)
+        P = U[:, -dim:].flip(1)  # [C, dim], the largest eigenvalues first
+        norm = scale / (ev[-dim:] / len(X)).mean().sqrt()
+    else:
+        _, S, V = torch.linalg.svd(X - mu, full_matrices=False)
+        P = V[:dim].T  # [C, dim]
+        norm = scale / (S[:dim] ** 2 / len(X)).mean().sqrt()
     out = torch.empty(len(images), dim, H, W, device=images.device)
     for i in range(0, len(images), chunk):
         f = feats(images[i : i + chunk])
         out[i : i + chunk] = torch.einsum("nchw,cd->ndhw", f - mu[:, None, None], P) * norm
-    del vgg
+    if not fast:
+        del vgg
     return out
 
 
@@ -388,6 +429,7 @@ class PBA(torch.nn.Module):
         gh, gw = (g, max(2, round(g * W / H))) if H > W else (max(2, round(g * H / W)), g)
         self.grid2 = torch.nn.Parameter(torch.zeros(N, gh, gw, device=dev))
         self.bright = torch.nn.Parameter(torch.zeros(N, 2, device=dev))  # log gain, bias
+        self.kr = torch.nn.Parameter(torch.zeros(1, device=dev))  # radial coefficient, only used by pba_analytic.py
 
         # sampling mask: confident, not at the border
         thr = torch.quantile(conf.reshape(-1)[:: conf.numel() // 2**22 + 1], cfg["conf_quantile"]) if cfg["conf_quantile"] > 0 else -1
@@ -596,14 +638,56 @@ class PBA(torch.nn.Module):
         return photo, geo.view(n, k, P, S), visible.view(n, k, P, S).detach(), ut.detach(), vt.detach()
 
 
-def sampling_probs(img, valid, grad_weight):
-    """[N, H*W] sampling probability of source pixels: valid and ~|grad I|^grad_weight."""
+def sampling_probs(img, valid, grad_weight, strat_cells=0):
+    """[N, H*W] sampling probability of source pixels: valid and ~|grad I|^grad_weight. With strat_cells > 0 every cell of
+    a grid with this many cells along the long side gets the same mass, so that texture can't concentrate the samples."""
     gray = img.mean(1, keepdim=True)
     gx = F.pad(gray[..., :, 2:] - gray[..., :, :-2], (1, 1, 0, 0))
     gy = F.pad(gray[..., 2:, :] - gray[..., :-2, :], (0, 0, 1, 1))
     g = torch.sqrt(gx**2 + gy**2)[:, 0]
     p = (g + 1e-3) ** grad_weight * valid
+    if strat_cells > 0:
+        H, W = p.shape[-2:]
+        s = max(1, math.ceil(max(H, W) / strat_cells))
+        mass = F.avg_pool2d(p[:, None], s, ceil_mode=True)
+        p = p / F.interpolate(mass, scale_factor=s, mode="nearest")[:, 0, :H, :W].clamp_min(1e-12)
     return p.reshape(len(p), -1) + 1e-12 * valid.reshape(len(p), -1)
+
+
+class Tracker:
+    """Poses and held-out errors during the optimisation (track_every > 0), to see when the accuracy starts to drop.
+
+    The held-out pixels are fixed, drawn uniformly from the valid ones with their own generator (the optimiser's random
+    stream stays the same as without tracking) and scored on the sharp images. Its time is left out of opt_s.
+    """
+
+    def __init__(self, model, nbrs, img_flat, every, n=2048):
+        self.model, self.nbrs, self.img, self.every = model, nbrs, img_flat, every
+        gen = torch.Generator(device=img_flat.device).manual_seed(12345)
+        pix = torch.multinomial(model.valid.reshape(model.N, -1).float(), n, replacement=True, generator=gen)
+        self.u, self.v = (pix % model.W).float(), (pix // model.W).float()
+        self.rows, self.spent, self.it = [], 0.0, 0
+
+    @torch.no_grad()
+    def record(self, level, force=False):
+        if not (force or self.it % self.every == 0):
+            return
+        start = time.perf_counter()
+        m = self.model
+        i_tgt, i_src, geo, mask = m.residuals(self.u, self.v, self.nbrs, self.img)
+        w = mask.float()
+        denom = w.sum().clamp_min(1)
+        R, t = m.poses()
+        self.rows.append({
+            "it": self.it, "level": level,
+            "photo": float(((i_tgt - i_src).abs().mean(-1) * w).sum() / denom),
+            "geo": float((geo.abs() * w).sum() / denom),
+            "visible": float(w.mean()),
+            "logf": float(m.logf.mean()),
+            "depth_corr": float(m.grid.abs().mean()),
+            "ext": torch.cat([R, t[..., None] * m.scale], -1).cpu().numpy(),
+        })
+        self.spent += time.perf_counter() - start
 
 
 @torch.no_grad()
@@ -824,14 +908,21 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     K = torch.from_numpy(pred["intrinsics"]).float().to(device)
     model = PBA(images, depth, conf, ext, K, cfg).to(device)
 
+    decode_s = time.perf_counter() - start
     with torch.no_grad():
         R, t = model.poses()
         nbrs, _ = select_neighbors(model.depth0, R, t, model.intrinsics(), cfg["neighbors"], cfg["occ_thresh"], cfg["nbr_mode"], cfg["min_covis"])
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    covis_s = time.perf_counter() - start - decode_s
     k = nbrs.shape[1]
     img_sharp = images.permute(1, 0, 2, 3).reshape(3, -1)
-    info = {"num_frames": N, "neighbors": k}
+    info = {"num_frames": N, "neighbors": k, "decode_s": decode_s, "covis_s": covis_s}
     before = eval_photo(model, nbrs, img_sharp)
     load_s = time.perf_counter() - start
+    tracker = Tracker(model, nbrs, img_sharp, cfg["track_every"]) if cfg["track_every"] else None
+    if tracker:
+        tracker.record(-1, force=True)
 
     groups = [
         {"params": [model.rot], "lr": cfg["lr_rot"]},
@@ -863,17 +954,46 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         info["matches_per_pair"] = float(model.match[4].sum(-1).mean())
     layout = lm_layout(model) if cfg["optimizer"] == "lm" else None
     lam = max(cfg["lm_lambda"], cfg["lm_lambda_min"])
+    kernel = fadam = None
+    if cfg["impl"] == "analytic" or cfg["lm_impl"] == "analytic":
+        from pba_analytic import FlatAdam, Kernel
+
+        kernel = Kernel(model)
+    if cfg["impl"] == "analytic":
+        fadam = FlatAdam([model.rot, model.trans, model.logf, model.grid, model.bright, model.kr], [cfg["lr_rot"], cfg["lr_trans"], cfg["lr_focal"], cfg["lr_depth"], cfg["lr_bright"], cfg["lr_radial"]])
+    blurred, shared_pool = {}, None  # per (features, sigma): levels of the same blur share their images
+
+    def blur(name, sig):
+        if (name, sig) not in blurred:
+            blurred[(name, sig)] = gaussian_blur(feat_maps[name], sig)
+        return blurred[(name, sig)]
+
+    # the sampling probabilities only need the grey image: the mean of the blurred channels is the blurred mean
+    feat_maps["_grey"] = images.mean(1, keepdim=True)
     for level, (feat_name, sigma, iters) in enumerate(levels):
         if feat_name not in feat_maps:
             if feat_name == "vgg":
-                feat_maps[feat_name] = vgg_features(images, cfg["feat_dim"])
+                t_feat = time.perf_counter()
+                feat_maps[feat_name] = vgg_features(images, cfg["feat_dim"], fast=cfg["vgg_fast"])
+                if device.type == "cuda":
+                    torch.cuda.synchronize()
+                info["feat_s"] = time.perf_counter() - t_feat
             else:  # DA3 backbone tokens
                 feat_maps[feat_name] = token_features(feat_path, feat_name, cfg["token_dim"], H, W, device)
-        img = gaussian_blur(feat_maps[feat_name], sigma)
+        img = blur(feat_name, sigma)
         img_flat = img.permute(1, 0, 2, 3).reshape(img.shape[1], -1)
+        if kernel:
+            kernel.set_level(img, cfg["features"] == "rgb" and cfg["photo_loss"] != "ncc",
+                             max(cfg["patch_stride"] * max(1.0, sigma), cfg["token_stride"] if feat_name in ("local", "mid", "final") else 0.0))
         # a pool of candidate pixels per frame, drawn once per level (multinomial over all pixels is slow)
-        probs = sampling_probs(gaussian_blur(images, sigma), model.valid, cfg["grad_weight"])
-        pool = torch.multinomial(probs, 16 * M, replacement=True)
+        grey = img if feat_name == "rgb" and img.shape[1] == 1 else blur("_grey", sigma)
+        probs = sampling_probs(grey, model.valid, cfg["grad_weight"], cfg["strat_cells"])
+        if cfg["pool_once"]:
+            if shared_pool is None:
+                shared_pool = torch.multinomial(sampling_probs(blur("_grey", levels[-1][1]), model.valid, cfg["grad_weight"], cfg["strat_cells"]), cfg["pool_factor"] * M, replacement=True)
+            pool = shared_pool
+        else:
+            pool = torch.multinomial(probs, cfg["pool_factor"] * M, replacement=True)
         stride = cfg["patch_stride"] * max(1.0, sigma)
         if feat_name in ("local", "mid", "final"):
             stride = max(stride, cfg["token_stride"])
@@ -881,6 +1001,13 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         fine = cfg["depth_grid_fine"] > 0 and level >= cfg["fine_from"]
         next(g for g in groups if g["params"][0] is model.grid2)["lr"] = cfg["lr_depth"] if fine else 0.0
         use_lm = cfg["optimizer"] == "lm" or str(level) in cfg["lm_levels"].split(",")
+        if use_lm and kernel and cfg["radial"] and cfg["radial_gate"] > 0 and kernel.radial:
+            info["radial_k_gate"] = float(model.kr)
+            if abs(info["radial_k_gate"]) < cfg["radial_gate"]:
+                with torch.no_grad():
+                    model.kr.zero_()
+                kernel.radial = False
+                info["radial_gated"] = 1
         if use_lm:
             layout = layout or lm_layout(model)
             iters = iters if cfg["optimizer"] == "lm" else cfg["lm_iters"]
@@ -888,14 +1015,39 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             D = S * img_flat.shape[0] + S
             if cfg["lm_samples"]:
                 n_pix = cfg["lm_samples"] // S
-                pool = torch.multinomial(probs, 4 * cfg["lm_samples"], replacement=True)
+                pool = torch.multinomial(probs, min(4, cfg["pool_factor"]) * cfg["lm_samples"], replacement=True)
             chunk = cfg["lm_chunk"] or max(1, int(1.5e8 / (k * n_pix * D * 21)))
+            if cfg["lm_impl"] == "analytic":  # warps per chunk: its dense weight matrices have 48 entries per warp
+                chunk = cfg["lm_chunk"] or max(1, int((1.6e7 if device.type == "cuda" else 4e6) / (k * n_pix * D)))
+            held_prev = None
+            if cfg["lm_stop"] > 0:
+                gen = torch.Generator(device=device).manual_seed(cfg["seed"] + 77)
+                held = kernel.make_pool(torch.multinomial(probs, cfg["lm_stop_samples"] // S, replacement=True, generator=gen))
+                held = (held[0].flatten(1, 2), held[1].flatten(1, 2)) if S > 1 else held
+                held_prev = kernel.cost(*held, nbrs, chunk)
             for it in range(iters):
                 if it == 0 or not cfg["lm_fixed"]:
                     pix = pool.gather(1, torch.randint(0, pool.shape[1], (N, n_pix), device=device))
                     u, v = (pix % W).float(), (pix // W).float()
-                lam, c0, c1, ok = lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam)
+                    if cfg["lm_impl"] == "analytic":
+                        feat, quad = kernel.make_pool(pix)
+                        if S > 1:
+                            feat, quad = feat.flatten(1, 2), quad.flatten(1, 2)
+                if cfg["lm_impl"] == "analytic":
+                    lam, c0, c1, ok = kernel.lm_step(feat, quad, nbrs, chunk, lam, cfg["lm_solver"], it=it)
+                else:
+                    lam, c0, c1, ok = lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam)
                 hist.append({"level": level, "it": it, "loss": c0, "loss_after": c1, "lambda": lam, "accepted": ok, "t": time.perf_counter() - start})
+                if tracker:  # every LM iteration: there are few and each one moves a lot
+                    tracker.it += 1
+                    tracker.record(level, force=True)
+                if held_prev is not None:
+                    held_cur = kernel.cost(*held, nbrs, chunk)
+                    hist[-1]["heldout"] = held_cur
+                    if (held_prev - held_cur) / max(held_prev, 1e-12) < cfg["lm_stop"]:
+                        info["lm_stopped_at"] = it + 1
+                        break
+                    held_prev = held_cur
             continue
         if cfg["optimizer"] == "lbfgs":
             pix = pool[:, : cfg["lbfgs_samples"] * n_pix]
@@ -915,6 +1067,28 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             opt.step(closure)
             hist.append({"level": level, "evals": len(evals), "loss_first": evals[0].item(), "loss": evals[-1].item()})
             continue
+        if fadam:  # same samples and update as below (fresh state per level), with the gradient of pba_analytic.py
+            fadam.reset()
+            # (with NCC the pool of 16 M centres is cut to 16 M / 9, each with its 9 samples)
+            feat_pool, quad_pool = kernel.make_pool(pool[:, : cfg["pool_factor"] * n_pix])
+            const = kernel.prep(nbrs)
+            for it in range(iters):
+                idx = torch.randint(0, feat_pool.shape[1], (N, n_pix), device=device)
+                log = it % 20 == 0 or it == iters - 1
+                nb_it = nbrs
+                if cfg["nbr_iter"] > 0:
+                    nb_it = nbrs.gather(1, torch.rand(N, k, device=device).argsort(1)[:, : cfg["nbr_iter"]])
+                    const = kernel.prep(nb_it)
+                res = kernel.gradient(*kernel.take(feat_pool, quad_pool, idx), nb_it, const, fadam.grads, want_loss=log)
+                fadam.step(0.1 + 0.45 * (1 + math.cos(math.pi * it / iters)))
+                if cfg["radial"]:
+                    model.kr.data.clamp_(max=cfg["radial_max"])
+                if log:
+                    hist.append({"level": level, "it": it, "loss": res[0], **res[1], "t": time.perf_counter() - start})
+                if tracker:
+                    tracker.it += 1
+                    tracker.record(level)
+            continue
         opt = torch.optim.Adam([dict(g) for g in groups])  # fresh state and learning rates per level
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda it: 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * it / iters)))
         for it in range(iters):
@@ -926,7 +1100,10 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
                 sub = torch.randperm(N, device=device)[: cfg["head_frames"]]
                 d_sub = head(sub) / model.scale
                 model.depth_dense = cache.index_put((sub,), d_sub)
-            loss, parts = model.loss(u, v, nbrs, img_flat, stride, match=str(level) in cfg["match_levels"].split(","))
+            nb_it = nbrs
+            if cfg["nbr_iter"] > 0:
+                nb_it = nbrs.gather(1, torch.rand(N, k, device=device).argsort(1)[:, : cfg["nbr_iter"]])
+            loss, parts = model.loss(u, v, nb_it, img_flat, stride, match=str(level) in cfg["match_levels"].split(","))
             if head is not None:  # depth prior relative to DA3's prediction (also fixes the scale gauge)
                 loss = loss + cfg["w_prior"] * ((torch.log(d_sub.clamp_min(1e-6)) - torch.log(model.depth0[sub])) ** 2).mean()
             opt.zero_grad(set_to_none=True)
@@ -935,11 +1112,17 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             sched.step()
             if it % 20 == 0 or it == iters - 1:
                 hist.append({"level": level, "it": it, "loss": loss.item(), **{k: v.item() for k, v in parts.items()}, "t": time.perf_counter() - start})
+            if tracker:
+                tracker.it += 1
+                tracker.record(level)
     if head is not None:
         model.depth_dense = head.all() / model.scale
     if device.type == "cuda":
         torch.cuda.synchronize()
-    opt_s = time.perf_counter() - start
+    opt_s = time.perf_counter() - start - (tracker.spent if tracker else 0.0)
+    if tracker:
+        tracker.record(len(levels), force=True)
+        info["track"] = tracker.rows
     after = eval_photo(model, nbrs, img_sharp)
 
     with torch.no_grad():
@@ -948,6 +1131,12 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         K_out = model.intrinsics().cpu().numpy()
         depth_out = (model.dense_depth() * model.scale).cpu().numpy()
         f_scale = torch.exp(model.logf).cpu().numpy()
+    if kernel:  # the same keys for every scene: the evaluator's mean takes them from the first one
+        info.update(cg_iters=float(np.mean(kernel.cg_iters)) if kernel.cg_iters else 0.0, schur_failed=kernel.schur_failed,
+                    lm_factorisations=kernel.factorisations, lm_chords=kernel.chords)
+        info.setdefault("lm_stopped_at", 0)
+        info.setdefault("radial_k_gate", 0.0)
+        info.setdefault("radial_gated", 0)
     info.update(
         load_s=load_s,
         opt_s=opt_s,
@@ -961,6 +1150,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         visible_before=before["visible"],
         visible_after=after["visible"],
         focal_scale=float(np.mean(f_scale)),
+        radial_k=float(model.kr.detach()[0]),
         depth_corr_abs=float(np.abs(model.grid.detach().cpu().numpy()).mean()),
     )
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
@@ -1080,6 +1270,18 @@ def main():
                 ext[:, :, 3] *= spread(pred["extrinsics"]) / max(spread(ext), 1e-12)
                 pred.update(extrinsics=ext, intrinsics=other["intrinsics"].astype(np.float32))
 
+            if cfg["init_gt"]:
+                ext = gt["extrinsics"][:, :3].astype(np.float32).copy()
+                spread = lambda e: np.linalg.norm((c := -np.einsum("nji,nj->ni", e[:, :, :3], e[:, :, 3])) - c.mean(0), axis=1).mean()  # noqa: E731
+                ext[:, :, 3] *= spread(pred["extrinsics"]) / max(spread(ext), 1e-12)
+                pred.update(extrinsics=ext)
+                if cfg["init_gt"] == "pose_focal":
+                    w_orig = cv2.imread(str(gt["image_files"][0])).shape[1]
+                    k_ = pred["intrinsics"].astype(np.float32).copy()
+                    k_[:, 0, 0] = gt["intrinsics"][:, 0, 0] * pred["depth"].shape[2] / w_orig
+                    k_[:, 1, 1] = gt["intrinsics"][:, 1, 1] * pred["depth"].shape[2] / w_orig
+                    pred.update(intrinsics=k_)
+
             if cfg["init_noise_deg"] > 0:
                 rng = np.random.default_rng(cfg["seed"] + 1)
                 ext = pred["extrinsics"].astype(np.float64).copy()
@@ -1103,6 +1305,16 @@ def main():
                 shutil.copy(os.path.join(exports, "gt_meta.npz"), os.path.join(out_exports, "gt_meta.npz"))
 
             gt_ext = torch.from_numpy(as_homogeneous(gt["extrinsics"]))
+            track = info.pop("track", None)
+            if track:
+                for row in track:
+                    ext_t = torch.from_numpy(as_homogeneous(row.pop("ext")))
+                    p = compute_pose(ext_t, gt_ext)
+                    row.update(auc03=float(p["auc03"]), auc30=float(p["auc30"]))
+                    r_err, t_err = se3_to_relative_pose_error(align_to_first_camera(ext_t), align_to_first_camera(gt_ext), len(ext_t))
+                    row.update(rot_med=float(r_err.median()), trans_med=float(t_err.median()), rot_q90=float(r_err.quantile(0.9)), trans_q90=float(t_err.quantile(0.9)))
+                with open(os.path.join(dst, "metric_results", f"{dataset}_pba_track.jsonl"), "a") as f:
+                    f.write(json.dumps({"scene": scene, "track": track}) + "\n")
             pose0 = compute_pose(torch.from_numpy(as_homogeneous(pred["extrinsics"])), gt_ext)
             pose = compute_pose(torch.from_numpy(as_homogeneous(out["extrinsics"])), gt_ext)
             gt_f = gt["intrinsics"][:, 0, 0] * pred["depth"].shape[2] / cv2.imread(str(gt["image_files"][0])).shape[1]
