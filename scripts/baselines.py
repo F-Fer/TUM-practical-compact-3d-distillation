@@ -31,6 +31,7 @@ from PIL import Image
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PREPROCESS = "native"  # or "da3" (VGGT and Pi3 only); set by run_bench.py --da3-preprocess
+DVLT_STEPS = 12  # DéjàView refinement steps K; set by run_bench.py --dvlt-steps
 
 
 def da3_preprocess(image_files):
@@ -170,7 +171,8 @@ class DVLTBaseline(Baseline):
     run over chunks of 8 frames instead of 128 (bit-identical outputs; 100 frames need 3.9 GiB
     instead of running out of memory)."""
 
-    def __init__(self, model_id, inference_steps=12):
+    def __init__(self, model_id, inference_steps=None):
+        inference_steps = inference_steps or DVLT_STEPS
         sys.path.insert(0, os.path.join(REPO_ROOT, "third_party", "dvlt", "src"))
         from accelerate import PartialState
         from dvlt.model.dvlt.model import DVLT

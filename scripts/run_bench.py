@@ -15,6 +15,7 @@ which replace DepthAnything3 in the evaluator.
 random frames in scenes with more (7-Scenes, ScanNet++). Use it with its own workspace.work_dir.
 --ransac-seed N likewise replaces the seed (42) of the RANSAC pose alignment in the recon modes;
 with eval.eval_only=true it re-scores existing predictions (copy them into the new work_dir).
+--dvlt-steps K runs DéjàView with K refinement steps instead of 12 (default work_dir suffix _K<K>).
 --da3-preprocess gives VGGT and Pi3 DA3's preprocessing instead of their own, as in the DA3 paper's
 baselines (see baselines.py); the default work_dir then gets the suffix _da3pre.
 
@@ -131,10 +132,12 @@ def set_ransac_seed(seed):
 def main():
     args = sys.argv[1:]
     frame_seed = ransac_seed = None
-    while args[:1] in (["--frame-seed"], ["--ransac-seed"], ["--da3-preprocess"]):
+    while args[:1] in (["--frame-seed"], ["--ransac-seed"], ["--da3-preprocess"], ["--dvlt-steps"]):
         opt = args.pop(0)
         if opt == "--da3-preprocess":
             baselines.PREPROCESS = "da3"
+        elif opt == "--dvlt-steps":
+            baselines.DVLT_STEPS = int(args.pop(0))
         elif opt == "--frame-seed":
             frame_seed = int(args.pop(0))
             set_frame_seed(frame_seed)
@@ -154,7 +157,8 @@ def main():
         os.path.join(
             "workspace",
             "evaluation",
-            os.path.basename(model.rstrip("/")) + ("_da3pre" if baselines.PREPROCESS == "da3" else ""),
+            os.path.basename(model.rstrip("/")) + ("_da3pre" if baselines.PREPROCESS == "da3" else "")
+            + (f"_K{baselines.DVLT_STEPS}" if baselines.DVLT_STEPS != 12 else ""),
         ),
     )
     os.makedirs(work_dir, exist_ok=True)
@@ -175,6 +179,7 @@ def main():
         "frame_seed": frame_seed,
         "ransac_seed": ransac_seed,
         "preprocess": baselines.PREPROCESS if model in baselines.MODELS else None,
+        "dvlt_steps": baselines.DVLT_STEPS if model == "nvidia/dvlt" else None,
     }
     sys.argv = ["depth_anything_3.bench.evaluator", f"model.path={model}", f"workspace.work_dir={work_dir}"]
     sys.argv += [o for o in overrides if not o.startswith("workspace.work_dir=")]
