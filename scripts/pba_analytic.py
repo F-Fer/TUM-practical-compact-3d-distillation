@@ -22,6 +22,10 @@ is 6 times faster than in double. scripts/bench_pba.py checks all of it against 
 
 lm_solver=schur and pcg (eliminate the depth grid, without or with iterating on the coupling of the frames' cells) and
 lm_refactor > 1 (reuse a factorisation) are faster still per iteration but lose ScanNet++, see results/pba/REPORT3.md.
+
+lm_free_depth gives every LM sample (with NCC every patch) its own log depth z with a prior, instead of the grid. A warp of
+sample p then depends on z_p, the poses of its two frames, the focal and k only, so the block of the z is diagonal and the
+Schur complement is exact, see solve_free. The target's depth is held fixed, which is what removes the coupling.
 """
 
 import math
@@ -133,8 +137,8 @@ class Warps:
 class Kernel:
     """The objective of PBA.loss at one pyramid level, its gradient and its Gauss-Newton blocks. All in torch.no_grad."""
 
-    def __init__(self, model):
-        cfg = model.cfg
+    def __init__(self, model, cfg=None):
+        cfg = cfg or model.cfg
         if cfg["focal"] == "per_frame" or cfg["depth_grid_fine"] > 0 or cfg["depth_param"] != "grid" or cfg["photo_agg"] != "mean" or cfg["w_match"] > 0:
             sys.exit("impl=analytic / lm_impl=analytic support focal=shared|none, depth_grid_fine=0, depth_param=grid, photo_agg=mean and w_match=0")
         self.m, self.cfg = model, cfg
@@ -162,6 +166,7 @@ class Kernel:
         self.cg_iters, self.schur_failed = [], 0
         self.factor, self.grad_buf, self.chords, self.factorisations = None, None, 0, 0
         self.w_geo_lm = cfg["w_geo"] if cfg["lm_w_geo"] < 0 else cfg["lm_w_geo"]  # of the LM levels only
+        self.z, self.w_z, self.fd = None, cfg["w_free_depth"], None  # lm_free_depth: log depth per sample [N, P], its prior, the blocks of normal_eq
 
     def prep(self, nbrs):
         """What warp needs of the neighbours nbrs [n, k] and does not change during a level."""
@@ -247,6 +252,9 @@ class Kernel:
             ds = feat[..., 2] * torch.exp((grid[rows, quad[..., None] + self.quad] * ws).sum(-1))
         else:
             ds = feat[..., 2]
+        if self.z is not None:
+            z = self.z if src is None else self.z[src]
+            ds = ds * torch.exp(z.repeat_interleave(self.S, 1) if self.ncc else z)
         Rs, ts = (R, t) if src is None else (R[src], t[src])
         xy = feat[..., :2] / s_f
         if self.radial:
@@ -321,6 +329,10 @@ class Kernel:
         if br is None:
             return w.I - w.s[:, None], 1.0
         a, b = br.unbind(-1)
+        if self.cfg["bright_rel"]:  # only the source's contrast counts: the residual can't vanish by shrinking all frames' contrast
+            a_s, b_s = (a, b) if w.src is None else (a[w.src], b[w.src])
+            eat = torch.exp(a[w.nbrs] - a_s[:, None])[:, :, None, None]
+            return w.I * eat + (b[w.nbrs] - b_s[:, None])[:, :, None, None] - w.s[:, None], eat
         ea = torch.exp(a)
         eat = ea[w.nbrs][:, :, None, None]
         eas, bs = (ea, b) if w.src is None else (ea[w.src], b[w.src])
@@ -353,6 +365,10 @@ class Kernel:
             v = v + cfg["w_radial"] * float((m.kr.data**2).sum())
         return v
 
+    def z_prior(self, n):
+        """0.5 w_z z^2 per sample, in the units of a warp (the data terms are divided by the visible warps n)."""
+        return 0.5 * self.w_z * float((self.z**2).sum()) / n if self.z is not None else 0.0
+
     def cost(self, feat, quad, nbrs, chunk):
         """PBA.loss for samples feat [N, M, D]."""
         cfg = self.cfg
@@ -371,7 +387,7 @@ class Kernel:
                 sp = sp + (rho(r, self.dp, self.kind).mean(-1) * m).sum()
             sg, n = sg + (rho(w.geo, self.dg, "huber") * m).sum(), n + m.sum()
         n = max(float(n), 1.0)
-        return cfg["w_photo"] * float(sp) / (max(float(np_), 1.0) if self.ncc else n) + self.w_geo_lm * float(sg) / n + self.priors()
+        return cfg["w_photo"] * float(sp) / (max(float(np_), 1.0) if self.ncc else n) + self.w_geo_lm * float(sg) / n + self.priors() + self.z_prior(n)
 
     # ---------------------------------------------------------------- gradient for Adam
     def gradient(self, feat, quad, nbrs, const, grads, want_loss=False):
@@ -454,13 +470,18 @@ class Kernel:
             grads[5].add_(m_.kr.data, alpha=2 * cfg["w_radial"])
         # brightness: r = I_j exp(a_j) + b_j - (I_i exp(a_i) + b_i)
         if br is not None:
-            ea = torch.exp(br[:, 0])
             s_all = dLr.sum(-1).sum(2)  # [N, k]
             ga_, gb_ = bright[:, 0], bright[:, 1]
-            ga_.copy_(-(dLr * w.s[:, None]).sum((-1, -2)).sum(1) * ea)
-            gb_.copy_(-s_all.sum(1))
             ja = nbrs.reshape(-1)
-            ga_.index_add_(0, ja, ((dLr * w.I).sum((-1, -2)) * ea[nbrs]).reshape(-1))
+            if cfg["bright_rel"]:  # r = I_j exp(a_j - a_i) + b_j - b_i - I_i
+                e_ = (dLr * w.I).sum((-1, -2)) * eat[:, :, 0, 0]
+                ga_.copy_(-e_.sum(1))
+                ga_.index_add_(0, ja, e_.reshape(-1))
+            else:
+                ea = torch.exp(br[:, 0])
+                ga_.copy_(-(dLr * w.s[:, None]).sum((-1, -2)).sum(1) * ea)
+                ga_.index_add_(0, ja, ((dLr * w.I).sum((-1, -2)) * ea[nbrs]).reshape(-1))
+            gb_.copy_(-s_all.sum(1))
             gb_.index_add_(0, ja, s_all.reshape(-1))
             bright.mul_(self.bright_on[:, None])
         else:
@@ -495,13 +516,15 @@ class Kernel:
         k_idx = n_pose + 1
         Hpp = torch.zeros((np_ + 1) ** 2, device=dev)
         gp = torch.zeros(np_ + 1, device=dev)
-        has_grid = self.has_grid
+        has_grid = self.has_grid and self.z is None  # with free depths the grid stays in the warp, fixed
         Hgp = torch.zeros(N * nc * (np_ + 1), device=dev) if has_grid else None
         Hgg = torch.zeros(N, nc, nc, device=dev) if has_grid else None
         gg = torch.zeros(N, nc, device=dev) if has_grid else None
         Hx = torch.zeros(N * nc, N * nc, device=dev) if has_grid and cross_frames else None
         sp, sg, n_vis, np_sum = 0.0, 0.0, 0.0, 0.0
         ncc_scale = 1.0
+        if self.z is not None:
+            hz, bz, fd_chunks = torch.zeros_like(self.z), torch.zeros_like(self.z), []
         if self.ncc:  # the rows are normalised by the visible samples at the end, NCC's by the visible patches
             nv, npatch = 0.0, 0.0
             for i in range(0, N, chunk):
@@ -612,6 +635,21 @@ class Kernel:
             ids = torch.cat(ids, -1)
             Hpp.index_add_(0, (ids[..., None] * (np_ + 1) + ids[..., None, :]).reshape(-1), H13.reshape(-1))
             gp.index_add_(0, ids.reshape(-1), g13.reshape(-1))
+            if self.z is not None:
+                # per sample: its diagonal entry, gradient, and coupling with the poses of its source and target frames, the focal and k
+                dpw = dp_ * wp
+                gw_ = dg_ * wg
+                if self.ncc:
+                    Vs = (gw_[..., None] * Jg).reshape(n, k, M // 9, 9, nq).sum(3)
+                    hg_, bg_ = (gw_ * dg_).reshape(n, k, M // 9, 9).sum(-1), (gw_ * w.geo).reshape(n, k, M // 9, 9).sum(-1)
+                else:
+                    Vs, hg_, bg_ = gw_[..., None] * Jg, gw_ * dg_, gw_ * w.geo
+                V = ((dpw[..., None] * Jp).sum(3) + Vs) @ T13.transpose(-1, -2)  # [n, k, P, nq], in the coordinates of the parameters
+                hz[src] += ((dpw * dp_).sum(-1) + hg_).sum(1)
+                bz[src] += ((dpw * r).sum(-1) + bg_).sum(1)
+                Vl = torch.cat([V[..., :6].sum(1), V[..., 6:12].transpose(1, 2).flatten(2), V[..., 12:].sum(1)], -1)  # [n, P, L], L = 6 + 6 k + 1 or 2
+                il = torch.cat([ids[:, 0, :6], ids[:, :, 6:12].flatten(1), ids[:, 0, 12:]], -1)  # [n, L]
+                fd_chunks.append((src, Vl.double(), il))
             if not has_grid:
                 continue
             # depth grid: dense bilinear weights [.., M, nc] of the source and the warped pixels
@@ -682,7 +720,9 @@ class Kernel:
             gg += f * self.m.grid.data.view(N, -1).double()
             if Hx is not None:
                 Hx = (Hx + Hx.T).double() / n_vis
-        loss = cfg["w_photo"] * sp / (max(np_sum, 1.0) if self.ncc else n_vis) + self.w_geo_lm * sg / n_vis + self.priors()
+        loss = cfg["w_photo"] * sp / (max(np_sum, 1.0) if self.ncc else n_vis) + self.w_geo_lm * sg / n_vis + self.priors() + self.z_prior(n_vis)
+        if self.z is not None:
+            self.fd = ((hz.double() + self.w_z) / n_vis, (bz.double() + self.w_z * self.z.double()) / n_vis, [(s_, V_ / n_vis, i_) for s_, V_, i_ in fd_chunks], np_ + 1)
         return Hpp, Hgp, Hgg, gp, gg, Hx, loss
 
     def apply(self, delta_p, delta_g, sign=1.0):
@@ -705,7 +745,10 @@ class Kernel:
         if self.radial:
             m.kr.data.clamp_(max=self.cfg["radial_max"])
         if delta_g is not None:
-            m.grid.data += delta_g.float().view_as(m.grid.data) * sign
+            if self.z is not None:
+                self.z += delta_g.float() * sign
+            else:
+                m.grid.data += delta_g.float().view_as(m.grid.data) * sign
 
     def chord_step(self, feat, quad, nbrs, chunk, lam):
         """LM iteration with the factorisation of an earlier iteration: only the gradient is new. Returns None if it does not
@@ -755,20 +798,22 @@ class Kernel:
                 return res
         self.factorisations += 1
         Hpp, Hgp, Hgg, gp, gg, Hx, cost0 = self.normal_eq(feat, quad, nbrs, chunk, solver in ("dense", "dense32", "pcg"))
-        if self.has_grid:
+        solves_grid = self.has_grid and self.z is None
+        if solves_grid:
             dmax = max(float(Hpp.diagonal().max()), float(Hgg.diagonal(dim1=1, dim2=2).max()))
         else:
             dmax = float(Hpp.diagonal().max())
         floor = 1e-12 * dmax + 1e-30
         Dp = Hpp.diagonal().clamp_min(floor)
-        Dg = Hgg.diagonal(dim1=1, dim2=2).clamp_min(floor) if self.has_grid else None
+        Dg = Hgg.diagonal(dim1=1, dim2=2).clamp_min(floor) if solves_grid else None
         if cfg["lm_mu"] > 0:
-            mean = (float(Dp.sum()) + (float(Dg.sum()) if self.has_grid else 0.0)) / (len(Dp) + (Dg.numel() if self.has_grid else 0))
+            mean = (float(Dp.sum()) + (float(Dg.sum()) if solves_grid else 0.0)) / (len(Dp) + (Dg.numel() if solves_grid else 0))
             Hpp = Hpp + torch.diag_embed(torch.full_like(Dp, cfg["lm_mu"] * mean))
-            if self.has_grid:
+            if solves_grid:
                 Hgg = Hgg + torch.diag_embed(torch.full_like(Dg, cfg["lm_mu"] * mean))
         params = (self.m.rot, self.m.trans, self.m.logf, self.m.grid, self.m.kr)
         state = [x.data.clone() for x in params]
+        z0 = self.z.clone() if self.z is not None else None
         for _ in range(max_tries):
             step = self.solve(Hpp, Hgp, Hgg, gp, gg, Hx, Dp, Dg, lam, solver)
             if step is not None:
@@ -785,17 +830,47 @@ class Kernel:
                     return max(lam / 3, lam_min), cost0, cost1, True
                 for x, s_ in zip(params, state):
                     x.data.copy_(s_)
+                if z0 is not None:
+                    self.z.copy_(z0)
             lam *= 4
         return lam, cost0, cost0, False
+
+    def solve_free(self, S, gp, lam):
+        """Exact Schur complement of the free depths: [[S, V^T], [V, diag(h)]] (dp, dz) = -(gp, b), with h damped like the rest.
+        Each source frame contributes one matrix of 6 + 6 k + 1 or 2 rows, whatever the number of samples."""
+        h, b, chunks, size = self.fd
+        hl = h * (1 + lam)
+        C = torch.zeros(size * size, device=gp.device, dtype=gp.dtype)
+        rhs = torch.zeros(size, device=gp.device, dtype=gp.dtype)
+        for src, V, il in chunks:
+            Vh = V / hl[src][..., None]
+            C.index_add_(0, (il[..., None] * size + il[:, None, :]).reshape(-1), (V.transpose(-1, -2) @ Vh).reshape(-1))
+            rhs.index_add_(0, il.reshape(-1), (Vh * b[src][..., None]).sum(1).reshape(-1))
+        L, info = torch.linalg.cholesky_ex(S - C.view(size, size)[:-1, :-1])
+        if int(info) != 0:
+            return None
+        dp_ = -torch.cholesky_solve((gp - rhs[:-1])[:, None], L)[:, 0]
+        x = torch.cat([dp_, torch.zeros(1, device=gp.device, dtype=gp.dtype)])  # the last entry is the fixed frame's
+        dz = -b / hl
+        for src, V, il in chunks:
+            dz[src] -= (V / hl[src][..., None] * x[il][:, None]).sum(-1)
+        return dp_, dz
 
     def solve(self, Hpp, Hgp, Hgg, gp, gg, Hx, Dp, Dg, lam, solver):
         """(H + lam diag(H)) delta = -g, None if not PD. dense: Cholesky of everything. schur: eliminate the cells, without the
         coupling Hx of the cells of different frames (a different step). pcg: conjugate gradients on the exact system, with schur as preconditioner."""
         S = Hpp + torch.diag_embed(lam * Dp)
+        if self.z is not None:
+            return self.solve_free(S, gp, lam)
         if not self.has_grid:
             L, info = torch.linalg.cholesky_ex(S)
             return (-torch.cholesky_solve(gp[:, None], L)[:, 0], None) if int(info) == 0 else None
         A = Hgg + torch.diag_embed(lam * Dg)
+        if solver == "frames":  # only the cells, each frame on its own (the others held fixed): pba_patch.depth_stage
+            L, info = torch.linalg.cholesky_ex(A)
+            if bool((info != 0).any()):
+                return None
+            return torch.zeros_like(gp), -torch.cholesky_solve(gg[..., None], L)[..., 0]
         if solver in ("dense", "dense32"):
             N, nc = self.N, self.nc
             n = len(gp)

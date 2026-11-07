@@ -92,6 +92,7 @@ DEFAULTS = {
     # on SMALL, 5-7% faster); runs before that used the colour image (their pba_config.json has no "gray" key)
     "gray": True,
     "bright": True,  # per-frame affine brightness (per-pixel losses on rgb)
+    "bright_rel": False,  # impl=analytic: I_j exp(a_j - a_i) + b_j - b_i - I_i instead of I_j exp(a_j) + b_j - I_i exp(a_i) - b_i, whose loss vanishes as the contrast of all frames but the first goes to 0
     "patch_stride": 1.0,  # px between patch samples, multiplied by max(1, blur sigma)
     "grad_weight": 1.0,  # sampling probability ~ |grad I|^grad_weight (0 = uniform)
     "features": "rgb",  # rgb (photometric) | vgg (feature-metric: VGG16 relu1_2 + relu2_2, PCA-reduced)
@@ -115,6 +116,23 @@ DEFAULTS = {
     "lm_refactor": 1,  # lm_impl=analytic, dense solvers: new Gauss-Newton matrix every n iterations, the iterations between reuse its factorisation with a new gradient
     "lm_stop": 0.0,  # lm_impl=analytic: stop the LM level when the cost on fixed held-out pixels falls by less than this fraction in an iteration, 0 = off
     "lm_stop_samples": 2048,  # held-out source pixels per frame of lm_stop
+    "lm_photo_loss": "",  # lm_impl=analytic: photo_loss of the LM levels, empty: photo_loss
+    "lm_free_depth": False,  # lm_impl=analytic, lm_fixed=true: one free log depth per LM sample (per patch with NCC), eliminated exactly, see pba_analytic.solve_free; the grid stays fixed in these levels
+    "w_free_depth": 20.0,  # its prior 0.5 w z^2 per sample, in units where a warp's geometric row at huber_geo=0.05 has curvature 20
+    "patch": "",  # after the levels: alignments and geometric solves, "sigma:alignments,...", e.g. 8:2,4:2,2:2,1:2, see pba_patch.py
+    "patch_count": 200,  # patches per frame
+    "patch_radius": 1,  # pattern of (2 r + 1)^2 pixels
+    "patch_lk": 3,  # Lucas-Kanade iterations per alignment
+    "patch_inner": 10,  # at most this many LM iterations per alignment
+    "patch_tol": 0.0,  # end them when the cost falls by less than this fraction
+    "patch_ncc": 0.5,  # warps with a lower NCC after alignment are left out
+    "patch_max_disp": 4.0,  # and warps that moved further than this, in strides
+    "patch_info": "photo",  # W of a warp: photo (H / S, in intensities, kernel scale huber_photo) | shape (of H only, in strides, kernel scale patch_delta)
+    "patch_delta": 1.0,  # patch_info=shape: scale of the kernel
+    "patch_iso": 0.01,  # patch_info=shape: isotropic part of W, relative to its trace
+    "patch_gate_after": -1,  # without Adam: index of the patch level after which radial_gate decides on the coefficient
+    "patch_depth_iters": 0,  # LM iterations of the depth grid, poses fixed, after the patch levels
+    "patch_depth_sigma": 1.0,  # their blur
     "lm_w_geo": -1.0,  # lm_impl=analytic: w_geo of the LM levels, < 0: w_geo (with 0 and lm_solver=schur the elimination of the grid is exact)
     "nbr_iter": 0,  # Adam: neighbours per frame used in an iteration (fresh random subset of the k), 0 = all
     "strat_cells": 0,  # source pixels: equal sampling mass per cell of a grid with this many cells along the long side, 0 = off
@@ -513,9 +531,13 @@ class PBA(torch.nn.Module):
         a, b = self.bright[:, 0] * on, self.bright[:, 1] * on
         C = img_flat.shape[0]
         i_src = bilinear_gather(img_flat, idx.reshape(-1), u.reshape(-1), v.reshape(-1), H, W).view(N, 1, -1, C)
-        i_src = i_src * torch.exp(a)[:, None, None, None] + b[:, None, None, None]
+        if not self.cfg["bright_rel"]:
+            i_src = i_src * torch.exp(a)[:, None, None, None] + b[:, None, None, None]
         i_tgt = bilinear_gather(img_flat, tgt, utf, vtf, H, W).view(*z.shape, C)
-        i_tgt = i_tgt * torch.exp(a[nbrs])[..., None, None] + b[nbrs][..., None, None]
+        if self.cfg["bright_rel"]:
+            i_tgt = i_tgt * torch.exp(a[nbrs] - a[:, None])[..., None, None] + (b[nbrs] - b[:, None])[..., None, None]
+        else:
+            i_tgt = i_tgt * torch.exp(a[nbrs])[..., None, None] + b[nbrs][..., None, None]
         return i_tgt, i_src, geo, visible
 
     def patch_samples(self, u, v, stride):
@@ -961,6 +983,12 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         kernel = Kernel(model)
     if cfg["impl"] == "analytic":
         fadam = FlatAdam([model.rot, model.trans, model.logf, model.grid, model.bright, model.kr], [cfg["lr_rot"], cfg["lr_trans"], cfg["lr_focal"], cfg["lr_depth"], cfg["lr_bright"], cfg["lr_radial"]])
+    if cfg["patch"] and (cfg["impl"] != "analytic" or cfg["lm_impl"] != "analytic" or cfg["focal"] == "per_frame" or not cfg["poses"] or cfg["photo_loss"] == "ncc"):
+        sys.exit("patch needs impl=analytic, lm_impl=analytic, poses, focal=shared|none and per-pixel kernels")
+    if cfg["bright_rel"] and (cfg["impl"] != "analytic" or (cfg["lm_levels"] and cfg["lm_impl"] != "analytic")):
+        sys.exit("bright_rel needs impl=analytic and lm_impl=analytic (lm_residuals has the old form)")
+    if cfg["lm_free_depth"] and (not cfg["lm_fixed"] or cfg["lm_stop"] > 0 or cfg["lm_impl"] != "analytic"):
+        sys.exit("lm_free_depth needs lm_impl=analytic, lm_fixed=true and lm_stop=0")
     blurred, shared_pool = {}, None  # per (features, sigma): levels of the same blur share their images
 
     def blur(name, sig):
@@ -1011,7 +1039,13 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         if use_lm:
             layout = layout or lm_layout(model)
             iters = iters if cfg["optimizer"] == "lm" else cfg["lm_iters"]
-            S = 9 if cfg["photo_loss"] == "ncc" else 1
+            lm_loss = cfg["lm_photo_loss"] or cfg["photo_loss"]
+            K_lm = kernel
+            if lm_loss != cfg["photo_loss"]:
+                K_lm = Kernel(model, {**cfg, "photo_loss": lm_loss})
+                K_lm.radial = kernel.radial
+                K_lm.set_level(img, cfg["features"] == "rgb" and lm_loss != "ncc", stride)
+            S = 9 if lm_loss == "ncc" else 1
             D = S * img_flat.shape[0] + S
             if cfg["lm_samples"]:
                 n_pix = cfg["lm_samples"] // S
@@ -1022,19 +1056,21 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             held_prev = None
             if cfg["lm_stop"] > 0:
                 gen = torch.Generator(device=device).manual_seed(cfg["seed"] + 77)
-                held = kernel.make_pool(torch.multinomial(probs, cfg["lm_stop_samples"] // S, replacement=True, generator=gen))
+                held = K_lm.make_pool(torch.multinomial(probs, cfg["lm_stop_samples"] // S, replacement=True, generator=gen))
                 held = (held[0].flatten(1, 2), held[1].flatten(1, 2)) if S > 1 else held
-                held_prev = kernel.cost(*held, nbrs, chunk)
+                held_prev = K_lm.cost(*held, nbrs, chunk)
             for it in range(iters):
                 if it == 0 or not cfg["lm_fixed"]:
                     pix = pool.gather(1, torch.randint(0, pool.shape[1], (N, n_pix), device=device))
                     u, v = (pix % W).float(), (pix // W).float()
                     if cfg["lm_impl"] == "analytic":
-                        feat, quad = kernel.make_pool(pix)
+                        feat, quad = K_lm.make_pool(pix)
                         if S > 1:
                             feat, quad = feat.flatten(1, 2), quad.flatten(1, 2)
+                        if cfg["lm_free_depth"]:
+                            K_lm.z = torch.zeros(N, n_pix, device=device, dtype=feat.dtype)
                 if cfg["lm_impl"] == "analytic":
-                    lam, c0, c1, ok = kernel.lm_step(feat, quad, nbrs, chunk, lam, cfg["lm_solver"], it=it)
+                    lam, c0, c1, ok = K_lm.lm_step(feat, quad, nbrs, chunk, lam, cfg["lm_solver"], it=it)
                 else:
                     lam, c0, c1, ok = lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam)
                 hist.append({"level": level, "it": it, "loss": c0, "loss_after": c1, "lambda": lam, "accepted": ok, "t": time.perf_counter() - start})
@@ -1042,12 +1078,15 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
                     tracker.it += 1
                     tracker.record(level, force=True)
                 if held_prev is not None:
-                    held_cur = kernel.cost(*held, nbrs, chunk)
+                    held_cur = K_lm.cost(*held, nbrs, chunk)
                     hist[-1]["heldout"] = held_cur
                     if (held_prev - held_cur) / max(held_prev, 1e-12) < cfg["lm_stop"]:
                         info["lm_stopped_at"] = it + 1
                         break
                     held_prev = held_cur
+            if cfg["lm_free_depth"]:
+                info["free_depth_abs"] = float(K_lm.z.abs().mean())
+                K_lm.z = None
             continue
         if cfg["optimizer"] == "lbfgs":
             pix = pool[:, : cfg["lbfgs_samples"] * n_pix]
@@ -1117,6 +1156,20 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
                 tracker.record(level)
     if head is not None:
         model.depth_dense = head.all() / model.scale
+    if cfg["patch"]:
+        from pba_patch import run_patch
+
+        radial = cfg["radial"]
+        if kernel and levels:  # the gate of the LM level above, as there is none now
+            radial = kernel.radial
+            if radial and cfg["radial_gate"] > 0 and "radial_k_gate" not in info:
+                info["radial_k_gate"] = float(model.kr)
+                if abs(info["radial_k_gate"]) < cfg["radial_gate"]:
+                    with torch.no_grad():
+                        model.kr.zero_()
+                    radial = False
+                    info["radial_gated"] = 1
+        run_patch(model, nbrs, images, blur, cfg, hist, info, tracker, radial, start, device, sampling_probs)
     if device.type == "cuda":
         torch.cuda.synchronize()
     opt_s = time.perf_counter() - start - (tracker.spent if tracker else 0.0)
@@ -1135,6 +1188,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         info.update(cg_iters=float(np.mean(kernel.cg_iters)) if kernel.cg_iters else 0.0, schur_failed=kernel.schur_failed,
                     lm_factorisations=kernel.factorisations, lm_chords=kernel.chords)
         info.setdefault("lm_stopped_at", 0)
+        info.setdefault("free_depth_abs", 0.0)
         info.setdefault("radial_k_gate", 0.0)
         info.setdefault("radial_gated", 0)
     info.update(
@@ -1152,6 +1206,9 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         focal_scale=float(np.mean(f_scale)),
         radial_k=float(model.kr.detach()[0]),
         depth_corr_abs=float(np.abs(model.grid.detach().cpu().numpy()).mean()),
+        bright_gain_abs=float(model.bright.detach()[:, 0].abs().mean()),
+        bright_bias_abs=float(model.bright.detach()[:, 1].abs().mean()),
+        bright_gain_mean=float(model.bright.detach()[1:, 0].mean()),
     )
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
 

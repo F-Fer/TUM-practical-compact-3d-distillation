@@ -119,6 +119,202 @@ def check_radial(m, images, nbrs, cfg):
     print(f"  Gauss-Newton gradient of the poses: cos {cos(gp[:n_pose], torch.cat([grads[0][1:], grads[1][1:]], 1).reshape(-1)):.7f}")
 
 
+def check_free(m, images, nbrs, cfg):
+    """lm_free_depth: the blocks against central differences of the residuals (frozen mask and IRLS weights), the eliminated
+    step against a dense solve of the whole system, and the cost of normal_eq against cost()."""
+    from pba_analytic import rho_weight
+
+    img, _, pool = level_data(m, images, cfg, 2.0, cfg["lm_samples"])
+    K = Kernel(m)
+    K.set_level(img, cfg["features"] == "rgb" and cfg["photo_loss"] != "ncc", 2.0)
+    perturb(m)
+    if K.radial:
+        with torch.no_grad():
+            m.kr.fill_(-0.08)
+    P = cfg["lm_samples"] // K.S
+    feat, quad = K.make_pool(pool.gather(1, torch.randint(0, pool.shape[1], (m.N, P), device=pool.device)))
+    if K.ncc:
+        feat, quad = feat.flatten(1, 2), quad.flatten(1, 2)
+    K.z = torch.randn(m.N, P, device=pool.device) * 0.03
+    const = K.prep(nbrs)
+    with torch.no_grad():
+        Hpp, _, _, gp, _, _, c = K.normal_eq(feat, quad, nbrs, 4, False)
+    print(f"  loss of normal_eq {c:.10f}, cost() {K.cost(feat, quad, nbrs, 4):.10f}")
+    h, b, chunks, size = K.fd
+    Vfull = torch.cat([c_[1] for c_ in chunks])  # [N, P, L]
+    ilfull = torch.cat([c_[2] for c_ in chunks])
+
+    def res():
+        st = K.state()
+        w = K.warp(st, None, feat, quad, nbrs, const)
+        m_ = w.vis.float()
+        if K.ncc:
+            b_, a_, aa, bb, _, _, mp = K.ncc_terms(w, m_)
+            return b_ / torch.sqrt(bb + 1e-8)[..., None] - a_ / torch.sqrt(aa + 1e-8)[..., None], w.geo, mp, m_
+        return K.photo_res(st, w)[0], w.geo, m_, m_
+
+    with torch.no_grad():
+        r0, g0, m0, mg0 = res()
+        n_vis = float(mg0.sum())
+        if K.ncc:
+            ncc_scale = n_vis / float(m0.sum())
+            wp = (m0 * cfg["w_photo"] * ncc_scale)[..., None].expand_as(r0)
+        else:
+            wp = m0[..., None] * rho_weight(r0, K.dp, K.kind) * (cfg["w_photo"] / r0.shape[-1])
+        wg = mg0 * rho_weight(g0, K.dg, "huber") * K.w_geo_lm
+
+        def diff(setter, eps=1e-6):
+            setter(eps)
+            a = res()[:2]
+            setter(-2 * eps)
+            b_ = res()[:2]
+            setter(eps)
+            return (a[0] - b_[0]) / (2 * eps), (a[1] - b_[1]) / (2 * eps)
+
+        for i_frame, p_ in ((1, 0), (2, 3)):
+            def zset(e, i=i_frame, p=p_):
+                K.z[i, p] += e
+            jz = diff(zset)
+            hn = float(((jz[0] ** 2 * wp).sum() + (jz[1] ** 2 * wg).sum()) / n_vis) + K.w_z / n_vis
+            print(f"  sample ({i_frame},{p_}): h central difference {hn:.6e} | normal_eq {float(h[i_frame, p_]):.6e}")
+            nb = nbrs[i_frame]
+            L = Vfull.shape[-1]
+            tests = [("rot source", m.rot, (i_frame, 1), 1), ("trans source", m.trans, (i_frame, 2), 5), ("rot target 0", m.rot, (int(nb[0]), 0), 6),
+                     ("trans target 2", m.trans, (int(nb[2]), 1), 6 + 12 + 4)]
+            if K.has_focal:
+                tests.append(("logf", m.logf, 0, 6 + 6 * nbrs.shape[1]))
+            if K.radial:
+                tests.append(("kr", m.kr, 0, L - 1))
+            for name, q, ix, loc in tests:
+                def pset(e, q=q, ix=ix):
+                    q.data[ix] += e
+                je = diff(pset)
+                vn = float(((jz[0] * je[0] * wp).sum() + (jz[1] * je[1] * wg).sum()) / n_vis)
+                print(f"    V[{name:14s}] central difference {vn:+.6e} | normal_eq {float(Vfull[i_frame, p_, loc]):+.6e}")
+    # the eliminated step against a dense solve of the whole system
+    lam = 1e-3
+    Dp = Hpp.diagonal().clamp_min(1e-30)
+    S = Hpp + torch.diag_embed(lam * Dp)
+    dp_, dz = K.solve_free(S, gp, lam)
+    n_p, T = len(gp), len(gp) + K.z.numel()
+    H = torch.zeros(T, T, dtype=torch.float64, device=gp.device)
+    H[:n_p, :n_p] = S
+    for i in range(m.N):
+        for pp in range(P):
+            row = n_p + i * P + pp
+            keep = ilfull[i] < n_p
+            vals = torch.zeros(n_p, dtype=torch.float64, device=gp.device)
+            vals.index_add_(0, ilfull[i][keep], Vfull[i, pp][keep])
+            H[row, :n_p] = vals
+            H[:n_p, row] = vals
+            H[row, row] = h[i, pp] * (1 + lam)
+    d = torch.linalg.solve(H, -torch.cat([gp, b.reshape(-1)]))
+    print(f"  step, eliminated against dense: poses cos {cos(dp_, d[:n_p]):.10f} max rel {rel(dp_, d[:n_p]):.2e}; depths cos {cos(dz.reshape(-1), d[n_p:]):.10f} max rel {rel(dz.reshape(-1), d[n_p:]):.2e}")
+    z_ = K.z.clone()
+    c0 = K.cost(feat, quad, nbrs, 4)
+    lam_ = 1e-3
+    for it in range(8):
+        lam_, a, b_, ok = K.lm_step(feat, quad, nbrs, 4, lam_, "dense", it=it)
+        print(f"  LM {it}: cost {a:.8f} -> {b_:.8f} accepted {ok} lambda {lam_:.1e} |z| {float(K.z.abs().mean()):.4f}")
+    K.z = None
+    return z_, c0
+
+
+def check_patch(m, images, nbrs, cfg):
+    """pba_patch: the blocks of the geometric objective against central differences, the step against a dense solve, the LM loop."""
+    from pba_analytic import rho_weight
+    from pba_patch import PatchKernel
+
+    perturb(m)
+    if cfg["radial"]:
+        with torch.no_grad():
+            m.kr.fill_(-0.08)
+    K = PatchKernel(m, nbrs, cfg["radial"], images)
+    K.set_image(R.gaussian_blur(images.mean(1, keepdim=True), 2.0), 2.0)
+    K.z = torch.randn_like(K.z) * 0.02
+    K.align(cfg["patch_lk"])
+    print(f"  {K.P} patches per frame, {K.S} pixels each, {K.stats}")
+    Hpp, _, _, gp, _, _, c = K.normal_eq(None, None, nbrs, 1, False)
+    print(f"  loss of normal_eq {c:.10f}, cost() {K.cost(None, None, nbrs, 1):.10f}")
+    h, b, chunks, size = K.fd
+    _, Vfull, ilfull = chunks[0]
+    g0 = K.geo_warp(K.state())
+    m0 = g0["mask"].to(g0["z"].dtype)
+    n_vis = float(m0.sum())
+    wr = m0 * rho_weight(K.maha(g0), K.delta, "huber")
+    W11, W12, W22 = (K.info * wr[..., None]).unbind(-1)
+    wg = m0 * rho_weight(g0["geo"], K.dg, "huber") * K.w_geo_lm
+
+    def diff(setter, eps=1e-6):
+        setter(eps)
+        a = K.geo_warp(K.state())
+        setter(-2 * eps)
+        b_ = K.geo_warp(K.state())
+        setter(eps)
+        return [(a[x] - b_[x]) / (2 * eps) for x in ("eu", "ev", "geo")]
+
+    def quad_form(a, b_):
+        return float((a[0] * (W11 * b_[0] + W12 * b_[1]) + a[1] * (W12 * b_[0] + W22 * b_[1]) + a[2] * wg * b_[2]).sum()) / n_vis
+
+    vis = m0.sum(1)
+    picks = [(int(i), int(p)) for i, p in (vis > 0).nonzero()[[0, len((vis > 0).nonzero()) // 2]]]
+    for i_frame, p_ in picks:
+        def zset(e, i=i_frame, p=p_):
+            K.z[i, p] += e
+        jz = diff(zset)
+        print(f"  patch ({i_frame},{p_}): h central difference {quad_form(jz, jz) + K.w_z / n_vis:.6e} | normal_eq {float(h[i_frame, p_]):.6e}")
+        nb = nbrs[i_frame]
+        L = Vfull.shape[-1]
+        tests = [("rot source", m.rot, (i_frame, 1), 1), ("trans source", m.trans, (i_frame, 2), 5), ("rot target 0", m.rot, (int(nb[0]), 0), 6), ("trans target 2", m.trans, (int(nb[2]), 1), 6 + 12 + 4)]
+        if K.has_focal:
+            tests.append(("logf", m.logf, 0, 6 + 6 * nbrs.shape[1]))
+        if K.radial:
+            tests.append(("kr", m.kr, 0, L - 1))
+        for name, q, ix, loc in tests:
+            def pset(e, q=q, ix=ix):
+                q.data[ix] += e
+            je = diff(pset)
+            print(f"    V[{name:14s}] central difference {quad_form(jz, je):+.6e} | normal_eq {float(Vfull[i_frame, p_, loc]):+.6e}")
+    n_pose = 6 * (m.N - 1)
+    for name, q, ix, idx in (("rot[1,0]", m.rot, (1, 0), 0), ("trans[2,1]", m.trans, (2, 1), 6 + 4), ("logf", m.logf, 0, n_pose)) + ((("kr", m.kr, 0, n_pose + 1),) if K.radial else ()):
+        e = 1e-6
+        q.data[ix] += e
+        fp = K.cost(None, None, nbrs, 1)
+        q.data[ix] -= 2 * e
+        fm = K.cost(None, None, nbrs, 1)
+        q.data[ix] += e
+        print(f"  d/d{name:11s} central difference {(fp - fm) / (2 * e):+.6e} | normal_eq {float(gp[idx]):+.6e}")
+    i_, p_ = picks[0]
+    K.z[i_, p_] += 1e-6
+    fp = K.cost(None, None, nbrs, 1)
+    K.z[i_, p_] -= 2e-6
+    fm = K.cost(None, None, nbrs, 1)
+    K.z[i_, p_] += 1e-6
+    print(f"  d/dz          central difference {(fp - fm) / 2e-6:+.6e} | normal_eq {float(b[i_, p_]):+.6e}")
+    lam = 1e-3
+    S = Hpp + torch.diag_embed(lam * Hpp.diagonal().clamp_min(1e-30))
+    dp_, dz = K.solve_free(S, gp, lam)
+    n_p, P = len(gp), K.z.shape[1]
+    T = n_p + K.z.numel()
+    H = torch.zeros(T, T, dtype=torch.float64, device=gp.device)
+    H[:n_p, :n_p] = S
+    for i in range(m.N):
+        keep = ilfull[i] < n_p
+        for pp in range(P):
+            row = n_p + i * P + pp
+            vals = torch.zeros(n_p, dtype=torch.float64, device=gp.device)
+            vals.index_add_(0, ilfull[i][keep], Vfull[i, pp][keep])
+            H[row, :n_p] = vals
+            H[:n_p, row] = vals
+            H[row, row] = h[i, pp] * (1 + lam)
+    d = torch.linalg.solve(H, -torch.cat([gp, b.reshape(-1)]))
+    print(f"  step, eliminated against dense: poses cos {cos(dp_, d[:n_p]):.10f} max rel {rel(dp_, d[:n_p]):.2e}; depths cos {cos(dz.reshape(-1), d[n_p:]):.10f} max rel {rel(dz.reshape(-1), d[n_p:]):.2e}")
+    lam_ = 1e-3
+    for it in range(8):
+        lam_, a, b_, ok = K.lm_step(None, None, nbrs, 1, lam_, "dense", it=it)
+        print(f"  LM {it}: cost {a:.8f} -> {b_:.8f} accepted {ok} lambda {lam_:.1e} |z| {float(K.z.abs().mean()):.4f}")
+
+
 def op_sections(m, images, nbrs, cfg):
     """Tensor operations (not views) per section of an analytic Adam iteration."""
     img, _, pool = level_data(m, images, cfg, 2.0, cfg["samples"])
@@ -661,7 +857,7 @@ def timing(m, images, nbrs, cfg, reps=30):
 def main():
     args = sys.argv[1:]
     dataset, scene = args[0], args[1]
-    mode = args[2] if len(args) > 2 and args[2] in ("check", "time", "both", "loop", "noise", "radial", "chord", "ops") else "both"
+    mode = args[2] if len(args) > 2 and args[2] in ("check", "time", "both", "loop", "noise", "radial", "chord", "ops", "free", "patch") else "both"
     rest = [a for a in args[2:] if "=" in a]
     if os.environ.get("PBA_DOUBLE"):
         torch.set_default_dtype(torch.float64)
@@ -677,6 +873,10 @@ def main():
         op_sections(m, images, nbrs, cfg)
     if mode == "radial":
         check_radial(m, images, nbrs, cfg)
+    if mode == "free":
+        check_free(m, images, nbrs, cfg)
+    if mode == "patch":
+        check_patch(m, images, nbrs, cfg)
     if mode == "chord":
         check_chord(m, images, nbrs, cfg)
     if mode == "loop":
