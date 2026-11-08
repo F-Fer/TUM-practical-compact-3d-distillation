@@ -40,6 +40,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "datasets": "",  # comma-separated, default: all in <src>/model_results
     "max_scenes": 0,  # per dataset, 0 = all
+    "first_scene": 0,  # per dataset: skip this many scenes first (held-out = the scenes after the dev subset)
     "scenes": "",  # comma-separated scene names, default: all
     "neighbors": 6,  # covisible target frames per source frame
     "nbr_mode": "top",  # top (most covisible) | spread (evenly over the covisibility ranking, see select_neighbors)
@@ -78,12 +79,18 @@ DEFAULTS = {
     "w_photo": 1.0,
     "w_geo": 1.0,  # multi-view depth consistency
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
+    "w_scale": -1.0,  # impl/lm_impl analytic, >= 0: prior weight of each frame's mean log-depth correction (its offset) instead of w_prior; w_prior then acts on the rest (the shape)
+    "w_smooth": 0.0,  # impl/lm_impl analytic: w_smooth * sum over adjacent cells of (g_a - g_b)^2 / (cells of all frames), a smoothness prior on the grid
     "w_pose": 0.0,  # keeps the pose updates (rotation in rad, translation in median depths) near zero (= DA3's poses)
+    "w_lap": 0.0,  # impl/lm_impl analytic: w_lap / (3 N) x^T (L kron I) x, x the pose updates in world axes (w, dC) as in pose_basis, L the Laplacian of the covisibility graph: smooth corrections are free, differences between covisible frames' corrections cost
     "w_focal": 0.0,  # keeps the log focal scale near zero (DA3's focal); focal and depth trade off on narrow-FOV scenes
     "huber_photo": 0.05,  # scale of the photometric kernel (intensities in [0, 1])
     "huber_geo": 0.05,  # log depth
     "occ_thresh": 0.05,  # relative depth; a sample is occluded in the target if it lies further away
     "conf_quantile": 0.1,  # source pixels below this DA3 confidence quantile (per scene) are not sampled
+    "depth_edge": 0.0,  # > 0: source pixels within depth_edge_dilate px of a DA3 depth discontinuity (|grad log depth| above this, central differences) are not sampled
+    "tgt_edge": 0.0,  # > 0, impl/lm_impl analytic: warps landing within depth_edge_dilate px of a discontinuity of the target's DA3 depth don't count
+    "depth_edge_dilate": 2,
     # per pixel (after affine brightness, kernel scale huber_photo, see robust()): huber | l2 | cauchy | gm | tukey;
     # or ncc (1 - NCC of 3x3 patches)
     "photo_loss": "huber",
@@ -141,6 +148,18 @@ DEFAULTS = {
     "radial_max": 1.0,  # upper bound of the coefficient; 0 allows only barrel distortion
     "radial_gate": 0.0,  # at the first LM level: if the coefficient is smaller than this in magnitude, set it to 0 and leave it out (no distortion in this scene)
     "lr_radial": 1e-3,
+    "radial_gate_heldout": False,  # instead of the threshold radial_gate: at the first LM level keep k only if it lowers the cost of fixed held-out pixels (sharp level, lm_stop_samples per frame) against k = 0
+    "pose_basis": 0,  # impl=analytic: K > 0 runs the Adam levels on a smooth pose basis + per-frame updates (pba_analytic.PoseBasis)
+    "pose_world": False,  # impl=analytic: the Adam levels' per-frame pose updates in world axes (PoseBasis with K = 0); implied by pose_basis > 0
+    "nbr_refresh": False,  # recompute the neighbours from the current poses and depth at the start of every level after the first
+    "init_fix_gross": False,  # oracle: before the optimisation, replace the frames whose pose is grossly wrong (> 15 deg or > 25 % of the median depth, against GT in DA3's gauge) by their GT pose
+    "reloc": False,  # before the optimisation: relocalise low-confidence frames by a discrete search (relocalise())
+    "reloc_conf": 0.5,  # frames whose median DA3 confidence is below this fraction of the scene's median are candidates
+    "reloc_gain": 1.5,  # the best hypothesis replaces the pose only if its consistency score is this many times the current one
+    "cuda_graph": False,  # impl=analytic on a GPU: replay a captured CUDA graph of the Adam iteration (same update, its own random draws); the iterations that log stay eager
+    "pp": False,  # impl=analytic: one shared principal-point offset (pixels), optimised in the Adam levels and held fixed in the LM levels
+    "lr_pp": 0.05,  # pixels
+    "w_pp": 0.0,  # keeps it near zero, per squared pixel
     "init_gt": "",  # start from the ground truth: pose | pose_focal (scale of the translations from DA3's camera spread), to test where the objective's minimum lies
     "pool_once": False,  # draw the candidate pixels once (at the sharpest level's distribution) instead of per level
     "pool_factor": 16,  # Adam: candidate pixels per frame drawn once per level = pool_factor * samples
@@ -419,6 +438,17 @@ def select_neighbors(depth, R, t, K, k, occ_thresh, mode="top", min_covis=0.2, n
     return order.gather(1, pos.round().long()), score
 
 
+def depth_edges(depth, thr, dilate):
+    """[N, H, W] bool: pixels within `dilate` px of a discontinuity of the depth [N, H, W] (|grad log depth| > thr, central differences)."""
+    ld = torch.log(depth.clamp_min(1e-6))
+    gx = F.pad(ld[:, :, 2:] - ld[:, :, :-2], (1, 1))
+    gy = F.pad(ld[:, 2:] - ld[:, :-2], (0, 0, 1, 1))
+    e = (torch.sqrt(gx**2 + gy**2) > thr).float()[:, None]
+    if dilate > 0:
+        e = F.max_pool2d(e, 2 * dilate + 1, stride=1, padding=dilate)
+    return e[:, 0] > 0
+
+
 class PBA(torch.nn.Module):
     def __init__(self, images, depth, conf, ext, K, cfg):
         super().__init__()
@@ -448,14 +478,19 @@ class PBA(torch.nn.Module):
         self.grid2 = torch.nn.Parameter(torch.zeros(N, gh, gw, device=dev))
         self.bright = torch.nn.Parameter(torch.zeros(N, 2, device=dev))  # log gain, bias
         self.kr = torch.nn.Parameter(torch.zeros(1, device=dev))  # radial coefficient, only used by pba_analytic.py
+        self.pp = torch.nn.Parameter(torch.zeros(2, device=dev))  # shared principal-point offset in pixels (pp=true), pba_analytic.py only
 
         # sampling mask: confident, not at the border
         thr = torch.quantile(conf.reshape(-1)[:: conf.numel() // 2**22 + 1], cfg["conf_quantile"]) if cfg["conf_quantile"] > 0 else -1
         valid = conf > thr
+        if cfg["depth_edge"] > 0:
+            valid &= ~depth_edges(depth, cfg["depth_edge"], cfg["depth_edge_dilate"])
         valid[(valid.flatten(1).float().mean(1) < 0.01)] = True  # frames with (almost) no confident pixels: use all
         valid[:, :2], valid[:, -2:], valid[:, :, :2], valid[:, :, -2:] = False, False, False, False
         self.register_buffer("valid", valid)
+        self.tgt_bad = depth_edges(depth, cfg["tgt_edge"], cfg["depth_edge_dilate"]).reshape(-1) if cfg["tgt_edge"] > 0 else None
         self.match = None  # token matches, see token_matches
+        self.pose_L = None  # w_lap: Laplacian of the covisibility graph [N, N]
         self.depth_dense = None  # depth_param=head: current depth [N, H, W] (replaces depth0, with gradients on some frames)
 
     # --- current state
@@ -471,7 +506,12 @@ class PBA(torch.nn.Module):
         logf = self.logf if logf is None else logf
         f = torch.exp(logf if self.cfg["focal"] != "none" else logf.detach() * 0).expand(self.N)
         scale = 1 + torch.diag_embed(torch.stack([f - 1, f - 1, torch.zeros_like(f)], -1))  # only fx, fy
-        return self.K0 * scale
+        K = self.K0 * scale
+        if self.cfg["pp"]:
+            K = K.clone()
+            K[:, 0, 2] += self.pp[0]
+            K[:, 1, 2] += self.pp[1]
+        return K
 
     def grid_at(self, idx, u, v):
         """log-depth correction at pixel (u, v) of frame idx (bilinear, grid corners at the image corners)."""
@@ -928,18 +968,26 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     conf = torch.from_numpy(pred["conf"]).float().to(device)
     ext = torch.from_numpy(pred["extrinsics"]).float().to(device)
     K = torch.from_numpy(pred["intrinsics"]).float().to(device)
+    reloc_info = {}
+    if cfg["reloc"]:
+        ext, reloc_info = relocalise(images, depth, conf, ext, K, cfg["reloc_conf"], cfg["reloc_gain"])
     model = PBA(images, depth, conf, ext, K, cfg).to(device)
 
     decode_s = time.perf_counter() - start
     with torch.no_grad():
         R, t = model.poses()
-        nbrs, _ = select_neighbors(model.depth0, R, t, model.intrinsics(), cfg["neighbors"], cfg["occ_thresh"], cfg["nbr_mode"], cfg["min_covis"])
+        nbrs, covis = select_neighbors(model.depth0, R, t, model.intrinsics(), cfg["neighbors"], cfg["occ_thresh"], cfg["nbr_mode"], cfg["min_covis"])
+        if cfg["w_lap"] > 0:
+            Wg = covis.clamp_min(0)
+            Wg = 0.5 * (Wg + Wg.T)
+            Wg.fill_diagonal_(0)
+            model.pose_L = torch.diag(Wg.sum(1)) - Wg
     if device.type == "cuda":
         torch.cuda.synchronize()
     covis_s = time.perf_counter() - start - decode_s
     k = nbrs.shape[1]
     img_sharp = images.permute(1, 0, 2, 3).reshape(3, -1)
-    info = {"num_frames": N, "neighbors": k, "decode_s": decode_s, "covis_s": covis_s}
+    info = {"num_frames": N, "neighbors": k, "decode_s": decode_s, "covis_s": covis_s, **reloc_info}
     before = eval_photo(model, nbrs, img_sharp)
     load_s = time.perf_counter() - start
     tracker = Tracker(model, nbrs, img_sharp, cfg["track_every"]) if cfg["track_every"] else None
@@ -976,15 +1024,22 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         info["matches_per_pair"] = float(model.match[4].sum(-1).mean())
     layout = lm_layout(model) if cfg["optimizer"] == "lm" else None
     lam = max(cfg["lm_lambda"], cfg["lm_lambda_min"])
-    kernel = fadam = None
+    kernel = fadam = basis = None
     if cfg["impl"] == "analytic" or cfg["lm_impl"] == "analytic":
-        from pba_analytic import FlatAdam, Kernel
+        from pba_analytic import FlatAdam, Kernel, PoseBasis
 
         kernel = Kernel(model)
     if cfg["impl"] == "analytic":
-        fadam = FlatAdam([model.rot, model.trans, model.logf, model.grid, model.bright, model.kr], [cfg["lr_rot"], cfg["lr_trans"], cfg["lr_focal"], cfg["lr_depth"], cfg["lr_bright"], cfg["lr_radial"]])
+        rest = [model.logf, model.grid, model.bright, model.kr, model.pp], [cfg["lr_focal"], cfg["lr_depth"], cfg["lr_bright"], cfg["lr_radial"], cfg["lr_pp"]]
+        if cfg["pose_basis"] > 0 or cfg["pose_world"]:
+            basis = PoseBasis(model, covis, cfg["pose_basis"])
+            fadam = FlatAdam(basis.params() + rest[0], [cfg["lr_rot"], cfg["lr_trans"], cfg["lr_rot"], cfg["lr_trans"]] + rest[1])
+        else:
+            fadam = FlatAdam([model.rot, model.trans] + rest[0], [cfg["lr_rot"], cfg["lr_trans"]] + rest[1])
     if cfg["patch"] and (cfg["impl"] != "analytic" or cfg["lm_impl"] != "analytic" or cfg["focal"] == "per_frame" or not cfg["poses"] or cfg["photo_loss"] == "ncc"):
         sys.exit("patch needs impl=analytic, lm_impl=analytic, poses, focal=shared|none and per-pixel kernels")
+    if cfg["pp"] and cfg["impl"] != "analytic":
+        sys.exit("pp needs impl=analytic")
     if cfg["bright_rel"] and (cfg["impl"] != "analytic" or (cfg["lm_levels"] and cfg["lm_impl"] != "analytic")):
         sys.exit("bright_rel needs impl=analytic and lm_impl=analytic (lm_residuals has the old form)")
     if cfg["lm_free_depth"] and (not cfg["lm_fixed"] or cfg["lm_stop"] > 0 or cfg["lm_impl"] != "analytic"):
@@ -999,6 +1054,10 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     # the sampling probabilities only need the grey image: the mean of the blurred channels is the blurred mean
     feat_maps["_grey"] = images.mean(1, keepdim=True)
     for level, (feat_name, sigma, iters) in enumerate(levels):
+        if cfg["nbr_refresh"] and level > 0:
+            with torch.no_grad():
+                R_, t_ = model.poses()
+                nbrs, _ = select_neighbors(model.dense_depth(), R_, t_, model.intrinsics(), cfg["neighbors"], cfg["occ_thresh"], cfg["nbr_mode"], cfg["min_covis"])
         if feat_name not in feat_maps:
             if feat_name == "vgg":
                 t_feat = time.perf_counter()
@@ -1029,7 +1088,23 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         fine = cfg["depth_grid_fine"] > 0 and level >= cfg["fine_from"]
         next(g for g in groups if g["params"][0] is model.grid2)["lr"] = cfg["lr_depth"] if fine else 0.0
         use_lm = cfg["optimizer"] == "lm" or str(level) in cfg["lm_levels"].split(",")
-        if use_lm and kernel and cfg["radial"] and cfg["radial_gate"] > 0 and kernel.radial:
+        if use_lm and kernel and cfg["radial"] and cfg["radial_gate_heldout"] and kernel.radial and "radial_k_gate" not in info:
+            info["radial_k_gate"] = float(model.kr)
+            with torch.no_grad():
+                gen_h = torch.Generator(device=device).manual_seed(cfg["seed"] + 78)
+                hp = kernel.make_pool(torch.multinomial(probs, cfg["lm_stop_samples"], replacement=True, generator=gen_h))
+                ch = max(1, int((1.6e7 if device.type == "cuda" else 4e6) / (k * cfg["lm_stop_samples"] * hp[0].shape[-1])))
+                c_k = kernel.cost(*hp, nbrs, ch)
+                k_val = model.kr.data.clone()
+                model.kr.zero_()
+                c_0 = kernel.cost(*hp, nbrs, ch)
+                info["radial_gate_gain"] = (c_0 - c_k) / max(c_0, 1e-12)
+                if c_k < c_0:
+                    model.kr.data.copy_(k_val)
+                else:
+                    kernel.radial = False
+                    info["radial_gated"] = 1
+        if use_lm and kernel and cfg["radial"] and cfg["radial_gate"] > 0 and kernel.radial and not cfg["radial_gate_heldout"]:
             info["radial_k_gate"] = float(model.kr)
             if abs(info["radial_k_gate"]) < cfg["radial_gate"]:
                 with torch.no_grad():
@@ -1108,18 +1183,60 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             continue
         if fadam:  # same samples and update as below (fresh state per level), with the gradient of pba_analytic.py
             fadam.reset()
+            if basis:
+                basis.reset()
+            grads_k = [basis.g_rot, basis.g_trans] + fadam.grads[4:] if basis else fadam.grads
             # (with NCC the pool of 16 M centres is cut to 16 M / 9, each with its 9 samples)
             feat_pool, quad_pool = kernel.make_pool(pool[:, : cfg["pool_factor"] * n_pix])
             const = kernel.prep(nbrs)
-            for it in range(iters):
+            graph = None
+            use_graph = cfg["cuda_graph"] and device.type == "cuda" and cfg["nbr_iter"] == 0 and tracker is None
+
+            def body(want_loss):
+                idx_ = torch.randint(0, feat_pool.shape[1], (N, n_pix), device=device)
+                r_ = kernel.gradient(*kernel.take(feat_pool, quad_pool, idx_), nbrs, const, grads_k, want_loss=want_loss)
+                if basis:
+                    basis.grads_to(fadam.grads)
+                fadam.step_graph()
+                if cfg["radial"]:
+                    model.kr.data.clamp_(max=cfg["radial_max"])
+                if basis:
+                    basis.apply()
+                return r_
+
+            for it in range(iters if use_graph else 0):
+                log = it % 20 == 0 or it == iters - 1
+                fadam.set_scalars(0.1 + 0.45 * (1 + math.cos(math.pi * it / iters)))
+                if it < 3 or log:  # eager: warm-up (on a side stream, as torch.cuda.graph wants) and the logged iterations
+                    side = torch.cuda.Stream()
+                    side.wait_stream(torch.cuda.current_stream())
+                    with torch.cuda.stream(side):
+                        res = body(log)
+                    torch.cuda.current_stream().wait_stream(side)
+                    if log:
+                        hist.append({"level": level, "it": it, "loss": res[0], **res[1], "t": time.perf_counter() - start})
+                    continue
+                if graph is None:
+                    graph = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(graph):  # records the iteration without running it; the scalars set above stay for the replay
+                        body(False)
+                graph.replay()
+            if graph is not None:  # free the graph's private memory pool before the next level (the LM levels need it)
+                del graph
+                torch.cuda.empty_cache()
+            for it in range(0 if use_graph else iters):
                 idx = torch.randint(0, feat_pool.shape[1], (N, n_pix), device=device)
                 log = it % 20 == 0 or it == iters - 1
                 nb_it = nbrs
                 if cfg["nbr_iter"] > 0:
                     nb_it = nbrs.gather(1, torch.rand(N, k, device=device).argsort(1)[:, : cfg["nbr_iter"]])
                     const = kernel.prep(nb_it)
-                res = kernel.gradient(*kernel.take(feat_pool, quad_pool, idx), nb_it, const, fadam.grads, want_loss=log)
+                res = kernel.gradient(*kernel.take(feat_pool, quad_pool, idx), nb_it, const, grads_k, want_loss=log)
+                if basis:
+                    basis.grads_to(fadam.grads)
                 fadam.step(0.1 + 0.45 * (1 + math.cos(math.pi * it / iters)))
+                if basis:
+                    basis.apply()
                 if cfg["radial"]:
                     model.kr.data.clamp_(max=cfg["radial_max"])
                 if log:
@@ -1191,6 +1308,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         info.setdefault("free_depth_abs", 0.0)
         info.setdefault("radial_k_gate", 0.0)
         info.setdefault("radial_gated", 0)
+        info.setdefault("radial_gate_gain", 0.0)
     info.update(
         load_s=load_s,
         opt_s=opt_s,
@@ -1205,12 +1323,103 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         visible_after=after["visible"],
         focal_scale=float(np.mean(f_scale)),
         radial_k=float(model.kr.detach()[0]),
+        pp_x=float(model.pp.detach()[0]),
+        pp_y=float(model.pp.detach()[1]),
         depth_corr_abs=float(np.abs(model.grid.detach().cpu().numpy()).mean()),
         bright_gain_abs=float(model.bright.detach()[:, 0].abs().mean()),
         bright_bias_abs=float(model.bright.detach()[:, 1].abs().mean()),
         bright_gain_mean=float(model.bright.detach()[1:, 0].mean()),
     )
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
+
+
+@torch.no_grad()
+def relocalise(images, depth, conf, ext, K, conf_frac, gain, n_yaw=12, grid=(20, 15), z_tol=0.05, i_tol=0.1):
+    """reloc: frames whose median DA3 confidence is below conf_frac x the scene's median (DA3's grossly misplaced frames have
+    low confidence, while their depth is as good as the others', see results/failure_modes/DA3-SMALL/REPORT.md) get a discrete
+    pose search. Hypotheses: n_yaw rotations about the vertical (the mean of the cameras' up axes; large errors are
+    almost pure rotations about it), each with the camera centre at its current place or at the centre of any frame that is
+    not a candidate. Score: the fraction of (sample, other frame) pairs, over a grid of the frame's pixels and all non-candidate
+    frames, whose depth agrees within z_tol (log) and grey value within i_tol. The best hypothesis replaces the pose if it scores
+    gain x the current one. Returns the extrinsics [N, 3, 4] (metric, like ext) and info."""
+    N, H, W = depth.shape
+    med = conf.flatten(1).median(1).values
+    cand = med < conf_frac * med.median()
+    cand[0] = False  # the gauge
+    info = {"reloc_candidates": float(cand.float().mean()), "reloc_moved": 0.0}
+    if not cand.any() or (~cand).sum() < 2:
+        return ext, info
+    grey = gaussian_blur(images.mean(1, keepdim=True), 2.0)[:, 0]
+    R, t = ext[:, :, :3], ext[:, :, 3]
+    C = -torch.einsum("nji,nj->ni", R, t)
+    up = -R[:, 1, :].mean(0)  # world direction of each camera's -y axis (OpenCV: y points down)
+    up = up / up.norm().clamp_min(1e-12)
+    good = torch.nonzero(~cand)[:, 0]
+    gw, gh = grid
+    vs, us = torch.meshgrid(torch.linspace(2, H - 3, gh, device=depth.device), torch.linspace(2, W - 3, gw, device=depth.device), indexing="ij")
+    us, vs = us.reshape(-1), vs.reshape(-1)
+    Kinv = torch.linalg.inv(K)
+    yaws = torch.arange(n_yaw, device=depth.device) * (2 * math.pi / n_yaw)
+    kx = torch.zeros(3, 3, device=depth.device)
+    kx[0, 1], kx[0, 2], kx[1, 0], kx[1, 2], kx[2, 0], kx[2, 1] = -up[2], up[1], up[2], -up[0], -up[1], up[0]
+    Q = torch.eye(3, device=depth.device) + torch.sin(yaws)[:, None, None] * kx + (1 - torch.cos(yaws))[:, None, None] * (kx @ kx)  # [Y, 3, 3]
+    Rg, tg, Kg, Dg, Ig = R[good], t[good], K[good], depth[good], grey[good]
+    ext = ext.clone()
+    moved = 0
+    for f in torch.nonzero(cand)[:, 0].tolist():
+        d = depth[f, vs.long(), us.long()]
+        Xc = (Kinv[f] @ torch.stack([us, vs, torch.ones_like(us)]) * d).T  # [P, 3]
+        If = grey[f, vs.long(), us.long()]
+        Rcw = Q @ R[f].T  # [Y, 3, 3] camera-to-world rotations
+        centres = torch.cat([C[f][None], C[good]])  # [Cn, 3]
+        Xw = (Xc @ Rcw.transpose(-1, -2))[:, None] + centres[None, :, None]  # [Y, Cn, P, 3]
+        Y, Cn, P = Xw.shape[:3]
+        score = torch.zeros(Y, Cn, device=depth.device)
+        for g in range(len(good)):
+            Xg = Xw @ Rg[g].T + tg[g]
+            z = Xg[..., 2]
+            u = Kg[g, 0, 0] * Xg[..., 0] / z.clamp_min(1e-6) + Kg[g, 0, 2]
+            v = Kg[g, 1, 1] * Xg[..., 1] / z.clamp_min(1e-6) + Kg[g, 1, 2]
+            ok = (z > 1e-6) & (u >= 0) & (u <= W - 1) & (v >= 0) & (v <= H - 1)
+            ui, vi = u.clamp(0, W - 1).round().long(), v.clamp(0, H - 1).round().long()
+            dz = (torch.log(z.clamp_min(1e-6)) - torch.log(Dg[g][vi, ui].clamp_min(1e-6))).abs()
+            score += (ok & (dz < z_tol) & ((Ig[g][vi, ui] - If).abs() < i_tol)).float().mean(-1)
+        best = int(score.argmax())
+        y, c = best // Cn, best % Cn
+        if float(score[y, c]) > gain * float(score[0, 0]) and (y, c) != (0, 0):
+            Rw = Rcw[y].T
+            ext[f, :, :3], ext[f, :, 3] = Rw, -Rw @ centres[c]
+            moved += 1
+    info["reloc_moved"] = moved / N
+    return ext, info
+
+
+def fix_gross(pred_ext, gt_ext, median_depth, max_deg=15.0, max_rel=0.25):
+    """init_fix_gross (an oracle): the frames whose pose is grossly wrong, as analyse_failure_modes.py labels them (after the
+    robust alignment of all cameras: geodesic median of the rotations, LMedS scale and translation of the centres; more than
+    max_deg off in rotation or max_rel median depths in the centre), replaced by their GT pose mapped into DA3's frame. Frame 0
+    (the gauge) is kept. Returns the extrinsics [N, 3, 4] and the number of replaced frames."""
+    from analyse_failure_modes import apply_sim3, robust_rotation_alignment, robust_scale_translation
+
+    def c2w(e):
+        T = np.tile(np.eye(4), (len(e), 1, 1))
+        T[:, :3] = e[:, :3]
+        return np.linalg.inv(T)
+    P, G = c2w(pred_ext.astype(np.float64)), c2w(gt_ext.astype(np.float64))
+    A = robust_rotation_alignment(P[:, :3, :3], G[:, :3, :3])
+    sim = robust_scale_translation(P[:, :3, 3], G[:, :3, 3], A)
+    dR = np.einsum("ij,njk,nlk->nil", A, P[:, :3, :3], G[:, :3, :3])
+    ang = np.degrees(np.arccos(np.clip((np.trace(dR, axis1=1, axis2=2) - 1) / 2, -1, 1)))
+    off = np.linalg.norm(apply_sim3(sim, P[:, :3, 3]) - G[:, :3, 3], axis=1) / (sim[0] * median_depth)
+    bad = (ang > max_deg) | (off > max_rel)
+    bad[0] = False
+    Rg = np.einsum("ji,njk->nik", A, G[:, :3, :3])  # GT camera-to-world rotations and centres in DA3's frame
+    cg = ((G[:, :3, 3] - sim[2]) @ A) / sim[0]
+    out = pred_ext[:, :3].astype(np.float64).copy()
+    Rw = Rg.transpose(0, 2, 1)
+    out[bad, :, :3] = Rw[bad]
+    out[bad, :, 3] = -np.einsum("nij,nj->ni", Rw[bad], cg[bad])
+    return out.astype(np.float32), int(bad.sum())
 
 
 # ---------------------------------------------------------------- wandb (optional)
@@ -1305,7 +1514,8 @@ def main():
         metrics.pop("mean", None)  # recomputed after every scene, so an interrupted run can be resumed
 
         scenes = sorted(os.path.dirname(p) for p, _, _ in os.walk(data_dir) if os.path.basename(p) == "unposed")
-        for i, scene_dir in enumerate(scenes[: cfg["max_scenes"] or None]):
+        first = cfg["first_scene"]
+        for i, scene_dir in enumerate(scenes[first : first + cfg["max_scenes"] if cfg["max_scenes"] else None], first):
             scene = os.path.relpath(scene_dir, data_dir)
             if cfg["scenes"] and scene not in cfg["scenes"].split(","):
                 continue
@@ -1339,6 +1549,10 @@ def main():
                     k_[:, 1, 1] = gt["intrinsics"][:, 1, 1] * pred["depth"].shape[2] / w_orig
                     pred.update(intrinsics=k_)
 
+            n_fixed = 0
+            if cfg["init_fix_gross"]:
+                ext, n_fixed = fix_gross(pred["extrinsics"], gt["extrinsics"], float(np.median(pred["depth"])))
+                pred["extrinsics"] = ext
             if cfg["init_noise_deg"] > 0:
                 rng = np.random.default_rng(cfg["seed"] + 1)
                 ext = pred["extrinsics"].astype(np.float64).copy()
@@ -1378,6 +1592,8 @@ def main():
             focal_err0 = np.abs(pred["intrinsics"][:, 0, 0] / gt_f - 1).mean()
             focal_err = np.abs(out["intrinsics"][:, 0, 0] / gt_f - 1).mean()
             rec = {**pose, **{f"{k}_init": v for k, v in pose0.items()}, "focal_err": focal_err, "focal_err_init": focal_err0, **info}
+            if cfg["init_fix_gross"]:
+                rec["gross_fixed"] = n_fixed / len(pred["extrinsics"])
             metrics[scene] = Evaluator._to_float_dict(rec)
             Evaluator._dump_json(metric_path, {**metrics, "mean": Evaluator._mean_of_dicts(metrics.values())})
             with open(hist_path, "a") as f:

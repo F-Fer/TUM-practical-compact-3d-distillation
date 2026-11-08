@@ -119,6 +119,21 @@ class FlatAdam:
 
     def reset(self):
         self.m, self.v, self.t = torch.zeros_like(self.x), torch.zeros_like(self.x), 0
+        # cuda_graph: the step's scalars on the device, so that a captured step reads them at replay
+        self.scale_t, self.bc2_t = torch.ones((), device=self.x.device), torch.ones((), device=self.x.device)
+
+    def set_scalars(self, scale=1.0):
+        """cuda_graph: advance t and write the scalars of the next step_graph (two small kernels)."""
+        self.t += 1
+        self.scale_t.fill_(scale / (1 - self.b1**self.t))
+        self.bc2_t.fill_(math.sqrt(1 - self.b2**self.t))
+
+    def step_graph(self):
+        """The update of step(), with the scalars from set_scalars (capturable in a CUDA graph)."""
+        self.m.lerp_(self.g, 1 - self.b1)
+        self.v.mul_(self.b2).addcmul_(self.g, self.g, value=1 - self.b2)
+        denom = (self.v.sqrt() / self.bc2_t).add_(self.eps)
+        self.x.sub_(self.lr * (self.m / denom) * self.scale_t)
 
     def step(self, scale=1.0):
         self.t += 1
@@ -128,10 +143,53 @@ class FlatAdam:
         self.x.sub_(self.lr * (self.m / denom) * (scale / (1 - self.b1**self.t)))
 
 
+class PoseBasis:
+    """pose_basis=K: in the Adam levels, the pose updates in world axes as a smooth part plus a per-frame part,
+    (w_i, dC_i) = sum_k B_ik theta_k + eps_i, with B the K lowest eigenvectors of the Laplacian of the covisibility graph
+    (scaled to unit RMS over the frames, so a step of theta_k moves a frame about as far as a step of eps_i). PBA's
+    parameters follow linearly as rot_i = R0_i w_i, trans_i = -R0_i dC_i: exactly a rotation by w_i about world axes, and to
+    first order a move of the camera centre by dC_i. Adam runs on theta and eps; the LM levels on rot and trans as before."""
+
+    def __init__(self, model, score, K):
+        N, dev = model.N, model.R0.device
+        Wg = score.clamp_min(0)
+        Wg = 0.5 * (Wg + Wg.T)
+        Wg.fill_diagonal_(0)
+        L = torch.diag(Wg.sum(1)) - Wg
+        _, V = torch.linalg.eigh(L.double())
+        K = min(K, N)
+        self.B = (V[:, :K] * math.sqrt(N)).float()  # [N, K]
+        self.R0, self.m = model.R0, model
+        self.theta_r, self.theta_t = torch.zeros(K, 3, device=dev), torch.zeros(K, 3, device=dev)
+        self.eps_r, self.eps_t = torch.zeros(N, 3, device=dev), torch.zeros(N, 3, device=dev)
+        self.g_rot, self.g_trans = torch.zeros(N, 3, device=dev), torch.zeros(N, 3, device=dev)
+
+    def params(self):
+        return [self.theta_r, self.theta_t, self.eps_r, self.eps_t]
+
+    def reset(self):
+        """theta = 0 and eps = the current state (at the start of every Adam level)."""
+        self.theta_r.zero_(), self.theta_t.zero_()
+        self.eps_r.copy_(torch.einsum("nji,nj->ni", self.R0, self.m.rot.data))
+        self.eps_t.copy_(-torch.einsum("nji,nj->ni", self.R0, self.m.trans.data))
+
+    def grads_to(self, g):
+        """The gradients g_rot, g_trans (filled by Kernel.gradient) -> those of theta and eps, into g[0:4]."""
+        gw = torch.einsum("nji,nj->ni", self.R0, self.g_rot)
+        gc = -torch.einsum("nji,nj->ni", self.R0, self.g_trans)
+        g[0].copy_(self.B.T @ gw), g[1].copy_(self.B.T @ gc), g[2].copy_(gw), g[3].copy_(gc)
+
+    def apply(self):
+        w = self.B @ self.theta_r + self.eps_r
+        dc = self.B @ self.theta_t + self.eps_t
+        self.m.rot.data.copy_(torch.einsum("nij,nj->ni", self.R0, w))
+        self.m.trans.data.copy_(-torch.einsum("nij,nj->ni", self.R0, dc))
+
+
 class Warps:
     """Forward quantities of a batch of warps, see Kernel.warp."""
 
-    __slots__ = ("rad", "A", "E", "Xc", "Xt", "ds", "s", "Rji", "tji", "src", "nbrs", "iz", "ux", "vy", "I", "Iu", "Iv", "lu", "lv", "geo", "vis", "base_g", "wt", "fxt", "fyt")
+    __slots__ = ("xyd", "rad", "A", "E", "Xc", "Xt", "ds", "s", "Rji", "tji", "src", "nbrs", "iz", "ux", "vy", "I", "Iu", "Iv", "lu", "lv", "geo", "vis", "base_g", "wt", "fxt", "fyt")
 
 
 class Kernel:
@@ -149,6 +207,7 @@ class Kernel:
         self.has_grid, self.has_focal, self.has_pose = cfg["depth_grid"] > 0, cfg["focal"] == "shared", cfg["poses"]
         self.kind, self.dp, self.dg = cfg["photo_loss"], cfg["huber_photo"], cfg["huber_geo"]
         self.ncc, self.S = cfg["photo_loss"] == "ncc", 9 if cfg["photo_loss"] == "ncc" else 1
+        self.has_pp = cfg["pp"]  # shared principal-point offset (pixels), added to every frame's (cx, cy)
         self.radial = cfg["radial"]  # one shared coefficient of the division model: x_undistorted = x_distorted / (1 + k r_distorted^2)
         self.quad = torch.tensor([0, 1, self.gw, self.gw + 1], device=model.R0.device)
         self.frames = torch.arange(self.N, device=model.R0.device)
@@ -166,7 +225,22 @@ class Kernel:
         self.cg_iters, self.schur_failed = [], 0
         self.factor, self.grad_buf, self.chords, self.factorisations = None, None, 0, 0
         self.w_geo_lm = cfg["w_geo"] if cfg["lm_w_geo"] < 0 else cfg["lm_w_geo"]  # of the LM levels only
-        self.z, self.w_z, self.fd = None, cfg["w_free_depth"], None  # lm_free_depth: log depth per sample [N, P], its prior, the blocks of normal_eq
+        self.z, self.w_z, self.fd = None, cfg["w_free_depth"], None
+        # depth prior: w_prior mean(g^2) unless w_scale >= 0 or w_smooth > 0, then g^T Qf g / (2 numel) per frame (Qf below)
+        self.Qf = None
+        if self.has_grid and (cfg["w_scale"] >= 0 or cfg["w_smooth"] > 0):
+            nc, dev = self.nc, model.R0.device
+            J = torch.full((nc, nc), 1.0 / nc, device=dev)
+            ws = cfg["w_scale"] if cfg["w_scale"] >= 0 else cfg["w_prior"]
+            L = torch.zeros(nc, nc, device=dev)
+            for y in range(self.gh):
+                for x in range(self.gw):
+                    i = y * self.gw + x
+                    for yy, xx in ((y + 1, x), (y, x + 1)):
+                        if yy < self.gh and xx < self.gw:
+                            j = yy * self.gw + xx
+                            L[i, i] += 1; L[j, j] += 1; L[i, j] -= 1; L[j, i] -= 1  # noqa: E702
+            self.Qf = (2 * (cfg["w_prior"] * (torch.eye(nc, device=dev) - J) + ws * J + cfg["w_smooth"] * L)).to(model.R0.dtype)  # lm_free_depth: log depth per sample [N, P], its prior, the blocks of normal_eq
 
     def prep(self, nbrs):
         """What warp needs of the neighbours nbrs [n, k] and does not change during a level."""
@@ -257,6 +331,11 @@ class Kernel:
             ds = ds * torch.exp(z.repeat_interleave(self.S, 1) if self.ncc else z)
         Rs, ts = (R, t) if src is None else (R[src], t[src])
         xy = feat[..., :2] / s_f
+        if self.has_pp:  # feat holds (u - cx) / f at the initial cx and f
+            pp = self.m.pp.data
+            f_src = self.f0 if src is None else self.f0[src]
+            xy = xy - pp / (f_src[:, None] * s_f)
+            w.xyd = xy
         if self.radial:
             k_r = self.m.kr.data
             rd2 = (xy * xy).sum(-1)
@@ -282,6 +361,8 @@ class Kernel:
         else:
             uvx = fxy * Xn
         uv = uvx + c_t
+        if self.has_pp:
+            uv = uv + pp
         uvc = uv.clamp(self.uv_lo, self.uv_hi)
         inside = (uv == uvc).all(-1) & (z > 1e-4)
         # texture: channels + depth, bilinear, with its derivatives in u and v
@@ -313,6 +394,8 @@ class Kernel:
             w.base_g, w.wt = None, None
         dt = val[..., -1] * e_g
         w.vis = inside & (z < dt * (1 + self.cfg["occ_thresh"]))
+        if self.m.tgt_bad is not None:  # tgt_edge: the target's depth is unreliable near its discontinuities (the mask is dilated, so the cell's corner decides)
+            w.vis = w.vis & ~self.m.tgt_bad[base]
         idt = 1 / dt.clamp_min(1e-4)
         w.geo = torch.log(zc * idt)
         idD = e_g * idt
@@ -355,7 +438,10 @@ class Kernel:
         """Value of the non-data terms of PBA.loss."""
         m, cfg = self.m, self.cfg
         v = 0.0
-        if self.has_grid:
+        if self.has_grid and self.Qf is not None:
+            g = m.grid.data.view(self.N, -1)
+            v = v + 0.5 * float(((g @ self.Qf) * g).sum()) / m.grid.numel()
+        elif self.has_grid:
             v = v + cfg["w_prior"] * float((m.grid.data**2).mean())
         if cfg["w_focal"] > 0:
             v = v + cfg["w_focal"] * float((m.logf.data**2).mean())
@@ -363,7 +449,19 @@ class Kernel:
             v = v + cfg["w_pose"] * float(((m.rot.data * m.free) ** 2 + (m.trans.data * m.free) ** 2).mean())
         if self.radial:
             v = v + cfg["w_radial"] * float((m.kr.data**2).sum())
+        if self.has_pp and cfg["w_pp"] > 0:
+            v = v + cfg["w_pp"] * float((m.pp.data**2).sum())
+        if cfg["w_lap"] > 0 and self.has_pose:
+            x = self.lap_x()
+            v = v + cfg["w_lap"] / (3 * self.N) * float((x * (m.pose_L @ x)).sum())
         return v
+
+    def lap_x(self):
+        """w_lap: the pose updates in world axes x [N, 6] = (R0^T rot, -R0^T trans), frame 0 at zero."""
+        m = self.m
+        w = torch.einsum("nji,nj->ni", m.R0, m.rot.data * m.free)
+        c = -torch.einsum("nji,nj->ni", m.R0, m.trans.data * m.free)
+        return torch.cat([w, c], 1)
 
     def z_prior(self, n):
         """0.5 w_z z^2 per sample, in the units of a warp (the data terms are divided by the visible warps n)."""
@@ -440,6 +538,10 @@ class Kernel:
                 f = 2 * cfg["w_pose"] / (3 * N)
                 rot.add_(m_.rot.data * m_.free * f)
                 trans.add_(m_.trans.data * m_.free * f)
+            if cfg["w_lap"] > 0:
+                gx = (m_.pose_L @ self.lap_x()) * (2 * cfg["w_lap"] / (3 * N))
+                rot.add_(torch.einsum("nij,nj->ni", m_.R0, gx[:, :3]) * m_.free)
+                trans.add_(-torch.einsum("nij,nj->ni", m_.R0, gx[:, 3:]) * m_.free)
         else:
             rot.zero_(), trans.zero_()
         dLs = (gX * Xr).sum(-1)  # dL / dlog(source depth) per warp
@@ -453,7 +555,10 @@ class Kernel:
             base = w.base_g
             grid.reshape(-1).index_add_(0, torch.cat([base, base + 1, base + gw_, base + gw_ + 1], -1).reshape(-1),
                                         torch.cat([a - ga, b - gb, ga, gb], -1).reshape(-1))
-            grid.add_(m_.grid.data, alpha=2 * cfg["w_prior"] / m_.grid.numel())
+            if self.Qf is not None:
+                grid.view(N, -1).add_(m_.grid.data.view(N, -1) @ self.Qf, alpha=1.0 / m_.grid.numel())
+            else:
+                grid.add_(m_.grid.data, alpha=2 * cfg["w_prior"] / m_.grid.numel())
         else:
             grid.zero_()
         if self.has_focal or self.radial:
@@ -468,6 +573,16 @@ class Kernel:
         if self.radial:
             grads[5].fill_((T * r2 * sc / q + src_part * w.E[:, None]).sum())
             grads[5].add_(m_.kr.data, alpha=2 * cfg["w_radial"])
+        if self.has_pp:  # target: uv + pp; source: x_d = (u - cx - pp) / (f s), through the division model if radial
+            gp_ = grads[6]
+            gp_[0], gp_[1] = Gu.sum(), Gv.sum()
+            g_xy = ((gX @ w.Rji)[..., :2] * w.ds[:, None, :, None]).sum(1)  # dL / d(x_u, y_u) of the source [N, M, 2]
+            if self.radial:
+                k_r, xd = m_.kr.data, w.xyd
+                D = 1 + k_r * (xd * xd).sum(-1, keepdim=True)
+                g_xy = g_xy / D - (2 * k_r / D**2) * xd * (xd * g_xy).sum(-1, keepdim=True)
+            gp_.sub_((g_xy / (self.f0[:, None] * st[4])).sum((0, 1)))
+            gp_.add_(m_.pp.data, alpha=2 * cfg["w_pp"])
         # brightness: r = I_j exp(a_j) + b_j - (I_i exp(a_i) + b_i)
         if br is not None:
             s_all = dLr.sum(-1).sum(2)  # [N, k]
@@ -705,6 +820,14 @@ class Kernel:
             f = 2 * cfg["w_pose"] / (3 * N)
             Hpp[range(n_pose), range(n_pose)] += f
             gp[:n_pose] += f * torch.cat([self.m.rot.data[1:], self.m.trans.data[1:]], 1).reshape(-1).double()
+        if self.has_pose and cfg["w_lap"] > 0:  # in PBA's coordinates p_i = M_i x_i, M_i = diag(R0_i, -R0_i)
+            M = torch.zeros(N, 6, 6, device=dev, dtype=torch.float64)
+            M[:, :3, :3], M[:, 3:, 3:] = self.m.R0.double(), -self.m.R0.double()
+            Lk = torch.kron(self.m.pose_L.double(), torch.eye(6, device=dev, dtype=torch.float64)).view(N, 6, N, 6)
+            Hl = torch.einsum("iab,ibjc,jdc->iajd", M, Lk, M).reshape(6 * N, 6 * N) * (2 * cfg["w_lap"] / (3 * N))
+            gl = (M @ (self.m.pose_L.double() @ self.lap_x().double())[..., None])[..., 0].reshape(-1) * (2 * cfg["w_lap"] / (3 * N))
+            Hpp[:n_pose, :n_pose] += Hl[6:, 6:]
+            gp[:n_pose] += gl[6:]
         if self.radial:  # keeps the coefficient near zero where the data do not determine it
             Hpp[k_idx, k_idx] += 2 * cfg["w_radial"]
             gp[k_idx] += 2 * cfg["w_radial"] * float(self.m.kr.data[0])
@@ -715,9 +838,14 @@ class Kernel:
             Hgp = Hgp.view(N, nc, np_ + 1)[..., :np_].double() / n_vis
             Hgg = Hgg.double() / n_vis
             gg = gg.double() / n_vis
-            f = 2 * cfg["w_prior"] / self.m.grid.numel()
-            Hgg[:, range(nc), range(nc)] += f
-            gg += f * self.m.grid.data.view(N, -1).double()
+            if self.Qf is not None:
+                Q = self.Qf.double() / self.m.grid.numel()
+                Hgg += Q
+                gg += self.m.grid.data.view(N, -1).double() @ Q
+            else:
+                f = 2 * cfg["w_prior"] / self.m.grid.numel()
+                Hgg[:, range(nc), range(nc)] += f
+                gg += f * self.m.grid.data.view(N, -1).double()
             if Hx is not None:
                 Hx = (Hx + Hx.T).double() / n_vis
         loss = cfg["w_photo"] * sp / (max(np_sum, 1.0) if self.ncc else n_vis) + self.w_geo_lm * sg / n_vis + self.priors() + self.z_prior(n_vis)
@@ -755,7 +883,7 @@ class Kernel:
         lower the cost of these samples (the caller then does a full iteration)."""
         L, sc = self.factor
         if self.grad_buf is None:
-            self.grad_buf = [torch.zeros_like(p.data) for p in (self.m.rot, self.m.trans, self.m.logf, self.m.grid, self.m.bright, self.m.kr)]
+            self.grad_buf = [torch.zeros_like(p.data) for p in (self.m.rot, self.m.trans, self.m.logf, self.m.grid, self.m.bright, self.m.kr, self.m.pp)]
         cost0 = self.cost(feat, quad, nbrs, chunk)
         self.gradient(feat, quad, nbrs, self.prep(nbrs), self.grad_buf)
         rot, trans, logf, grid, _, kr = self.grad_buf
