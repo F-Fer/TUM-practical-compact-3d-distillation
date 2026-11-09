@@ -28,7 +28,7 @@ To reproduce, starting from unposed predictions (`run_bench.py ... "eval.modes=[
 uv run scripts/analyse_failure_modes.py DA3-SMALL           # ~1 min, CPU
 uv run scripts/plot_failure_modes.py DA3-SMALL              # ~1 min
 uv run scripts/reconstruction_errors.py DA3-SMALL --render auto   # ~30 min, CPU
-uv run scripts/reconstruction_errors.py DA3-SMALL --render scannetpp/5f99900f09 --no-metrics
+uv run scripts/reconstruction_errors.py DA3-SMALL --render scannetpp/5f99900f09 --no-metricsPle
 ```
 
 All three scripts take the model name, so other model sizes only need their predictions first.
