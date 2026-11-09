@@ -164,6 +164,12 @@ DEFAULTS = {
     "pool_once": False,  # draw the candidate pixels once (at the sharpest level's distribution) instead of per level
     "pool_factor": 16,  # Adam: candidate pixels per frame drawn once per level = pool_factor * samples
     "track_every": 0,  # record the poses and a held-out loss every n iterations (<dst>/metric_results/<dataset>_pba_track.jsonl)
+    # optimise at res_scale x the prediction resolution: images resized from the originals, DA3's depth/confidence
+    # upsampled bilinearly, blur sigmas of `levels` in pixels of that resolution; outputs back at the prediction resolution
+    "res_scale": 1.0,
+    "sample_chunk": 0,  # Adam: source pixels per frame and forward/backward pass (gradient accumulation), 0 = all `samples` at once
+    "camera": "pinhole",  # pinhole | radial (shared k1, k2 of the normalised coordinates, impl=autograd / lm_impl=jvp; the output intrinsics stay pinhole). Not the same as `radial` (division model, analytic)
+    "lr_dist": 1e-3,
     "seed": 0,
     "save": True,  # write results.npz (False: only metrics)
 }
@@ -196,6 +202,39 @@ def so3_exp(w):
     k = torch.stack([o, -z, y, z, o, -x, -y, x, o], -1).reshape(*w.shape[:-1], 3, 3)
     eye = torch.eye(3, device=w.device, dtype=w.dtype).expand_as(k)
     return eye + a * k + b * (k @ k)
+
+
+def undistort(xd, yd, dist, iters=10):
+    """Normalised distorted -> undistorted coordinates of the radial model x_d = x (1 + k1 r^2 + k2 r^4), by
+    fixed-point iteration (differentiable). dist None = pinhole."""
+    if dist is None:
+        return xd, yd
+    x, y = xd, yd
+    for _ in range(iters):
+        r2 = x * x + y * y
+        f = 1 + dist[0] * r2 + dist[1] * r2 * r2
+        x, y = xd / f, yd / f
+    return x, y
+
+
+def distort(x, y, dist):
+    r2 = x * x + y * y
+    f = 1 + dist[0] * r2 + dist[1] * r2 * r2
+    return x * f, y * f
+
+
+def blurred_flat(x, sigma, device, chunk=8):
+    """gaussian_blur of x [N, C, H, W] (on any device) as channel-major [C, N*H*W] on device (bilinear_gather's layout).
+    Large maps (res_scale > 1) are blurred frame chunk by frame chunk, and those of more than 2 GiB are stored as
+    float16 (bilinear_gather promotes to float32)."""
+    if x.device == device and x.numel() < 2**28:
+        img = gaussian_blur(x, sigma)
+        return img.permute(1, 0, 2, 3).reshape(img.shape[1], -1)
+    N, C, H, W = x.shape
+    out = torch.empty(C, N, H, W, device=device, dtype=torch.float16 if x.numel() > 2**29 else x.dtype)
+    for i in range(0, N, chunk):
+        out[:, i : i + chunk] = gaussian_blur(x[i : i + chunk].to(device), sigma).transpose(0, 1)
+    return out.reshape(C, -1)
 
 
 def bilinear_gather(src, idx, u, v, H, W):
@@ -297,6 +336,8 @@ def vgg_features(images, dim, chunk=2, scale=0.1, fast=False):
     mean = torch.tensor([0.485, 0.456, 0.406], device=images.device)[:, None, None]
     std = torch.tensor([0.229, 0.224, 0.225], device=images.device)[:, None, None]
     H, W = images.shape[-2:]
+    if H * W > 504 * 504:  # res_scale > 1: one frame at a time (the prediction resolution keeps 2, same PCA samples)
+        chunk = 1
 
     def feats(x):
         f1 = vgg[:4]((x - mean) / std)
@@ -321,10 +362,11 @@ def vgg_features(images, dim, chunk=2, scale=0.1, fast=False):
         _, S, V = torch.linalg.svd(X - mu, full_matrices=False)
         P = V[:dim].T  # [C, dim]
         norm = scale / (S[:dim] ** 2 / len(X)).mean().sqrt()
-    out = torch.empty(len(images), dim, H, W, device=images.device)
+    big = len(images) * dim * H * W > 2**29  # > 2 GiB (res_scale > 1): kept on the CPU, blurred per level (blurred_flat)
+    out = torch.empty(len(images), dim, H, W, device="cpu" if big else images.device)
     for i in range(0, len(images), chunk):
         f = feats(images[i : i + chunk])
-        out[i : i + chunk] = torch.einsum("nchw,cd->ndhw", f - mu[:, None, None], P) * norm
+        out[i : i + chunk] = (torch.einsum("nchw,cd->ndhw", f - mu[:, None, None], P) * norm).to(out.device)
     if not fast:
         del vgg
     return out
@@ -479,6 +521,7 @@ class PBA(torch.nn.Module):
         self.bright = torch.nn.Parameter(torch.zeros(N, 2, device=dev))  # log gain, bias
         self.kr = torch.nn.Parameter(torch.zeros(1, device=dev))  # radial coefficient, only used by pba_analytic.py
         self.pp = torch.nn.Parameter(torch.zeros(2, device=dev))  # shared principal-point offset in pixels (pp=true), pba_analytic.py only
+        self.dist = torch.nn.Parameter(torch.zeros(2, device=dev))  # radial k1, k2 (camera=radial)
 
         # sampling mask: confident, not at the border
         thr = torch.quantile(conf.reshape(-1)[:: conf.numel() // 2**22 + 1], cfg["conf_quantile"]) if cfg["conf_quantile"] > 0 else -1
@@ -513,6 +556,33 @@ class PBA(torch.nn.Module):
             K[:, 1, 2] += self.pp[1]
         return K
 
+    def distortion(self, dist=None):
+        """Radial coefficients [2], or None for the pinhole camera."""
+        if self.cfg["camera"] != "radial":
+            return None
+        return self.dist if dist is None else dist
+
+    def unproject(self, u, v, fx, fy, cx, cy, d, dist):
+        """Pixel (u, v) at z-depth d -> camera coordinates (x, y), all broadcastable."""
+        if dist is None:
+            return (u - cx) / fx * d, (v - cy) / fy * d
+        xn, yn = undistort((u - cx) / fx, (v - cy) / fy, dist)
+        return xn * d, yn * d
+
+    def project(self, X, Y, zc, fx, fy, cx, cy, dist):
+        """-> pixel (u, v) and a validity mask (None for the pinhole camera). With distortion, points far outside
+        the field of view would fold back into the image (the polynomial is not monotonic for large radii), so
+        only radii up to 1.5x the image corner's (and where the mapping is still monotonic) are valid."""
+        if dist is None:
+            return fx * X / zc + cx, fy * Y / zc + cy, None
+        x, y = X / zc, Y / zc
+        xd, yd = distort(x, y, dist)
+        r2 = (x * x + y * y).detach()
+        corner2 = ((torch.maximum(cx, self.W - 1 - cx) / fx) ** 2 + (torch.maximum(cy, self.H - 1 - cy) / fy) ** 2).detach()
+        k1, k2 = dist.detach()
+        ok = (r2 < 2.25 * corner2) & (1 + 3 * k1 * r2 + 5 * k2 * r2 * r2 > 0)
+        return fx * xd + cx, fy * yd + cy, ok
+
     def grid_at(self, idx, u, v):
         """log-depth correction at pixel (u, v) of frame idx (bilinear, grid corners at the image corners)."""
         out = torch.zeros_like(u)
@@ -545,17 +615,18 @@ class PBA(torch.nn.Module):
         idx = torch.arange(N, device=u.device)[:, None].expand_as(u)
         base = self.depth0 if self.depth_dense is None else self.depth_dense
         d_src = base[idx, v.long(), u.long()] * torch.exp(self.grid_at(idx.reshape(-1), u.reshape(-1), v.reshape(-1)).view_as(u))
-        x = (u - K[:, None, 0, 2]) / K[:, None, 0, 0] * d_src
-        y = (v - K[:, None, 1, 2]) / K[:, None, 1, 1] * d_src
+        dist = self.distortion()
+        x, y = self.unproject(u, v, K[:, None, 0, 0], K[:, None, 1, 1], K[:, None, 0, 2], K[:, None, 1, 2], d_src, dist)
         Xc = torch.stack([x, y, d_src], -1)  # [N, M, 3]
         Xw = (Xc - t[:, None]) @ R  # R^T (X - t), row vectors
         Rt, tt, Kt = R[nbrs], t[nbrs], K[nbrs]  # [N, k, ...]
         Xt = Xw[:, None] @ Rt.transpose(-1, -2) + tt[:, :, None]  # [N, k, M, 3]
         z = Xt[..., 2]
         zc = z.clamp_min(1e-4)
-        ut = Kt[..., None, 0, 0] * Xt[..., 0] / zc + Kt[..., None, 0, 2]
-        vt = Kt[..., None, 1, 1] * Xt[..., 1] / zc + Kt[..., None, 1, 2]
+        ut, vt, ok = self.project(Xt[..., 0], Xt[..., 1], zc, Kt[..., None, 0, 0], Kt[..., None, 1, 1], Kt[..., None, 0, 2], Kt[..., None, 1, 2], dist)
         inside = (z > 1e-4) & (ut >= 0) & (ut <= W - 1) & (vt >= 0) & (vt <= H - 1)
+        if ok is not None:
+            inside = inside & ok
         ut, vt = ut.clamp(0, W - 1), vt.clamp(0, H - 1)
 
         tgt = nbrs[:, :, None].expand_as(ut).reshape(-1)
@@ -646,7 +717,7 @@ class PBA(torch.nn.Module):
         e = torch.sqrt((ut - tu) ** 2 + (vt - tv) ** 2 + 1e-12) / 14
         return (huber(e, delta) * mm).sum() / mm.sum().clamp_min(1)
 
-    def lm_residuals(self, rot_s, trans_s, rot_t, trans_t, logf, ds, dt, src, u, v, nbrs, img_flat, S):
+    def lm_residuals(self, rot_s, trans_s, rot_t, trans_t, logf, dist, ds, dt, src, u, v, nbrs, img_flat, S):
         """Residuals of the source frames src [n] (u, v [n, P*S], S samples per patch) for Levenberg-Marquardt.
 
         The poses enter twice, for the source and for the target role, so that the forward-mode derivative w.r.t.
@@ -667,16 +738,17 @@ class PBA(torch.nn.Module):
         logd = self.grid_at(idx.reshape(-1), u.reshape(-1), v.reshape(-1)).view_as(u) + ds.repeat_interleave(S, 1)
         d_src = self.depth0[idx, v.long(), u.long()] * torch.exp(logd)
         Ks = K[src]
-        x = (u - Ks[:, None, 0, 2]) / Ks[:, None, 0, 0] * d_src
-        y = (v - Ks[:, None, 1, 2]) / Ks[:, None, 1, 1] * d_src
+        dist = self.distortion(dist)
+        x, y = self.unproject(u, v, Ks[:, None, 0, 0], Ks[:, None, 1, 1], Ks[:, None, 0, 2], Ks[:, None, 1, 2], d_src, dist)
         Xw = (torch.stack([x, y, d_src], -1) - t_s[src][:, None]) @ R_s[src]
         Rt, tt, Kt = R_t[nbrs], t_t[nbrs], K[nbrs]
         Xt = Xw[:, None] @ Rt.transpose(-1, -2) + tt[:, :, None]  # [n, k, M, 3]
         z = Xt[..., 2]
         zc = z.clamp_min(1e-4)
-        ut = Kt[..., None, 0, 0] * Xt[..., 0] / zc + Kt[..., None, 0, 2]
-        vt = Kt[..., None, 1, 1] * Xt[..., 1] / zc + Kt[..., None, 1, 2]
+        ut, vt, ok = self.project(Xt[..., 0], Xt[..., 1], zc, Kt[..., None, 0, 0], Kt[..., None, 1, 1], Kt[..., None, 0, 2], Kt[..., None, 1, 2], dist)
         inside = (z > 1e-4) & (ut >= 0) & (ut <= W - 1) & (vt >= 0) & (vt <= H - 1)
+        if ok is not None:
+            inside = inside & ok
         ut, vt = ut.clamp(0, W - 1), vt.clamp(0, H - 1)
         tgt = nbrs[:, :, None].expand_as(ut).reshape(-1)
         utf, vtf = ut.reshape(-1), vt.reshape(-1)
@@ -792,13 +864,14 @@ def lm_layout(model):
         sys.exit("optimizer=lm supports focal=shared|none")
     n_pose = 6 * (N - 1) if cfg["poses"] else 0
     n_grid = model.grid[0].numel() if cfg["depth_grid"] > 0 else 0
-    T = n_pose + 1 + N * n_grid  # (the fine depth grid is too large for a dense system and stays fixed in LM levels)
+    nd = 2 if cfg["camera"] == "radial" else 0
+    T = n_pose + 1 + nd + N * n_grid  # (the fine depth grid is too large for a dense system and stays fixed in LM levels)
     dev = model.grid.device
     pose_idx = torch.full((N, 6), T, dtype=torch.long, device=dev)
     if cfg["poses"]:
         pose_idx[1:] = torch.arange(n_pose, device=dev).view(N - 1, 6)
     focal_idx = n_pose if cfg["focal"] == "shared" else T
-    return {"T": T, "pose": pose_idx, "focal": focal_idx, "grid0": n_pose + 1, "n_grid": n_grid}
+    return {"T": T, "pose": pose_idx, "focal": focal_idx, "dist": list(range(n_pose + 1, n_pose + 1 + nd)), "grid0": n_pose + 1 + nd, "n_grid": n_grid}
 
 
 def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
@@ -809,7 +882,8 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
     P = u.shape[1] // S
     gh, gw = model.grid.shape[1:]
     kind, agg_min = cfg["photo_loss"], cfg["photo_agg"] == "min" and S == 1
-    p = [x.detach() for x in (model.rot, model.trans, model.rot, model.trans, model.logf)]
+    p = [x.detach() for x in (model.rot, model.trans, model.rot, model.trans, model.logf, model.dist)]
+    nd = len(layout["dist"])
 
     # normalisers of the photometric (patches visible in all samples / visible samples) and geometric terms
     chunks = [torch.arange(i, min(i + chunk, N), device=u.device) for i in range(0, N, chunk)]
@@ -831,19 +905,21 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
         f = lambda *q: model.lm_residuals(*q, src, u[src], v[src], nbrs[src], img_flat, S)[:2]  # noqa: E731
         with torch.no_grad():
             photo, geo, vis, ut, vt = model.lm_residuals(*primals, src, u[src], v[src], nbrs[src], img_flat, S)
-            tangents = []  # one per column: rot_s, trans_s, rot_t, trans_t (3 each), logf, ds, dt
-            for a in range(7):
-                for c in range(3 if a < 4 else 1):
+            tangents = []  # one per column: rot_s, trans_s, rot_t, trans_t (3 each), logf, dist (nd), ds, dt
+            for a in range(8):
+                for c in range(3 if a < 4 else nd if a == 5 else 1):
                     t = [torch.zeros_like(x) for x in primals]
                     if a < 4:
                         t[a][:, c] = 1
+                    elif a == 5:
+                        t[a][c] = 1
                     else:
                         t[a].fill_(1)
                     tangents.append(t)
             tangents = [torch.stack([t[i] for t in tangents]) for i in range(len(primals))]
-            # all 15 forward-mode derivatives in one vectorised pass (2.3x faster than a loop, identical)
+            # all 15 (+ nd) forward-mode derivatives in one vectorised pass (2.3x faster than a loop, identical)
             jp, jg = torch.func.vmap(lambda *t: torch.func.jvp(f, primals, t)[1])(*tangents)
-            jp, jg = jp.movedim(0, -1), jg.movedim(0, -1)  # [n, k, P, D, 15], [n, k, P, S, 15]
+            jp, jg = jp.movedim(0, -1), jg.movedim(0, -1)  # [n, k, P, D, 15 + nd], [n, k, P, S, 15 + nd]
             # weights of 0.5 * w * r^2
             m = vis.float()
             if S > 1:
@@ -862,10 +938,11 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
             utc, vtc = ut.view(n, k, P, S).mean(-1), vt.view(n, k, P, S).mean(-1)
             ct, wt = bilinear_weights(utc * (gw - 1) / (W - 1), vtc * (gh - 1) / (H - 1), gh, gw)  # [n, k, P, 4]
             ws = ws[:, None].expand(n, k, P, 4)
-            nc = 21
+            nc = 21 + nd
+            e = 13 + nd  # columns before the depth offsets
 
-            def expand(J):  # [n, k, P, D, 15] -> [n, k, P, D, 21]
-                return torch.cat([J[..., :13], J[..., 13:14] * ws[..., None, :], J[..., 14:15] * wt[..., None, :]], -1)
+            def expand(J):  # [n, k, P, D, 15 + nd] -> [n, k, P, D, 21 + nd]
+                return torch.cat([J[..., :e], J[..., e : e + 1] * ws[..., None, :], J[..., e + 1 : e + 2] * wt[..., None, :]], -1)
 
             jp, jg = expand(jp), expand(jg)
             G = torch.einsum("nkpdi,nkpd,nkpdj->nkpij", jp, wp, jp) + torch.einsum("nkpdi,nkpd,nkpdj->nkpij", jg, wg, jg)
@@ -875,11 +952,13 @@ def lm_normal_equations(model, u, v, nbrs, img_flat, S, layout, chunk):
             idx[..., :6] = layout["pose"][src][:, None, None]
             idx[..., 6:12] = layout["pose"][nbrs[src]][:, :, None]
             idx[..., 12] = layout["focal"]
+            for c, di in enumerate(layout["dist"]):
+                idx[..., 13 + c] = di
             if layout["n_grid"]:
-                idx[..., 13:17] = layout["grid0"] + src[:, None, None, None] * layout["n_grid"] + cs[:, None]
-                idx[..., 17:21] = layout["grid0"] + nbrs[src][:, :, None, None] * layout["n_grid"] + ct
+                idx[..., e : e + 4] = layout["grid0"] + src[:, None, None, None] * layout["n_grid"] + cs[:, None]
+                idx[..., e + 4 : e + 8] = layout["grid0"] + nbrs[src][:, :, None, None] * layout["n_grid"] + ct
             else:
-                idx[..., 13:] = T
+                idx[..., e:] = T
             idx = idx.reshape(-1, nc)
             Hm.index_add_(0, (idx[:, :, None] * (T + 1) + idx[:, None, :]).reshape(-1), G.reshape(-1))
             g.index_add_(0, idx.reshape(-1), b.reshape(-1))
@@ -914,8 +993,21 @@ def lm_apply(model, layout, delta):
         model.trans[1:] += d[:, 3:]
     if layout["focal"] < T:
         model.logf += delta[layout["focal"]]
+    if layout["dist"]:
+        model.dist += delta[layout["dist"][0] : layout["dist"][-1] + 1]
     if layout["n_grid"]:
         model.grid += delta[layout["grid0"] :].view_as(model.grid)
+
+
+@torch.no_grad()
+def eval_cost(model, u, v, nbrs, img_flat, stride):
+    """model.loss's total at fixed samples, over chunks of sample_chunk source pixels per frame (weighted mean)."""
+    c = model.cfg["sample_chunk"]
+    if not c:
+        return float(model.loss(u, v, nbrs, img_flat, stride)[0])
+    c = max(1, c // 9 if model.cfg["photo_loss"] == "ncc" else c)
+    n = u.shape[1]
+    return sum(float(model.loss(u[:, j : j + c], v[:, j : j + c], nbrs, img_flat, stride)[0]) * min(c, n - j) / n for j in range(0, n, c))
 
 
 def lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam, max_tries=6):
@@ -923,12 +1015,12 @@ def lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam, max_trie
     the loss before and after and whether a step was accepted."""
     U, V = model.patch_samples(u, v, stride) if S > 1 else (u, v)
     with torch.no_grad():
-        cost0 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+        cost0 = eval_cost(model, u, v, nbrs, img_flat, stride)
     Hm, g = lm_normal_equations(model, U, V, nbrs, img_flat, S, layout, chunk)
     diag = Hm.diagonal().clamp_min(1e-12 * float(Hm.diagonal().max()) + 1e-30)
     if model.cfg["lm_mu"] > 0:
         Hm = Hm + model.cfg["lm_mu"] * float(diag.mean()) * torch.eye(len(diag), device=Hm.device, dtype=Hm.dtype)
-    params = (model.rot, model.trans, model.logf, model.grid, model.grid2)
+    params = (model.rot, model.trans, model.logf, model.grid, model.grid2, model.dist)
     state = [x.detach().clone() for x in params]
     for _ in range(max_tries):
         L, info = torch.linalg.cholesky_ex(Hm + torch.diag(lam * diag))
@@ -936,12 +1028,12 @@ def lm_step(model, u, v, nbrs, img_flat, stride, S, layout, chunk, lam, max_trie
             delta = -torch.cholesky_solve(g[:, None], L)[:, 0]
             lm_apply(model, layout, delta)
             with torch.no_grad():
-                cost1 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+                cost1 = eval_cost(model, u, v, nbrs, img_flat, stride)
             if cost1 < cost0:
                 # the Gauss-Newton model overestimates the curvature of the (large-residual) objective: try twice the step
                 lm_apply(model, layout, delta)
                 with torch.no_grad():
-                    cost2 = float(model.loss(u, v, nbrs, img_flat, stride)[0])
+                    cost2 = eval_cost(model, u, v, nbrs, img_flat, stride)
                 lam_min = model.cfg["lm_lambda_min"]
                 if cost2 < cost1:
                     return max(lam / 3, lam_min), cost0, cost2, True
@@ -963,11 +1055,28 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     start = time.perf_counter()
 
     depth = torch.from_numpy(pred["depth"]).float().to(device)
-    N, H, W = depth.shape
-    images = load_images(image_files, H, W).to(device)
+    N, H0, W0 = depth.shape
     conf = torch.from_numpy(pred["conf"]).float().to(device)
     ext = torch.from_numpy(pred["extrinsics"]).float().to(device)
     K = torch.from_numpy(pred["intrinsics"]).float().to(device)
+    s = cfg["res_scale"]
+    if s != 1:
+        if cfg["depth_param"] != "grid" or cfg["w_match"] > 0 or cfg["depth_grid_fine"] > 0:
+            sys.exit("res_scale != 1 supports depth_param=grid without w_match / depth_grid_fine")
+        H, W = round(H0 * s), round(W0 * s)
+        sx, sy = W / W0, H / H0
+        # pixel centres as in cv2.resize / F.interpolate(align_corners=False): u' = (u + 0.5) s - 0.5
+        K = K.clone()
+        K[:, 0, 0] *= sx
+        K[:, 1, 1] *= sy
+        K[:, 0, 2] = (K[:, 0, 2] + 0.5) * sx - 0.5
+        K[:, 1, 2] = (K[:, 1, 2] + 0.5) * sy - 0.5
+        depth_lo = depth
+        depth = F.interpolate(depth[:, None], size=(H, W), mode="bilinear", align_corners=False)[:, 0]
+        conf = F.interpolate(conf[:, None], size=(H, W), mode="bilinear", align_corners=False)[:, 0]
+    else:
+        H, W = H0, W0
+    images = load_images(image_files, H, W).to(device)
     reloc_info = {}
     if cfg["reloc"]:
         ext, reloc_info = relocalise(images, depth, conf, ext, K, cfg["reloc_conf"], cfg["reloc_gain"])
@@ -988,7 +1097,7 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     k = nbrs.shape[1]
     img_sharp = images.permute(1, 0, 2, 3).reshape(3, -1)
     info = {"num_frames": N, "neighbors": k, "decode_s": decode_s, "covis_s": covis_s, **reloc_info}
-    before = eval_photo(model, nbrs, img_sharp)
+    before = eval_photo(model, nbrs[:, :10], img_sharp)  # (at most 10 neighbours: memory with all pairs)
     load_s = time.perf_counter() - start
     tracker = Tracker(model, nbrs, img_sharp, cfg["track_every"]) if cfg["track_every"] else None
     if tracker:
@@ -1002,6 +1111,10 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         {"params": [model.bright], "lr": cfg["lr_bright"]},
         {"params": [model.grid2], "lr": cfg["lr_depth"]},
     ]
+    if cfg["camera"] == "radial":
+        groups.append({"params": [model.dist], "lr": cfg["lr_dist"]})
+    if cfg["sample_chunk"] and (cfg["depth_param"] == "head" or cfg["optimizer"] != "adam"):
+        sys.exit("sample_chunk needs optimizer=adam and depth_param=grid")
     levels = []  # empty: no optimisation (reference run)
     for spec in cfg["levels"].split(","):
         if spec:
@@ -1038,6 +1151,8 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             fadam = FlatAdam([model.rot, model.trans] + rest[0], [cfg["lr_rot"], cfg["lr_trans"]] + rest[1])
     if cfg["patch"] and (cfg["impl"] != "analytic" or cfg["lm_impl"] != "analytic" or cfg["focal"] == "per_frame" or not cfg["poses"] or cfg["photo_loss"] == "ncc"):
         sys.exit("patch needs impl=analytic, lm_impl=analytic, poses, focal=shared|none and per-pixel kernels")
+    if (cfg["camera"] != "pinhole" or cfg["res_scale"] != 1 or cfg["sample_chunk"]) and (kernel or cfg["patch"] or cfg["radial"]):
+        sys.exit("camera=radial, res_scale and sample_chunk need impl=autograd, lm_impl=jvp, no patch levels and radial=false")
     if cfg["pp"] and cfg["impl"] != "analytic":
         sys.exit("pp needs impl=analytic")
     if cfg["bright_rel"] and (cfg["impl"] != "analytic" or (cfg["lm_levels"] and cfg["lm_impl"] != "analytic")):
@@ -1067,13 +1182,17 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
                 info["feat_s"] = time.perf_counter() - t_feat
             else:  # DA3 backbone tokens
                 feat_maps[feat_name] = token_features(feat_path, feat_name, cfg["token_dim"], H, W, device)
-        img = blur(feat_name, sigma)
-        img_flat = img.permute(1, 0, 2, 3).reshape(img.shape[1], -1)
-        if kernel:
-            kernel.set_level(img, cfg["features"] == "rgb" and cfg["photo_loss"] != "ncc",
-                             max(cfg["patch_stride"] * max(1.0, sigma), cfg["token_stride"] if feat_name in ("local", "mid", "final") else 0.0))
+        if cfg["res_scale"] != 1:  # large maps: blurred chunk by chunk straight into bilinear_gather's layout (no kernel)
+            img = img_flat = None  # free the previous level's maps first
+            img_flat = blurred_flat(feat_maps[feat_name], sigma, device)
+        else:
+            img = blur(feat_name, sigma)
+            img_flat = img.permute(1, 0, 2, 3).reshape(img.shape[1], -1)
+            if kernel:
+                kernel.set_level(img, cfg["features"] == "rgb" and cfg["photo_loss"] != "ncc",
+                                 max(cfg["patch_stride"] * max(1.0, sigma), cfg["token_stride"] if feat_name in ("local", "mid", "final") else 0.0))
         # a pool of candidate pixels per frame, drawn once per level (multinomial over all pixels is slow)
-        grey = img if feat_name == "rgb" and img.shape[1] == 1 else blur("_grey", sigma)
+        grey = img if img is not None and feat_name == "rgb" and img.shape[1] == 1 else blur("_grey", sigma)
         probs = sampling_probs(grey, model.valid, cfg["grad_weight"], cfg["strat_cells"])
         if cfg["pool_once"]:
             if shared_pool is None:
@@ -1259,6 +1378,26 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
             nb_it = nbrs
             if cfg["nbr_iter"] > 0:
                 nb_it = nbrs.gather(1, torch.rand(N, k, device=device).argsort(1)[:, : cfg["nbr_iter"]])
+            if cfg["sample_chunk"]:  # gradient accumulation over chunks of the samples (weighted by their share)
+                opt.zero_grad(set_to_none=True)
+                c = max(1, cfg["sample_chunk"] if cfg["photo_loss"] != "ncc" else cfg["sample_chunk"] // 9)
+                tot, acc = 0.0, {}
+                for j in range(0, n_pix, c):
+                    w = min(c, n_pix - j) / n_pix
+                    l_c, p_c = model.loss(u[:, j : j + c], v[:, j : j + c], nb_it, img_flat, stride, match=str(level) in cfg["match_levels"].split(","))
+                    (l_c * w).backward()
+                    tot += float(l_c) * w
+                    for key, val in p_c.items():
+                        acc[key] = acc.get(key, 0.0) + val * w
+                loss, parts = torch.tensor(tot), acc
+                opt.step()
+                sched.step()
+                if it % 20 == 0 or it == iters - 1:
+                    hist.append({"level": level, "it": it, "loss": loss.item(), **{k: v.item() for k, v in parts.items()}, "t": time.perf_counter() - start})
+                if tracker:
+                    tracker.it += 1
+                    tracker.record(level)
+                continue
             loss, parts = model.loss(u, v, nb_it, img_flat, stride, match=str(level) in cfg["match_levels"].split(","))
             if head is not None:  # depth prior relative to DA3's prediction (also fixes the scale gauge)
                 loss = loss + cfg["w_prior"] * ((torch.log(d_sub.clamp_min(1e-6)) - torch.log(model.depth0[sub])) ** 2).mean()
@@ -1293,13 +1432,24 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
     if tracker:
         tracker.record(len(levels), force=True)
         info["track"] = tracker.rows
-    after = eval_photo(model, nbrs, img_sharp)
+    after = eval_photo(model, nbrs[:, :10], img_sharp)
 
     with torch.no_grad():
         R, t = model.poses()
         ext_out = torch.cat([R, t[..., None] * model.scale], -1).cpu().numpy()
-        K_out = model.intrinsics().cpu().numpy()
-        depth_out = (model.dense_depth() * model.scale).cpu().numpy()
+        K_hi = model.intrinsics()
+        if s != 1:  # back to the prediction resolution: the depth correction grid applied to DA3's own depth
+            K_lo = K_hi.clone()
+            K_lo[:, 0, 0] /= sx
+            K_lo[:, 1, 1] /= sy
+            K_lo[:, 0, 2] = (K_hi[:, 0, 2] + 0.5) / sx - 0.5
+            K_lo[:, 1, 2] = (K_hi[:, 1, 2] + 0.5) / sy - 0.5
+            K_out = K_lo.cpu().numpy()
+            corr = F.interpolate(model.grid[:, None], size=(H0, W0), mode="bilinear", align_corners=True)[:, 0] if cfg["depth_grid"] > 0 else 0
+            depth_out = (depth_lo * torch.exp(corr)).cpu().numpy()
+        else:
+            K_out = K_hi.cpu().numpy()
+            depth_out = (model.dense_depth() * model.scale).cpu().numpy()
         f_scale = torch.exp(model.logf).cpu().numpy()
     if kernel:  # the same keys for every scene: the evaluator's mean takes them from the first one
         info.update(cg_iters=float(np.mean(kernel.cg_iters)) if kernel.cg_iters else 0.0, schur_failed=kernel.schur_failed,
@@ -1329,6 +1479,8 @@ def refine_scene(image_files, pred, cfg, device, feat_path=None, api=None, head_
         bright_gain_abs=float(model.bright.detach()[:, 0].abs().mean()),
         bright_bias_abs=float(model.bright.detach()[:, 1].abs().mean()),
         bright_gain_mean=float(model.bright.detach()[1:, 0].mean()),
+        k1=float(model.dist[0]),
+        k2=float(model.dist[1]),
     )
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
 
@@ -1565,7 +1717,10 @@ def main():
             try:
                 out, info, hist = refine_scene(gt["image_files"], pred, cfg, device, feat_path, api, head_state)
             except torch.cuda.OutOfMemoryError as e:  # not stored, so a rerun retries it
-                print(f"[run_tto_pba] {dataset} {i + 1}/{len(scenes)} {scene} FAILED: {e!r}")
+                import traceback
+
+                where = " <- ".join(f"{fr.name}:{fr.lineno}" for fr in reversed(traceback.extract_tb(e.__traceback__)[-4:]))
+                print(f"[run_tto_pba] {dataset} {i + 1}/{len(scenes)} {scene} FAILED: {e!r} at {where}")
                 torch.cuda.empty_cache()
                 continue
 
