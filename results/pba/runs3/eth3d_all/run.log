@@ -1,0 +1,49 @@
+=== 19:34:46 DA3-SMALL base eth3d
+[run_tto_pba] eth3d 1/11 courtyard: auc03 0.006->0.156 auc30 0.541->0.687 focal_err 0.028->0.044 photo 0.1639->0.0979 geo 0.0644->0.0229 t 63.7s mem 3.64G
+[run_tto_pba] eth3d 2/11 delivery_area: auc03 0.019->0.044 auc30 0.392->0.604 focal_err 0.318->0.096 photo 0.1228->0.0963 geo 0.0620->0.0240 t 62.8s mem 3.70G
+[run_tto_pba] eth3d 3/11 electro: auc03 0.127->0.164 auc30 0.845->0.897 focal_err 0.072->0.009 photo 0.1118->0.0809 geo 0.0614->0.0219 t 62.6s mem 3.67G
+[run_tto_pba] eth3d 4/11 facade: auc03 0.113->0.135 auc30 0.702->0.757 focal_err 0.027->0.026 photo 0.1785->0.1112 geo 0.0852->0.0493 t 121.5s mem 4.96G
+[run_tto_pba] eth3d 5/11 kicker: auc03 0.206->0.342 auc30 0.862->0.924 focal_err 0.041->0.016 photo 0.0822->0.0481 geo 0.0441->0.0282 t 50.2s mem 3.46G
+[run_tto_pba] eth3d 6/11 office: auc03 0.195->0.228 auc30 0.574->0.680 focal_err 0.043->0.015 photo 0.1184->0.1105 geo 0.0628->0.0299 t 44.8s mem 3.33G
+[run_tto_pba] eth3d 7/11 pipes: auc03 0.095->0.480 auc30 0.717->0.942 focal_err 0.121->0.010 photo 0.1231->0.1086 geo 0.0321->0.0203 t 28.3s mem 3.01G
+[run_tto_pba] eth3d 8/11 playground: auc03 0.056->0.224 auc30 0.642->0.863 focal_err 0.028->0.012 photo 0.1612->0.1194 geo 0.2132->0.0873 t 52.4s mem 3.48G
+[run_tto_pba] eth3d 9/11 relief: auc03 0.025->0.246 auc30 0.634->0.787 focal_err 0.180->0.016 photo 0.0599->0.0427 geo 0.0877->0.0231 t 33.8s mem 3.14G
+[run_tto_pba] eth3d 10/11 relief_2: auc03 0.018->0.172 auc30 0.380->0.682 focal_err 0.323->0.027 photo 0.0668->0.0394 geo 0.1222->0.0234 t 34.9s mem 3.17G
+[run_tto_pba] eth3d 11/11 terrains: auc03 0.083->0.105 auc30 0.549->0.609 focal_err 0.195->0.084 photo 0.1174->0.0966 geo 0.0950->0.0211 t 67.4s mem 3.75G
+=== 19:46:53 DA3-SMALL radial eth3d
+[run_tto_pba] eth3d 1/11 courtyard: auc03 0.006->0.145 auc30 0.541->0.720 focal_err 0.028->0.022 photo 0.1639->0.0939 geo 0.0644->0.0223 t 67.0s mem 3.97G
+[run_tto_pba] eth3d 2/11 delivery_area: auc03 0.019->0.042 auc30 0.392->0.592 focal_err 0.318->0.108 photo 0.1228->0.0956 geo 0.0620->0.0240 t 66.8s mem 4.03G
+[run_tto_pba] eth3d 3/11 electro: auc03 0.127->0.891 auc30 0.845->0.989 focal_err 0.072->0.005 photo 0.1118->0.0794 geo 0.0614->0.0208 t 65.9s mem 4.00G
+[run_tto_pba] eth3d 4/11 facade: auc03 0.113->0.394 auc30 0.702->0.801 focal_err 0.027->0.019 photo 0.1785->0.1078 geo 0.0852->0.0482 t 127.7s mem 5.08G
+[run_tto_pba] eth3d 5/11 kicker: auc03 0.206->0.926 auc30 0.862->0.991 focal_err 0.041->0.006 photo 0.0822->0.0448 geo 0.0441->0.0272 t 53.2s mem 3.79G
+[run_tto_pba] eth3d 6/11 office: auc03 0.195->0.409 auc30 0.574->0.710 focal_err 0.043->0.015 photo 0.1184->0.1088 geo 0.0628->0.0289 t 47.4s mem 3.66G
+[run_tto_pba] eth3d 7/11 pipes: auc03 0.095->0.762 auc30 0.717->0.976 focal_err 0.121->0.005 photo 0.1231->0.1085 geo 0.0321->0.0211 t 29.6s mem 3.34G
+[run_tto_pba] eth3d 8/11 playground: auc03 0.056->0.695 auc30 0.642->0.958 focal_err 0.028->0.007 photo 0.1612->0.1172 geo 0.2132->0.0846 t 55.1s mem 3.81G
+[run_tto_pba] eth3d 9/11 relief: auc03 0.025->0.569 auc30 0.634->0.858 focal_err 0.180->0.010 photo 0.0599->0.0415 geo 0.0877->0.0235 t 35.9s mem 3.47G
+[run_tto_pba] eth3d 10/11 relief_2: auc03 0.018->0.237 auc30 0.380->0.782 focal_err 0.323->0.015 photo 0.0668->0.0386 geo 0.1222->0.0239 t 37.3s mem 3.50G
+[run_tto_pba] eth3d 11/11 terrains: auc03 0.083->0.280 auc30 0.549->0.713 focal_err 0.195->0.100 photo 0.1174->0.0923 geo 0.0950->0.0207 t 71.5s mem 4.08G
+=== 19:59:31 DA3-LARGE-1.1 base eth3d
+[run_tto_pba] eth3d 1/11 courtyard: auc03 0.338->0.652 auc30 0.909->0.959 focal_err 0.010->0.005 photo 0.1285->0.0964 geo 0.0249->0.0141 t 20.3s mem 3.64G
+[run_tto_pba] eth3d 2/11 delivery_area: auc03 0.266->0.359 auc30 0.862->0.898 focal_err 0.015->0.006 photo 0.1032->0.0913 geo 0.0219->0.0112 t 19.4s mem 3.70G
+[run_tto_pba] eth3d 3/11 electro: auc03 0.314->0.507 auc30 0.918->0.945 focal_err 0.025->0.003 photo 0.0958->0.0823 geo 0.0267->0.0159 t 19.6s mem 3.67G
+[run_tto_pba] eth3d 4/11 facade: auc03 0.325->0.436 auc30 0.902->0.926 focal_err 0.005->0.003 photo 0.1366->0.1008 geo 0.0409->0.0296 t 36.9s mem 4.96G
+[run_tto_pba] eth3d 5/11 kicker: auc03 0.486->0.539 auc30 0.942->0.949 focal_err 0.015->0.002 photo 0.0582->0.0445 geo 0.0232->0.0168 t 15.7s mem 3.46G
+[run_tto_pba] eth3d 6/11 office: auc03 0.273->0.312 auc30 0.827->0.832 focal_err 0.015->0.007 photo 0.1146->0.1126 geo 0.0157->0.0138 t 13.6s mem 3.33G
+[run_tto_pba] eth3d 7/11 pipes: auc03 0.505->0.590 auc30 0.942->0.958 focal_err 0.011->0.005 photo 0.1094->0.1074 geo 0.0131->0.0102 t 8.8s mem 3.01G
+[run_tto_pba] eth3d 8/11 playground: auc03 0.225->0.368 auc30 0.804->0.840 focal_err 0.025->0.003 photo 0.1296->0.1163 geo 0.1253->0.0759 t 16.0s mem 3.48G
+[run_tto_pba] eth3d 9/11 relief: auc03 0.468->0.507 auc30 0.841->0.841 focal_err 0.019->0.007 photo 0.0458->0.0412 geo 0.0285->0.0174 t 10.3s mem 3.14G
+[run_tto_pba] eth3d 10/11 relief_2: auc03 0.249->0.267 auc30 0.837->0.821 focal_err 0.017->0.007 photo 0.0438->0.0377 geo 0.0226->0.0116 t 11.0s mem 3.17G
+[run_tto_pba] eth3d 11/11 terrains: auc03 0.380->0.523 auc30 0.862->0.922 focal_err 0.012->0.003 photo 0.0970->0.0841 geo 0.0328->0.0125 t 20.6s mem 3.75G
+=== 20:04:26 DA3-LARGE-1.1 radial eth3d
+[run_tto_pba] eth3d 1/11 courtyard: auc03 0.338->0.836 auc30 0.909->0.983 focal_err 0.010->0.005 photo 0.1285->0.0890 geo 0.0249->0.0127 t 20.9s mem 3.97G
+[run_tto_pba] eth3d 2/11 delivery_area: auc03 0.266->0.515 auc30 0.862->0.932 focal_err 0.015->0.011 photo 0.1032->0.0885 geo 0.0219->0.0105 t 20.6s mem 4.03G
+[run_tto_pba] eth3d 3/11 electro: auc03 0.314->0.718 auc30 0.918->0.970 focal_err 0.025->0.008 photo 0.0958->0.0803 geo 0.0267->0.0160 t 20.6s mem 4.00G
+[run_tto_pba] eth3d 4/11 facade: auc03 0.325->0.671 auc30 0.902->0.958 focal_err 0.005->0.011 photo 0.1366->0.0949 geo 0.0409->0.0289 t 39.4s mem 5.08G
+[run_tto_pba] eth3d 5/11 kicker: auc03 0.486->0.753 auc30 0.942->0.974 focal_err 0.015->0.008 photo 0.0582->0.0398 geo 0.0232->0.0151 t 16.8s mem 3.79G
+[run_tto_pba] eth3d 6/11 office: auc03 0.273->0.556 auc30 0.827->0.875 focal_err 0.015->0.010 photo 0.1146->0.1111 geo 0.0157->0.0128 t 14.7s mem 3.66G
+[run_tto_pba] eth3d 7/11 pipes: auc03 0.505->0.850 auc30 0.942->0.985 focal_err 0.011->0.012 photo 0.1094->0.1064 geo 0.0131->0.0108 t 9.1s mem 3.34G
+[run_tto_pba] eth3d 8/11 playground: auc03 0.225->0.593 auc30 0.804->0.918 focal_err 0.025->0.006 photo 0.1296->0.1127 geo 0.1253->0.0719 t 17.2s mem 3.81G
+[run_tto_pba] eth3d 9/11 relief: auc03 0.468->0.811 auc30 0.841->0.884 focal_err 0.019->0.004 photo 0.0458->0.0395 geo 0.0285->0.0175 t 11.1s mem 3.47G
+[run_tto_pba] eth3d 10/11 relief_2: auc03 0.249->0.519 auc30 0.837->0.925 focal_err 0.017->0.005 photo 0.0438->0.0361 geo 0.0226->0.0110 t 11.6s mem 3.50G
+[run_tto_pba] eth3d 11/11 terrains: auc03 0.380->0.671 auc30 0.862->0.943 focal_err 0.012->0.022 photo 0.0970->0.0830 geo 0.0328->0.0123 t 22.0s mem 4.08G
+=== 20:09:32 done
