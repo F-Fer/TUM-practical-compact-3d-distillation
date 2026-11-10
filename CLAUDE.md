@@ -148,7 +148,7 @@ Evaluation conventions both papers use: predictions are aligned to ground truth 
 
 - **Before** proposing or running an experiment, read `knowledge/README.md`, then grep `knowledge/ideas/` and `knowledge/runs.csv` for the idea and its options, and say what was tried before, on which configuration and set.
 - **After** every experiment, also a negative or inconclusive one: add an evidence row to the idea file (date, setting with model/set/seeds/baseline, change, result, source) and update its status and answer, or create a file from the template in `knowledge/README.md`; update the README if the current best, a status or the open questions changed; copy the configs and metric JSONs of runs worth keeping to `results/pba/runs/<model>/<run>/` (scratch is deleted after 30 days untouched) and rerun `.venv/bin/python scripts/index_runs.py`.
-- Run outputs stay local: metric JSONs, run configs and per-run comparisons under `results/` are gitignored (since 2026-11-10). Commit the knowledge: `knowledge/` (incl. `runs.csv`), reports, figures, tables and job scripts.
+- Run outputs stay local: metric JSONs, run configs and per-run comparisons under `results/` are gitignored (since 2026-11-10). What belongs in git is the knowledge: `knowledge/` (incl. `runs.csv`), reports, figures, tables and job scripts. Commit only when the user explicitly asks.
 
 ### TTO status (2026-11-10)
 
