@@ -116,7 +116,7 @@ Each run writes to `workspace/evaluation/<model>/` (add `workspace.work_dir=<dir
 
 The console logs are `workspace/bench_<model>*.log`. The benchmark data itself is in `workspace/benchmark_dataset/` (see "Download the data").
 
-Committed to git (`results/da3_bench/<model>/`, written by `compare_paper.py --save`): the metric JSONs, `timings.jsonl`, `runs.jsonl` and `comparison.md` (our numbers next to the paper's). The predictions and point clouds are too large and aren't committed. To get them on another machine, rerun the benchmark.
+`compare_paper.py --save` writes `results/da3_bench/<model>/`: the metric JSONs, `timings.jsonl`, `runs.jsonl` and `comparison.md` (our numbers next to the paper's). Only `comparison.md` is committed; the JSON/JSONL files stay on the machine that ran the benchmark (gitignored since 2026-11-10, earlier versions are in the git history). The predictions and point clouds are too large and aren't committed. To get them on another machine, rerun the benchmark.
 
 ### Compare with the paper
 
@@ -125,7 +125,7 @@ uv run scripts/compare_paper.py            # print ours vs. paper for every run 
 uv run scripts/compare_paper.py --save     # also copy metrics, timings and comparison.md to results/da3_bench/<model>/
 ```
 
-Commit `results/da3_bench/`; it is our record of the baseline numbers.
+Commit the `comparison.md` files; they are our record of the baseline numbers.
 
 ### Visualize reconstructions
 
@@ -185,6 +185,8 @@ We ran the full benchmark for DA3-SMALL, DA3-BASE and DA3-LARGE-1.1 (October 202
 Our own changes don't cause the differences. The pipeline is deterministic on our machine (repeated forward passes are bit-identical), the evaluation uses fixed seeds (42), and our patches (parallel KDTree queries, one fusion worker, `scripts/da3_lowmem.py`) were checked to give identical outputs.
 
 ## Test-time optimization (TTO)
+
+What has been tried, what worked and how well: [`knowledge/README.md`](knowledge/README.md) (one file per idea, the current best results and the open questions; `knowledge/runs.csv` indexes every scored run).
 
 We refine the saved DA3 predictions (cameras and depth) without training and score them with the benchmark's metrics on a dev subset of 22 scenes (HiRoom 10, 7-Scenes 2, ScanNet++ 3, DTU-64 4, ETH3D 3), one seed. A method reads `workspace/evaluation/<model>/` and writes a run directory in the same layout; `scripts/eval_tto.py` and `scripts/eval_recon_aligned.py` score it, `scripts/compare_tto.py` and `scripts/tracks_table.py` tabulate runs.
 
