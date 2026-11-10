@@ -9,8 +9,8 @@ ba_fast_it<k>, F1 of time_ba_it<k>, the same predictions before the solver got f
 (time_vggsfm, 90-110 s per scene) would be far off the linear time axis and isn't drawn. A run that lacks one of the
 metric files is skipped, PBA markers with a message; run_tto_dev.sh scores recon without ETH3D, so its runs need
 `eval_tto.py workspace/evaluation/<model> <run> eth3d recon_unposed --workers 1` first.
-The families are the session-5 configurations (2026-11-09, job lines $SCRATCH/jobs/pmba/f1_lines.py, copy in
-results/pba/jobs/pmba/); results/pba/figures3/compute_all_models.png (the families v3 and rec, the markers fastpolish50
+The families are the session-5 configurations (2026-11-09, job lines $SCRATCH/jobs/pmba/f1_lines.py and f2_lines.py,
+copies in results/pba/jobs/pmba/); results/pba/figures3/compute_all_models.png (the families v3 and rec, the markers fastpolish50
 and recommended, a symlog time axis) was drawn by this script as of commit d725f23.
 x = mean time per scene: DA3 forward (workspace/evaluation/<model>/timings.jsonl) + PBA optimisation (opt_s). If
 <run>_t exists (the same configuration re-timed alone on a GPU, e.g. because <run> shared its GPU or ran on the CPU), its
@@ -43,22 +43,25 @@ POSE = ["hiroom", "7scenes", "scannetpp", "dtu64", "eth3d"]
 RECON = ["hiroom", "7scenes", "scannetpp"]
 RECON_ALL = RECON + ["eth3d"]  # all F1 datasets (the DA3 paper's recon average)
 STYLE = "#a8a7a1"  # legend entries for line style / marker shape (not a series)
-# All three: analytic code, 10 spread neighbours, 8-cell depth grid, one shared focal length (focal_init=median), gated
+# Both: analytic code, 10 spread neighbours, 8-cell depth grid, one shared focal length (focal_init=median), gated
 # radial coefficient (0.01), Adam on 4 blur levels x T, then one LM level on the sharp images.
-# fm: feature-metric, VGG16 features (8 PCA channels) + NCC of 3x3 patches, 4096 px, LM with the stop rule (REPORT3's
-#     feature-metric configuration with the shared focal)
 # pho: photometric, grey Huber with relative brightness, 1024 px, LM on Huber with the stop rule (REPORT5's B')
-# (The runs ncc_it<T> of the same job, pho followed by 40 LM iterations on NCC of 3x3 grey patches, are not drawn.)
+# fmh: feature-metric at about the cost of pho: VGG16 features (8 PCA channels) with the per-pixel Huber loss at 1024 px,
+#     LM with the stop rule (job lines f2_lines.py)
+# Not drawn (runs in workspace/tto and results/pba/runs): fm_it<T>, feature-metric VGG + NCC of 3x3 patches at 4096 px
+# (REPORT3's configuration with the shared focal, 3x the cost of fmh at T = 800), and ncc_it<T>, pho followed by 40 LM
+# iterations on NCC of 3x3 grey patches. Add them back to FAMILIES as "fm": ("-.", "Feature-metric: VGG + NCC (4,096 px),
+# Adam (4 x T) + LM") etc.
 FAMILIES = {
-    "fm": ("-", "Feature-metric: VGG + NCC, Adam (4 x T) + LM"),
-    "pho": ("--", "Photometric: grey Huber, Adam (4 x T) + LM"),
+    "fmh": ("-", "Feature-metric: VGG + Huber (1,024 px), Adam (4 x T) + LM"),
+    "pho": ("--", "Photometric: grey Huber (1,024 px), Adam (4 x T) + LM"),
 }
 POINTS = {}
-TIMED_ALONE = ("rec", "fm", "pho", "ncc")  # families whose runs with T > 200 were timed alone on a GPU
-# T labels on the family lines: on a linear axis T = 25 and 50 sit next to the DA3-alone circle, and the photometric
-# lines are short, so only their T = 800 end is labelled
-LABEL_T = {"fm": (400, 800), "pho": (800,), "ncc": (800,)}
-LABEL_OFFSET = {"fm": ((5, -11), "left"), "pho": ((6, -3), "left"), "ncc": ((6, -3), "left")}
+TIMED_ALONE = ("rec", "fm", "fmh", "pho", "ncc")  # families whose runs with T > 200 were timed alone on a GPU
+# T labels on the family lines (none drawn: on a linear axis T = 25 and 50 sit next to the DA3-alone circle, and the
+# fmh and pho lines end within 1 s of each other, so their T = 800 labels collide)
+LABEL_T = {}
+LABEL_OFFSET = {"fm": ((5, -11), "left"), "fmh": ((6, -3), "left"), "pho": ((6, -3), "left"), "ncc": ((6, -3), "left")}
 TRACK_ITERS = (2, 5, 10, 25)  # BA iterations of the dotted track lines
 
 
@@ -179,7 +182,7 @@ def main():
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.05), ncol=3, frameon=False, fontsize=8, handlelength=3.5)
     fig.text(0.5, 0.008, "Dev subset (22 scenes), one seed. All TTO lines: one shared focal length, 8-cell depth grid, gated radial "
-             "coefficient. Points from left to right: T = 25, 50, 200, 400, 800, labelled where there's room.\n"
+             "coefficient. Points from left to right: T = 25, 50, 200, 400, 800.\n"
              "VGGSfM tracks + BA (90-110 s per scene) not shown.", ha="center", fontsize=7.5, color="#52514e")
     fig.tight_layout(rect=(0, 0.14, 1, 1))
     fig.savefig(sys.argv[1], dpi=150)
