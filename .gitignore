@@ -12,3 +12,5 @@ __pycache__
 # no trailing slash: on tum2 it is a symlink to scratch
 /workspace
 results/figures/
+
+.claude/

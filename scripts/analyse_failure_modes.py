@@ -267,9 +267,11 @@ def block_mean_depth(depth, valid, size, min_frac=0.03, max_rel_std=0.05):
     return np.where(ok, mean, 0), ok
 
 
-def load_scene(model, dataset, scene):
-    """Predictions and GT of a scene in frame order, with GT depth resampled to the prediction grid."""
-    export = os.path.join(REPO_ROOT, "workspace/evaluation", model, "model_results", dataset, scene, "unposed/exports")
+def load_scene(model, dataset, scene, src=None):
+    """Predictions and GT of a scene in frame order, with GT depth resampled to the prediction grid. src: a directory with
+    model_results/ (e.g. a TTO run) instead of workspace/evaluation/<model>."""
+    src = src or os.path.join(REPO_ROOT, "workspace/evaluation", model)
+    export = os.path.join(src, "model_results", dataset, scene, "unposed/exports")
     pred = np.load(os.path.join(export, "mini_npz/results.npz"))
     gt = np.load(os.path.join(export, "gt_meta.npz"), allow_pickle=True)
     image_files = [
@@ -424,10 +426,10 @@ def depth_errors(data, rng):
 
 
 def process_scene(args):
-    model, dataset, scene, out_path = args
+    model, dataset, scene, out_path, src = args
     cv2.setNumThreads(1)
     torch.set_num_threads(1)
-    data = load_scene(model, dataset, scene)
+    data = load_scene(model, dataset, scene, src)
     rng = np.random.default_rng(0)
     depth = depth_errors(data, rng)
     pose = pose_errors(data["pred_w2c"], data["gt_w2c"], depth["median_gt_depth"], data["bench_order"])
@@ -442,15 +444,19 @@ def main():
     parser.add_argument("model")
     parser.add_argument("--datasets", nargs="+", default=DATASETS)
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--src", help="directory with model_results/ to analyse instead of workspace/evaluation/<model> (e.g. a TTO run)")
+    parser.add_argument("--name", help="output folder under workspace/failure_modes/ (default: the model)")
     args = parser.parse_args()
+    src = os.path.abspath(args.src) if args.src else os.path.join(REPO_ROOT, "workspace/evaluation", args.model)
+    name_out = args.name or args.model
 
     tasks = []
     for dataset in args.datasets:
-        root = os.path.join(REPO_ROOT, "workspace/evaluation", args.model, "model_results", dataset)
+        root = os.path.join(src, "model_results", dataset)
         for result in sorted(glob.glob(os.path.join(root, "**/unposed/exports/mini_npz/results.npz"), recursive=True)):
             scene = os.path.relpath(result, root).split("/unposed/")[0]
             name = scene.replace("/", "_") + ".npz"
-            tasks.append((args.model, dataset, scene, os.path.join(REPO_ROOT, "workspace/failure_modes", args.model, dataset, name)))
+            tasks.append((args.model, dataset, scene, os.path.join(REPO_ROOT, "workspace/failure_modes", name_out, dataset, name), src))
     if not tasks:
         sys.exit(f"No predictions found for {args.model}; run scripts/run_bench.py first")
 
