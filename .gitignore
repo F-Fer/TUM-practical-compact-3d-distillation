@@ -12,3 +12,11 @@ __pycache__
 # no trailing slash: on tum2 it is a symlink to scratch
 /workspace
 results/figures/
+
+.claude/
+# Run outputs stay on the machine that made them (indexed in knowledge/runs.csv by scripts/index_runs.py); only the
+# knowledge built from them is tracked: knowledge/, reports, figures, tables, job scripts, comparison.md files
+/results/pba/runs/
+/results/pba/runs6/
+/results/**/*.json
+/results/**/*.jsonl

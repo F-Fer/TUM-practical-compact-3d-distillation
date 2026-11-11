@@ -1,22 +1,34 @@
-"""Quality vs. compute of DA3 models with and without PBA (dev subset).
+"""Quality vs. compute of DA3 models with and without TTO (dev subset).
 
 Usage: .venv/bin/python scripts/plot_compute.py <out.png> [model ...]
 
 Per model: the unrefined run (workspace/tto/<model>/init_dev), the PBA runs workspace/tto/<model>/<family>_it<T>
-for each family in FAMILIES (lines over T, the Adam iterations per level), and the single runs in POINTS (markers).
+for each family in FAMILIES (lines over T, the Adam iterations per level), the single PBA runs in POINTS (markers), and
+the track-based BA where a model has it: RoMa tracks + BA as a dotted line over the BA iterations k (time and AUC@3 of
+ba_fast_it<k>, F1 of time_ba_it<k>, the same predictions before the solver got faster). VGGSfM tracks + BA
+(time_vggsfm, 90-110 s per scene) would be far off the linear time axis and isn't drawn. A run that lacks one of the
+metric files is skipped, PBA markers with a message; run_tto_dev.sh scores recon without ETH3D, so its runs need
+`eval_tto.py workspace/evaluation/<model> <run> eth3d recon_unposed --workers 1` first.
+The families are runs of scripts/run_tto_pba.py: `pho_it<T>` its defaults with iters=T, `fmh_it<T>` with features=vgg
+(made 2026-11-09 by the code at commit 1c1a921, which gives the same results); results/pba/figures3/compute_all_models.png (the families v3 and rec, the markers fastpolish50
+and recommended, a symlog time axis) was drawn by this script as of commit d725f23.
 x = mean time per scene: DA3 forward (workspace/evaluation/<model>/timings.jsonl) + PBA optimisation (opt_s). If
-<run>_t exists (the same configuration re-timed alone on a GPU, e.g. because <run> shared its GPU), its opt_s is used;
-the first scene of each dataset (one-off warm-up of a fresh process) counts with the dataset's median time;
+<run>_t exists (the same configuration re-timed alone on a GPU, e.g. because <run> shared its GPU or ran on the CPU), its
+opt_s is used; the first scene of each dataset (one-off warm-up of a fresh process) counts with the dataset's median time;
 family runs with T > 200 (timed on a shared GPU) use the opt_s of <family>_it200 scaled by T / 200 (the cost is
-linear in T: 0.7 s + 0.08 s x T per scene for v3 on the dev subset).
+linear in T: 0.7 s + 0.08 s x T per scene for v3 on the dev subset), except the families in TIMED_ALONE, whose runs
+ran alone on a GPU.
 y = AUC@3 averaged over the five pose datasets, and recon F1 averaged over the four F1 datasets of the DA3 benchmark
-(HiRoom, 7-Scenes, ScanNet++, ETH3D; DTU is scored by Chamfer distance). Other scripts that import point() keep the
-default RECON (without ETH3D): runs before 2026-11-03 were scored without ETH3D recon (its full-resolution TSDF fusion
-needs up to ~58 GB of RAM); the compute-plot runs were rescored with $SCRATCH/jobs/eth3d_rescore.sh.
+(HiRoom, 7-Scenes, ScanNet++, ETH3D; DTU is scored by Chamfer distance). The dotted track lines have no ETH3D recon yet:
+their F1 is the mean of three datasets, from the unrefined F1 of the same three, so compare them with the other series
+on the pose panel only. Other scripts that import point() keep the default RECON (without ETH3D): runs before 2026-11-03
+were scored without ETH3D recon (its full-resolution TSDF fusion needs up to ~58 GB of RAM); the compute-plot runs were
+rescored with $SCRATCH/jobs/eth3d_rescore.sh.
 """
 
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -31,14 +43,23 @@ POSE = ["hiroom", "7scenes", "scannetpp", "dtu64", "eth3d"]
 RECON = ["hiroom", "7scenes", "scannetpp"]
 RECON_ALL = RECON + ["eth3d"]  # all F1 datasets (the DA3 paper's recon average)
 STYLE = "#a8a7a1"  # legend entries for line style / marker shape (not a series)
-FAMILIES = {"v3": ("-", "Adam, VGG+NCC (4 levels x T)"), "fast": ("--", "Adam, RGB Huber, 1024 px (4 x T)")}
-POINTS = {
-    "polish50": ("s", "Adam 4x50 + LM polish"),
-    "polish200": ("D", "Adam 4x200 + LM polish"),
-    "fastpolish50": ("P", "RGB Adam 4x50 + LM polish"),
-    "abl_P3_it25_lm5": ("X", "RGB Adam 4x25 + LM polish"),
-    "lm10": ("^", "LM only (4x10)"),
+# pho: run_tto_pba.py's defaults (photometric: grey Huber with relative brightness, 1024 px, 10 spread neighbours, 8-cell
+#     depth grid, shared focal, gated radial coefficient, Adam on 4 blur levels x T, LM on the sharp images with the stop rule)
+# fmh: the same with features=vgg (VGG16 features, 8 PCA channels, Huber at 1024 px)
+# Not drawn (runs in workspace/tto and results/pba/runs): fm_it<T> (features=vgg photo_loss=ncc samples=4096 lm_samples=0,
+# 3x the cost of fmh at T = 800) and ncc_it<T> (lm_photo_loss=ncc lm_iters=40 lm_stop=0). Add them back to FAMILIES as "fm": ("-.", "Feature-metric: VGG + NCC (4,096 px),
+# Adam (4 x T) + LM") etc.
+FAMILIES = {
+    "fmh": ("-", "Feature-metric: VGG + Huber (1,024 px), Adam (4 x T) + LM"),
+    "pho": ("--", "Photometric: grey Huber (1,024 px), Adam (4 x T) + LM"),
 }
+POINTS = {}
+TIMED_ALONE = ("rec", "fm", "fmh", "pho", "ncc")  # families whose runs with T > 200 were timed alone on a GPU
+# T labels on the family lines (none drawn: on a linear axis T = 25 and 50 sit next to the DA3-alone circle, and the
+# fmh and pho lines end within 1 s of each other, so their T = 800 labels collide)
+LABEL_T = {}
+LABEL_OFFSET = {"fm": ((5, -11), "left"), "fmh": ((6, -3), "left"), "pho": ((6, -3), "left"), "ncc": ((6, -3), "left")}
+TRACK_ITERS = (2, 5, 10, 25)  # BA iterations of the dotted track lines
 
 
 def load(run, name):
@@ -50,7 +71,8 @@ def load(run, name):
     return d
 
 
-def point(run, forward, recon=RECON):
+def point(run, forward, recon=RECON, recon_run=None):
+    """(time per scene, AUC@3, F1) of a run; F1 from recon_run if given, NaN if recon is empty; None if metrics are missing."""
     pba = {d: load(run, f"{d}_pba") for d in POSE}
     scenes = {d: list(pba[d]) for d in POSE}
     if not all(scenes.values()):
@@ -58,7 +80,7 @@ def point(run, forward, recon=RECON):
     timing, factor = pba, 1.0
     if os.path.isdir(run + "_t"):
         timing = {d: load(run + "_t", f"{d}_pba") for d in POSE}
-    elif (m := re.search(r"_it(\d+)$", run)) and int(m.group(1)) > 200 and os.path.isdir(run[: m.start()] + "_it200"):
+    elif not re.search(rf"/({'|'.join(TIMED_ALONE)})_it\d+$", run) and (m := re.search(r"_it(\d+)$", run)) and int(m.group(1)) > 200 and os.path.isdir(run[: m.start()] + "_it200"):
         timing, factor = {d: load(run[: m.start()] + "_it200", f"{d}_pba") for d in POSE}, int(m.group(1)) / 200
     t = []
     for d in POSE:
@@ -69,17 +91,24 @@ def point(run, forward, recon=RECON):
     auc = sum(sum(pba[d][s]["auc03"] for s in scenes[d]) / len(scenes[d]) for d in POSE) / len(POSE)
     f1 = []
     for d in recon:
-        r = load(run, f"{d}_recon_unposed")
+        r = load(recon_run or run, f"{d}_recon_unposed")
         if not r:
             return None
         f1.append(sum(v["fscore"] for v in r.values()) / len(r))
-    return sum(t) / len(t), 100 * auc, 100 * sum(f1) / len(f1)
+    return sum(t) / len(t), 100 * auc, 100 * sum(f1) / len(f1) if f1 else math.nan
+
+
+def missing(run, recon):
+    """The metric files point() needs that `run` lacks."""
+    names = [f"{d}_pba" for d in POSE] + [f"{d}_recon_unposed" for d in recon]
+    return [n for n in names if not os.path.exists(os.path.join(run, "metric_results", f"{n}.json"))]
 
 
 def main():
     os.chdir(REPO_ROOT)
     models = sys.argv[2:] or list(MODELS)
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5.2), facecolor="#fcfcfb")
+    fig, axes = plt.subplots(1, 2, figsize=(12.5, 7.5), facecolor="#fcfcfb")
+    xmax = 1.0
     for model in models:
         color = MODELS[model]
         if not os.path.exists(f"workspace/evaluation/{model}/timings.jsonl"):
@@ -91,33 +120,49 @@ def main():
             if not r["posed"] and "forward_s" in r:
                 d, s = r["task"].split("/", 1)
                 forward[(d, s.rsplit("/unposed", 1)[0])] = r["forward_s"]
-        init = point(f"workspace/tto/{model}/init_dev", forward, RECON_ALL)
+        root = f"workspace/tto/{model}"
+        init = point(f"{root}/init_dev", forward, RECON_ALL)
         for fam, (ls, _) in FAMILIES.items():
-            runs = sorted((int(re.search(r"_it(\d+)$", p).group(1)), p) for p in glob.glob(f"workspace/tto/{model}/{fam}_it*") if re.search(r"_it\d+$", p))
+            runs = sorted((int(re.search(r"_it(\d+)$", p).group(1)), p) for p in glob.glob(f"{root}/{fam}_it*") if re.search(r"_it\d+$", p))
             pts = [(0, init)] + [(it, point(run, forward, RECON_ALL)) for it, run in runs]
             pts = [(it, p) for it, p in pts if p]
             if len(pts) < 2:
                 continue
+            for it, p in pts[1:]:
+                print(f"{model} {fam}_it{it}: {p[0]:.2f} s, AUC@3 {p[1]:.1f}, F1 {p[2]:.1f}")
+            xmax = max(xmax, *(p[0] for _, p in pts))
             for ax, k in zip(axes, (1, 2)):
                 ax.plot([p[0] for _, p in pts], [p[k] for _, p in pts], color=color, lw=2, ls=ls, marker="o", ms=6, mec="#fcfcfb", mew=1.5, zorder=3)
                 for it, p in pts:
-                    if fam == "v3" and it:
-                        ax.annotate(f"{it}", (p[0], p[k]), textcoords="offset points", xytext=(5, -11), fontsize=7.5, color="#52514e")
-                    elif it:  # dashed family: labels above the points, so they don't collide with the solid line's
-                        ax.annotate(f"{it}", (p[0], p[k]), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=7.5, color="#52514e", style="italic")
+                    if it in LABEL_T.get(fam, ()):
+                        off, ha = LABEL_OFFSET[fam]
+                        ax.annotate(f"{it}", (p[0], p[k]), textcoords="offset points", xytext=off, ha=ha, fontsize=7.5, color="#52514e")
+        tracks = [(k, point(f"{root}/ba_fast_it{k}", forward, RECON, recon_run=f"{root}/time_ba_it{k}")) for k in TRACK_ITERS]
+        tracks = [(k, p) for k, p in tracks if p]
+        start = point(f"{root}/init_dev", forward, RECON)  # the track runs' F1 has three datasets: start from the same three
+        if tracks and start:
+            xmax = max(xmax, *(p[0] for _, p in tracks))
+            for ax, c in zip(axes, (1, 2)):
+                ax.plot([start[0]] + [p[0] for _, p in tracks], [start[c]] + [p[c] for _, p in tracks], color=color, lw=2, ls=":", marker="o", ms=5, mec="#fcfcfb", mew=1.2, zorder=3)
+                for k, p in (tracks[0], tracks[-1]):  # the iterations hardly change x, so they stack: label the two ends
+                    ax.annotate(f"k={k}", (p[0], p[c]), textcoords="offset points", xytext=(6, -3), fontsize=7.5, color="#52514e")
         if init:  # the unrefined DA3 prediction, the start of every line
             for ax, k in zip(axes, (1, 2)):
                 ax.plot([init[0]], [init[k]], marker="o", ms=10, mfc="#fcfcfb", mec=color, mew=2.2, ls="none", zorder=5)
         for name, (marker, _) in POINTS.items():
-            p = point(f"workspace/tto/{model}/{name}", forward, RECON_ALL)
+            run = f"{root}/{name}"
+            p = point(run, forward, RECON_ALL)
+            if p is None and os.path.isdir(run):
+                print(f"skip {run}: missing {', '.join(missing(run, RECON_ALL)) or 'scenes'}")
             if p:
+                print(f"{model} {name}: {p[0]:.2f} s, AUC@3 {p[1]:.1f}, F1 {p[2]:.1f}")
                 for ax, k in zip(axes, (1, 2)):
-                    ax.plot([p[0]], [p[k]], color=color, marker=marker, ms=8, mec="#0b0b0b", mew=0.8, ls="none", zorder=4)
+                    ax.plot([p[0]], [p[k]], color=color, marker=marker, ms=9, mec="#0b0b0b", mew=0.8, ls="none", zorder=6)
         axes[0].plot([], [], color=color, lw=2, marker="o", ms=6, label=model)
-    for ax, title in zip(axes, ("Pose AUC@3 (%), mean of 5 datasets", "Recon F1 (%), mean of HiRoom, 7-Scenes, ScanNet++, ETH3D")):
-        ax.set_xscale("symlog", linthresh=1)
-        ax.set_xlabel("time per scene (s): DA3 forward + PBA, RTX 5090", color="#52514e")
-        ax.set_title(title, fontsize=10, color="#0b0b0b", loc="left")
+    for ax, ylabel in zip(axes, ("pose AUC@3 (%)", "recon F1 (%)")):
+        ax.set_xlim(0, 1.04 * xmax)
+        ax.set_xlabel("time per scene (s): DA3 forward + TTO, RTX 5090", color="#52514e")
+        ax.set_ylabel(ylabel, color="#52514e")
         ax.set_facecolor("#fcfcfb")
         ax.grid(color="#e4e3df", lw=0.8)
         for s in ("top", "right"):
@@ -125,15 +170,18 @@ def main():
         for s in ("left", "bottom"):
             ax.spines[s].set_color("#a8a7a1")
         ax.tick_params(colors="#52514e", labelsize=8)
-    axes[0].plot([], [], marker="o", ms=9, mfc="#fcfcfb", mec=STYLE, mew=2.2, ls="none", label="DA3 alone (no PBA)")
+    axes[0].plot([], [], marker="o", ms=9, mfc="#fcfcfb", mec=STYLE, mew=2.2, ls="none", label="DA3 alone (no TTO)")
     for fam, (ls, desc) in FAMILIES.items():
         axes[0].plot([], [], color=STYLE, lw=2, ls=ls, label=desc)
+    axes[0].plot([], [], color=STYLE, lw=2, ls=":", label="RoMa tracks + BA (radial, ba_lm), k iterations; F1 without ETH3D")
     for name, (marker, desc) in POINTS.items():
         axes[0].plot([], [], color=STYLE, marker=marker, ms=7, mec="#0b0b0b", mew=0.8, ls="none", label=desc)
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, fontsize=8)
-    fig.suptitle("PBA iterations per level (labels) and optimiser vs. model size, dev subset", fontsize=11, x=0.01, ha="left")
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.05), ncol=3, frameon=False, fontsize=8, handlelength=3.5)
+    fig.text(0.5, 0.008, "Dev subset (22 scenes), one seed. All TTO lines: one shared focal length, 8-cell depth grid, gated radial "
+             "coefficient. Points from left to right: T = 25, 50, 200, 400, 800.\n"
+             "VGGSfM tracks + BA (90-110 s per scene) not shown.", ha="center", fontsize=7.5, color="#52514e")
+    fig.tight_layout(rect=(0, 0.14, 1, 1))
     fig.savefig(sys.argv[1], dpi=150)
     print(sys.argv[1])
 
