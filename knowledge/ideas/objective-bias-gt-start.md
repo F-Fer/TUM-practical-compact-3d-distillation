@@ -7,8 +7,9 @@ biased; NCC removes most of it** · Area: PBA · Updated 2026-11-10
 The drift doesn't depend on the pixel count (bias, not noise). It shrinks with more depth freedom, a lens model on
 ETH3D and, most of all, NCC instead of per-pixel grey differences.
 
-**How to run:** `init_gt=true` (LM from GT poses and focal, no Adam), report AUC@3 at LM iterations 5 and 20 on the
-`drift` scenes (HiRoom 5, DTU-64 2, ETH3D 3); `scripts/pm_table.py --track` tabulates it.
+**How to run:** `init_gt=pose_focal levels=1 lm_levels=0 lm_iters=5` and again with `lm_iters=20` (LM from the GT poses
+and focal, no Adam), on the `drift` scenes (HiRoom 5, DTU-64 2, ETH3D 3). The old code tracked AUC@3 per iteration
+in one run (`track_every`, `scripts/pm_table.py --track`); that was removed in the 2026-11-10 refactor; the code is at commit `1c1a921`.
 
 ## Evidence (AUC@3 at LM iteration 5 / 20; REPORT3 §3, REPORT4 §4)
 

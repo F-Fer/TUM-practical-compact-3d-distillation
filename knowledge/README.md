@@ -10,6 +10,12 @@ by section. Updated 2026-11-10.
   `scripts/index_runs.py`. Grep it before running a configuration: `grep -i "lm_photo_loss=ncc" knowledge/runs.csv`.
 - [infrastructure.md](infrastructure.md): tum2/job/disk lessons.
 
+**Code state:** since 2026-11-10 the photometric / feature-metric BA is one script, `scripts/run_tto_pba.py`, whose
+defaults are the current photometric configuration ([pba-method](ideas/pba-method.md)). Options of the alternatives
+that are marked rejected or slow here were removed; where an idea file's open points need one of them, its code is at
+commit `1c1a921` (`git show 1c1a921:scripts/run_tto_pba.py`, `scripts/pba_analytic.py`). `runs.csv` describes old runs
+relative to the current code.
+
 ## Workflow
 
 **Before an experiment:** read this page, grep `ideas/` and `runs.csv` for the idea and its options. If it was tried,

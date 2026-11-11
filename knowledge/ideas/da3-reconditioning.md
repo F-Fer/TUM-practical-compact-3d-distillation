@@ -3,7 +3,7 @@
 Status: **rejected as a default** (not a consistent gain after the hybrid; helps DTU Chamfer) · Area: TTO pipeline ·
 Updated 2026-11-10
 
-`scripts/run_tto_recond.py`: feed PBA's refined cameras into DA3's posed mode (intrinsics converted back to the original
+`scripts/run_tto_recond.py` (removed in the 2026-11-10 refactor; the code is at commit `1c1a921`): feed PBA's refined cameras into DA3's posed mode (intrinsics converted back to the original
 image size), keep the refined cameras and take DA3's new depth. One extra forward pass.
 
 ## Evidence (REPORT2 §4, §6)

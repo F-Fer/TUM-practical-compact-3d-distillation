@@ -25,8 +25,11 @@ Columns:
                     the compute plot uses the 4 sets hiroom+7scenes+scannetpp+eth3d)
   tto_s             mean TTO seconds per scene (opt_s; first scene of each dataset replaced by the dataset's median,
                     as in plot_compute.py). For feed-forward runs: median forward seconds from timings.jsonl
-  overrides         pba_config.json values that differ from the current DEFAULTS of run_tto_pba.py (bookkeeping keys
-                    left out). Options added after a run are absent from its config and not shown
+  overrides         how the run's configuration differs from what scripts/run_tto_pba.py does now with its DEFAULTS
+                    (bookkeeping keys left out). Runs of the code before the single-file refactor (pba_config.json
+                    without "code_version"): options their config lacks take that code's defaults (commit 1c1a921);
+                    options that no longer exist are shown if they differ from what the code now does fixed (e.g.
+                    impl=autograd, bright_rel=False) or, for dropped experiments, from their old default (e.g. pose_basis=6)
   date              modification date of the run's config or metric files (approximate: copies may be newer)
 Numbers depend on GPU (RTX 5090 on tum2, 3070 for session 5), code snapshot and seed; see knowledge/evaluation.md.
 """
@@ -51,7 +54,12 @@ SETS = {
     (5, 0, 0, 2, 3): "drift",
     (2, 0, 0, 0, 1): "tiny",
 }
-SKIP_KEYS = {"datasets", "max_scenes", "scenes", "save", "first_scene", "init_from", "track_every", "wandb"}
+SKIP_KEYS = {"subset", "datasets", "max_scenes", "scenes", "save", "first_scene", "init_from", "track_every", "wandb", "code_version"}
+LEGACY_COMMIT = "1c1a921"  # last commit of the multi-option run_tto_pba.py (with pba_analytic.py)
+# options of the old code that the current one has no longer, with what it now does without them
+NOW_FIXED = {"impl": "analytic", "lm_impl": "analytic", "lm_solver": "dense32", "bright": True, "bright_rel": True,
+             "gray": True, "vgg_fast": True, "optimizer": "adam", "camera": "pinhole", "res_scale": 1.0, "depth_param": "grid",
+             "photo_agg": "mean", "grad_weight": 1.0, "pool_factor": 16, "patch_stride": 1.0, "lm_fixed": False}
 MODEL_RE = re.compile(r"^(DA3-|dvlt|VGGT|Pi3|pilot_)")
 
 
@@ -80,6 +88,60 @@ def defaults():
     return None
 
 
+def legacy_defaults():
+    """DEFAULTS of run_tto_pba.py at LEGACY_COMMIT, from git."""
+    import subprocess
+
+    try:
+        src = subprocess.run(["git", "-C", REPO, "show", f"{LEGACY_COMMIT}:scripts/run_tto_pba.py"], capture_output=True, text=True, check=True).stdout
+        for node in ast.parse(src).body:
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DEFAULTS" for t in node.targets):
+                return ast.literal_eval(node.value)
+    except (OSError, subprocess.CalledProcessError, SyntaxError, ValueError) as e:
+        print(f"[index_runs] can't read the old DEFAULTS at {LEGACY_COMMIT} ({e}); old runs' overrides are less complete", file=sys.stderr)
+    return {}
+
+
+def overrides(cfg, dflt, legacy):
+    """key=value of the options in which the run differs from what the current code does (see the docstring)."""
+    if cfg.get("code_version") or not legacy:
+        eff, old = cfg, {}
+    else:
+        eff, old = {**legacy, **cfg}, legacy
+        if eff.get("features") == "rgb":  # the old name of the grey / colour images
+            eff = {**eff, "features": "grey" if eff.get("gray", True) else "rgb"}
+    if eff.get("levels", "x") == "":
+        return "levels="  # no optimisation: DA3's prediction scored through the same pipeline
+    # options without effect in this run
+    vgg, grey_huber = eff.get("features") == "vgg", eff.get("features") in ("grey", "rgb") and eff.get("photo_loss") != "ncc"
+    has_lm = bool(eff.get("lm_levels")) or eff.get("optimizer") == "lm"
+    idle = set()
+    if not vgg:
+        idle |= {"feat_dim", "vgg_fast"}
+    if not grey_huber:
+        idle |= {"bright", "bright_rel", "lr_bright", "gray"}
+    if not eff.get("radial", False):
+        idle |= {"radial_max", "radial_gate", "w_radial", "lr_radial"}
+    if not has_lm:
+        idle |= {k for k in eff if k.startswith("lm_")}
+    out = []
+    for k, v in eff.items():
+        if k in SKIP_KEYS or k in idle:
+            continue
+        if dflt is not None and k in dflt:
+            if dflt[k] != v:
+                out.append(f"{k}={v}")
+        elif k in NOW_FIXED:
+            if NOW_FIXED[k] != v:
+                out.append(f"{k}={v}")
+        elif k in old:
+            if old[k] != v:
+                out.append(f"{k}={v}")
+        else:
+            out.append(f"{k}={v}")
+    return " ".join(out)
+
+
 def fmt(x):
     return "" if x is None else f"{x:.1f}"
 
@@ -99,7 +161,7 @@ def find_runs():
             dirnames[:] = [d for d in dirnames if d not in ("model_results", "exports", "queue", "snap", "feats")]
 
 
-def describe(src, root, dirpath, rel, dflt):
+def describe(src, root, dirpath, rel, dflt, legacy):
     idx = next((i for i, p in enumerate(rel) if MODEL_RE.match(p)), None)
     if idx is None:
         return None
@@ -173,15 +235,7 @@ def describe(src, root, dirpath, rel, dflt):
         row["tto_s"] = f"{statistics.median(t):.2f}" if t else ""
     else:
         row["tto_s"] = f"{statistics.mean(opt):.2f}" if opt else ""
-    ov = []
-    if cfg:
-        for k, v in cfg.items():
-            if k in SKIP_KEYS:
-                continue
-            if dflt is not None and k in dflt and dflt[k] == v:
-                continue
-            ov.append(f"{k}={v}")
-    row["overrides"] = " ".join(ov)
+    row["overrides"] = overrides(cfg, dflt, legacy) if cfg else ""
     stamp_src = os.path.join(dirpath, "pba_config.json") if cfg else mdir
     row["date"] = datetime.date.fromtimestamp(os.path.getmtime(stamp_src)).isoformat()
     row["source"] = src
@@ -192,10 +246,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default=os.path.join(REPO, "knowledge", "runs.csv"))
     args = ap.parse_args()
-    dflt = defaults()
+    dflt, legacy = defaults(), legacy_defaults()
     best = {}
     for src, root, dirpath, rel in find_runs():
-        row = describe(src, root, dirpath, rel, dflt)
+        row = describe(src, root, dirpath, rel, dflt, legacy)
         if row is None:
             continue
         key = (row["model"], row["run"])

@@ -26,9 +26,9 @@ parameters (the code turns them off for those), which is part of why they looked
   T = 800 41.3.
 - F1 (dev, 4 sets): relative T = 50 48.1 (was 46.1), T = 800 46.1 (was 41.5).
 - Earlier (11-02 loss sweep, before the fix, T = 50 + LM 5): without the brightness model pose −0.8.
-- Implemented in the analytic gradient (`pba_analytic.Kernel.photo_res`, `gradient`; checked against central
-  differences, ratio 1.00000) and autograd `PBA.residuals`; the LM levels keep brightness fixed, and `lm_residuals` of the
-  jvp path still has the old form, so `bright_rel` needs `impl=analytic lm_impl=analytic`.
+- Implemented in `Kernel.photo_res` and `Kernel.gradient` of `run_tto_pba.py` (checked against central differences,
+  ratio 1.00000); the LM levels keep brightness fixed. Since the 2026-11-10 refactor it is the only brightness model
+  (no option; the absolute form is at commit `1c1a921`).
 
 ## Consequences
 

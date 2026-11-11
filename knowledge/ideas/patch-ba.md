@@ -4,7 +4,7 @@ Status: **rejected** (settles, but at a worse fixed point; without Adam it fails
 
 The proposal (tested in session 4 with four experiments): per alignment, each of 200 patches per frame is warped into
 each neighbour and aligned by Lucas-Kanade alone (3 iterations, zero-mean, gain); then LM on the aligned
-correspondences with a free depth per patch (exact Schur), no image lookups. Code: `scripts/pba_patch.py`
+correspondences with a free depth per patch (exact Schur), no image lookups. Code (removed in the 2026-11-10 refactor; the code is at commit `1c1a921`): `scripts/pba_patch.py`
 (`patch=<sigma:alignments,...>`), checked against central differences and a dense solve (1e-13).
 
 ## Evidence (SMALL dev; REPORT4 §5-6)

@@ -4,7 +4,7 @@ Status: **adopted, two variants:** VGG + Huber at 1,024 px (`fmh`, cheap, best F
 4,096 px (`fm`, best pose on LARGE at long T, 3.3x the time) · Area: PBA loss / speed · Updated 2026-11-10
 
 Features: VGG16 relu1_2 + relu2_2, upsampled, PCA-reduced per scene (8 channels now, 16 before session 3),
-`vgg_fast=true` keeps the network between scenes, runs 8 frames per pass and does the PCA by eigendecomposition
+the fast extractor (always on since 2026-11-10) keeps the network between scenes, runs 8 frames per pass and does the PCA by eigendecomposition
 (0.06-0.36 s per scene). No brightness parameters.
 
 ## Evidence

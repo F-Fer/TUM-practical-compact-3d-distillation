@@ -3,7 +3,8 @@
 Status: **rejected for DA3 initialisations** (coarse level neutral, token matches wrong) · **kept as an option** for
 poor initialisations (it widens the basin) · Area: PBA features · Updated 2026-11-10
 
-DA3's backbone tokens are free (the forward pass computes them). `scripts/cache_da3_feats.py` re-runs DA3 exactly as
+DA3's backbone tokens are free (the forward pass computes them). The token levels, matches and `scripts/cache_da3_feats.py`
+were removed in the 2026-11-10 refactor; the code is at commit `1c1a921`. `cache_da3_feats.py` re-ran DA3 exactly as
 the evaluator with `export_feat_layers` and caches L2-normalised tokens PCA-reduced to 64 channels
 (`workspace/tto/feats/`, 1.3 GB). Used as a level with `levels=local:0,vgg:4,vgg:2,vgg:1`.
 

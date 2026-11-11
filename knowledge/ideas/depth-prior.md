@@ -15,7 +15,7 @@ a good init (LARGE) is mostly hurt by free depth corrections. A prior fitted to 
 | 10-30 | LARGE dev | 1 / 10 / 100 / 1000 | HiRoom F1 77.4 / 84.5 / 83.4 / 82.0, 7-Scenes F1 54.8 / 60.1 / 65.7 / 58.6, DTU CD 2.59 / 2.40 / 1.94 / 1.59 | REPORT1 |
 | 10-30 | full benchmark | w = 10 SMALL/BASE, 100 LARGE | ~neutral for SMALL/BASE; LARGE v3 w = 100 better than DA3-LARGE on every metric except a DTU-CD near-tie (HiRoom F1 69.5 → 82.8) | REPORT1 |
 | 10-31 | LARGE full, hybrid | `w_prior=100` (+ `w_pose=10`) | best LARGE results of session 2 (DTU CD 1.62 mm, first PBA result below DA3's 1.81) | REPORT2 §6 |
-| 11-08 | SMALL dev, 3 seeds | prior fitted by ML to DA3's depth error (`scripts/fit_depth_prior.py`): offset prior half the shape prior (`w_scale=0.5`), smoothness between cells (`w_smooth=0.14`) | 34.0 and 33.8 vs 33.7: neutral | REPORT5 §4 |
+| 11-08 | SMALL dev, 3 seeds | prior fitted by ML to DA3's depth error (`scripts/fit_depth_prior.py`; it and `w_scale`/`w_smooth` were removed in the 2026-11-10 refactor; the code is at commit `1c1a921`): offset prior half the shape prior (`w_scale=0.5`), smoothness between cells (`w_smooth=0.14`) | 34.0 and 33.8 vs 33.7: neutral | REPORT5 §4 |
 
 ## Open
 

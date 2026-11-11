@@ -32,13 +32,14 @@ undistorted scenes (it trades off with the focal), hence barrel-only plus a gate
   GIANT loses on DTU with it (95.2 alone → 86.9/89.7). The principal point isn't what it absorbs (REPORT5 §4).
 - The gate's HiRoom margin is thin (max \|k\| 0.0097 on SMALL vs 0.01), and the threshold fits T = 50 only.
 - `results.npz` stays pinhole: ETH3D recon F1 doesn't benefit directly.
-- `camera=radial` only exists on the old autograd/jvp path (no `bright_rel`, no stop rule, 3-6x slower); porting it to
-  the analytic kernels is a few hours of work plus a float64 check.
+- `camera=radial` was only on the old autograd/jvp path (no `bright_rel`, no stop rule, 3-6x slower), removed in the 2026-11-10 refactor; the code is at commit `1c1a921`;
+  porting it to the analytic kernels is a few hours of work plus a float64 check.
 
 ## Next
 
 Compare 1 vs 2 coefficients in the same configuration on all 11 ETH3D scenes (SMALL, LARGE; VGG + Huber config, which
-runs on both paths: analytic `radial=true`, old path pinhole, old path `camera=radial`; ~20-30 GPU min). Only if 2
+runs on both paths: analytic `radial=true`, old path pinhole, old path `camera=radial`, the old path from commit
+`1c1a921`; ~20-30 GPU min). Only if 2
 coefficients clearly win, port them to the analytic path. A per-camera (not per-scene) gate; export the undistortion
 for recon.
 

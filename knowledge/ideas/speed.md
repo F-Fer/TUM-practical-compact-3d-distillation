@@ -48,6 +48,6 @@ rule < 1 s. Image decoding (~1.8 s per scene) isn't counted anywhere.
 
 ## Open
 
-`camera=radial`, `res_scale` and `sample_chunk` (REPORT6) exist only on the autograd/jvp path (3-6x slower).
+`camera=radial`, `res_scale` and `sample_chunk` (REPORT6) were only on the autograd/jvp path (3-6x slower), removed in the 2026-11-10 refactor; the code is at commit `1c1a921`.
 
 Related: [feature-metric-vgg](feature-metric-vgg.md), [pba-method](pba-method.md).
