@@ -116,7 +116,7 @@ Each run writes to `workspace/evaluation/<model>/` (add `workspace.work_dir=<dir
 
 The console logs are `workspace/bench_<model>*.log`. The benchmark data itself is in `workspace/benchmark_dataset/` (see "Download the data").
 
-Committed to git (`results/da3_bench/<model>/`, written by `compare_paper.py --save`): the metric JSONs, `timings.jsonl`, `runs.jsonl` and `comparison.md` (our numbers next to the paper's). The predictions and point clouds are too large and aren't committed. To get them on another machine, rerun the benchmark.
+`compare_paper.py --save` writes `results/da3_bench/<model>/`: the metric JSONs, `timings.jsonl`, `runs.jsonl` and `comparison.md` (our numbers next to the paper's). Only `comparison.md` is committed; the JSON/JSONL files stay on the machine that ran the benchmark (gitignored since 2026-11-10, earlier versions are in the git history). The predictions and point clouds are too large and aren't committed. To get them on another machine, rerun the benchmark.
 
 ### Compare with the paper
 
@@ -125,7 +125,7 @@ uv run scripts/compare_paper.py            # print ours vs. paper for every run 
 uv run scripts/compare_paper.py --save     # also copy metrics, timings and comparison.md to results/da3_bench/<model>/
 ```
 
-Commit `results/da3_bench/`; it is our record of the baseline numbers.
+Commit the `comparison.md` files; they are our record of the baseline numbers.
 
 ### Visualize reconstructions
 
@@ -186,9 +186,11 @@ Our own changes don't cause the differences. The pipeline is deterministic on ou
 
 ## Test-time optimization (TTO)
 
+What has been tried, what worked and how well: [`knowledge/README.md`](knowledge/README.md) (one file per idea, the current best results and the open questions; `knowledge/runs.csv` indexes every scored run).
+
 We refine the saved DA3 predictions (cameras and depth) without training and score them with the benchmark's metrics on a dev subset of 22 scenes (HiRoom 10, 7-Scenes 2, ScanNet++ 3, DTU-64 4, ETH3D 3), one seed. A method reads `workspace/evaluation/<model>/` and writes a run directory in the same layout; `scripts/eval_tto.py` and `scripts/eval_recon_aligned.py` score it, `scripts/compare_tto.py` and `scripts/tracks_table.py` tabulate runs.
 
-- **Photometric BA** (`scripts/run_tto_pba.py`, reports in `results/pba/`): poses, focal length and a coarse depth grid optimised on photometric/feature NCC, then an LM polish.
+- **Photometric BA** (`scripts/run_tto_pba.py`, reports in `results/pba/`): poses, one shared focal length, a coarse depth grid and a radial lens coefficient optimised on grey-image (default) or VGG-feature (`features=vgg`) consistency between frames, Adam on blurred images then Levenberg-Marquardt; `subset=dev` runs the dev scenes.
 - **Track-based BA** (`scripts/run_tto_ba.py`): RoMa v2 or VGGSfM tracks, then pycolmap BA with a Cauchy loss. Configurations are named in `scripts/tto_configs.sh`; `camera=radial` models lens distortion (needed on ETH3D) and `depth_fit=grid` refits the depth to the BA points. Using the BA's cameras, a depth-only polish (`run_tto_pba.py init_from=<run> poses=false focal=none`) refines only the depth.
 - **BA iterations** (own solver, `scripts/ba_lm.py` with `run_tto_ba_iterations.py`, `run_tto_ba_truncated.py`, `ba_iteration_curves.py`): pycolmap can't cap the iterations or expose them, so we re-solve the dumped BA problem with the same objective, optionally with a prior on DA3's poses.
 

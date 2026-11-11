@@ -9,8 +9,8 @@ ba_fast_it<k>, F1 of time_ba_it<k>, the same predictions before the solver got f
 (time_vggsfm, 90-110 s per scene) would be far off the linear time axis and isn't drawn. A run that lacks one of the
 metric files is skipped, PBA markers with a message; run_tto_dev.sh scores recon without ETH3D, so its runs need
 `eval_tto.py workspace/evaluation/<model> <run> eth3d recon_unposed --workers 1` first.
-The families are the session-5 configurations (2026-11-09, job lines $SCRATCH/jobs/pmba/f1_lines.py and f2_lines.py,
-copies in results/pba/jobs/pmba/); results/pba/figures3/compute_all_models.png (the families v3 and rec, the markers fastpolish50
+The families are runs of scripts/run_tto_pba.py: `pho_it<T>` its defaults with iters=T, `fmh_it<T>` with features=vgg
+(made 2026-11-09 by the code at commit 1c1a921, which gives the same results); results/pba/figures3/compute_all_models.png (the families v3 and rec, the markers fastpolish50
 and recommended, a symlog time axis) was drawn by this script as of commit d725f23.
 x = mean time per scene: DA3 forward (workspace/evaluation/<model>/timings.jsonl) + PBA optimisation (opt_s). If
 <run>_t exists (the same configuration re-timed alone on a GPU, e.g. because <run> shared its GPU or ran on the CPU), its
@@ -43,14 +43,11 @@ POSE = ["hiroom", "7scenes", "scannetpp", "dtu64", "eth3d"]
 RECON = ["hiroom", "7scenes", "scannetpp"]
 RECON_ALL = RECON + ["eth3d"]  # all F1 datasets (the DA3 paper's recon average)
 STYLE = "#a8a7a1"  # legend entries for line style / marker shape (not a series)
-# Both: analytic code, 10 spread neighbours, 8-cell depth grid, one shared focal length (focal_init=median), gated
-# radial coefficient (0.01), Adam on 4 blur levels x T, then one LM level on the sharp images.
-# pho: photometric, grey Huber with relative brightness, 1024 px, LM on Huber with the stop rule (REPORT5's B')
-# fmh: feature-metric at about the cost of pho: VGG16 features (8 PCA channels) with the per-pixel Huber loss at 1024 px,
-#     LM with the stop rule (job lines f2_lines.py)
-# Not drawn (runs in workspace/tto and results/pba/runs): fm_it<T>, feature-metric VGG + NCC of 3x3 patches at 4096 px
-# (REPORT3's configuration with the shared focal, 3x the cost of fmh at T = 800), and ncc_it<T>, pho followed by 40 LM
-# iterations on NCC of 3x3 grey patches. Add them back to FAMILIES as "fm": ("-.", "Feature-metric: VGG + NCC (4,096 px),
+# pho: run_tto_pba.py's defaults (photometric: grey Huber with relative brightness, 1024 px, 10 spread neighbours, 8-cell
+#     depth grid, shared focal, gated radial coefficient, Adam on 4 blur levels x T, LM on the sharp images with the stop rule)
+# fmh: the same with features=vgg (VGG16 features, 8 PCA channels, Huber at 1024 px)
+# Not drawn (runs in workspace/tto and results/pba/runs): fm_it<T> (features=vgg photo_loss=ncc samples=4096 lm_samples=0,
+# 3x the cost of fmh at T = 800) and ncc_it<T> (lm_photo_loss=ncc lm_iters=40 lm_stop=0). Add them back to FAMILIES as "fm": ("-.", "Feature-metric: VGG + NCC (4,096 px),
 # Adam (4 x T) + LM") etc.
 FAMILIES = {
     "fmh": ("-", "Feature-metric: VGG + Huber (1,024 px), Adam (4 x T) + LM"),
