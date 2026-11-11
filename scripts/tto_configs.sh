@@ -45,4 +45,10 @@ declare -A CONFIGS=(
     [abl-shrink25]="$Q4 shrink=0.25"
     [abl-shrink50]="$Q4 shrink=0.5"
     [abl-shrink75]="$Q4 shrink=0.75"
+    # cheaper tracking: match each query only to its k most covisible frames, fewer queries (one RoMa call per query-frame pair)
+    [fast-p10]="$Q4 pairs=10"
+    [fast-p5]="$Q4 pairs=5"
+    [fast-q2p10]="$Q4 query_frames=2 extra_queries=2 pairs=10"
+    [fast-q2p5]="$Q4 query_frames=2 extra_queries=2 pairs=5"
+    [fast-q4e0p10]="$Q4 extra_queries=0 pairs=10"
 )
