@@ -28,7 +28,8 @@ def frames(n, image_dir=""):
     from dvlt.util.preprocess import preprocess_images
 
     if image_dir:  # any folder of same-sized images (timing does not depend on content)
-        files = sorted(f for f in os.listdir(image_dir) if f.lower().endswith((".png", ".jpg", ".jpeg")))
+        files = sorted(f for f in os.listdir(image_dir)
+                       if f.lower().endswith((".png", ".jpg", ".jpeg")) and "depth" not in f.lower())  # 7-Scenes
         idx = torch.linspace(0, len(files) - 1, n).long().tolist()
         imgs = [Image.open(os.path.join(image_dir, files[i])) for i in idx]
         return preprocess_images(imgs, 504, 14, "cpu")["images"]
