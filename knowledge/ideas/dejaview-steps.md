@@ -29,6 +29,28 @@ LARGE-1.1 51.3 (1.54 s), GIANT-1.1 67.0 (2.85 s) AUC@3.
 - From the distillation runs: DéjàView at K < 8 is very sensitive to resampling (a cv2-resized cache moved AUC@3 by
   ~10 points), so always use its own `preprocess_images` ([distillation](distillation.md)).
 
+## Why K < 8 collapses, and the paper's K (2026-11-15, Finn + Claude, read in code and paper)
+
+- The checkpoint was trained with K ~ Beta(2, 1) scaled to [8, 16] (`min_steps=8`, `num_steps=16`), and each
+  step is conditioned on the interval (t_now, t_next) of `linspace(0, 1, K)` plus a terminal (1, 1) step
+  (`k_sampling=linspace`, `time_conditioning=interval`, two zero-initialised gate MLPs, ~0.32M parameters). K < 8
+  therefore queries step sizes (1/5, 1/3, 1/2) that training never saw: the collapse is extrapolation in step size,
+  which makes few-step (shortcut-style) distillation of the gates a cheap experiment.
+- The paper runs K = 16 at inference (its Table 5: 12 → 16 is +3.7 AUC@3); the HF config and our adapter use 12.
+- Solv3R (arXiv 2611.02857, weights released) is a fine-tuned DéjàView made step-independent, with adaptive stopping.
+- Probe job 2832 on tum2 (submitted 11-15, training-free; script `$SCRATCH/jobs/dvlt_probe/`, outputs
+  `workspace/evaluation/dvlt_probe/<name>/`): K = 6 uniform / big last interval / big first interval, K = 16, K = 24,
+  K = 8 uniform / six trained-size steps then one jump. Scored 11-16, see below.
+- First photometric TTO numbers on DéjàView (dev, `pho_it25`, read from the per-scene lines of Antonin's
+  `dvlt_tto_fast` logs, not from metric files): K = 12 56.2 → 70.6, 8 43.8 → 67.3, 6 27.5 → 58.0, 4 7.7 → 33.2,
+  3 2.0 → 20.9 AUC@3 at 0.23-0.36 s TTO; VGG + Huber (`fmh_it25`) is not better (K = 12 71.6 at 1.41 s).
+- Probe results (official evaluator, 5-dataset mean AUC@3): K = 16 **61.2** (1.16 s), K = 24 60.1; K = 6 uniform 31.1
+  (= control), big last interval 30.4, big first interval 26.6; K = 8 uniform 47.6, six trained-size steps + jump
+  41.2. So K = 16 beats our K = 12 baseline (+2.5) and keeping trained interval sizes does not help: the number of
+  block applications is what matters. Photometric TTO on K = 16: 61.2 → 70.6 (all 81 scenes).
+- Research directions built on this: `reports/DéjàView and Solv3r distillation ideas.md`; first
+  training pilot in [dejaview-few-step-distillation](dejaview-few-step-distillation.md).
+
 ## Open
 
 TTO on DéjàView at K = 3-12 (jobs submitted 11-09/10): does a cheap K + TTO beat a larger K? This is the same

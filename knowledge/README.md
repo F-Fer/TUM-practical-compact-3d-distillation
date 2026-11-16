@@ -107,7 +107,9 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [views-scaling](ideas/views-scaling.md) | answered | saturates at 32-64 views; views trade worse than model size |
 | [benchmark-reproduction](ideas/benchmark-reproduction.md) | done | within ±1.5 / ±3 of the paper; ScanNet++ pose gap open |
 | [dejaview-steps](ideas/dejaview-steps.md) | in progress | K = 12 58.7 at 0.96 s; collapses below K = 6; TTO on it pending (Antonin) |
-| [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change |
+| [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
+| [dejaview-speed](ideas/dejaview-speed.md) | in progress | profile: loop 59-78 % of K = 16, encoder 4-8 %; released model locked to 504 px (420 px: 61 → 27, + TTO 71 → 37) |
+| [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
 ## Session reports (the long form)
 
