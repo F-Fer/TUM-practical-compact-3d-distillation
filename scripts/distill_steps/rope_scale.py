@@ -27,10 +27,13 @@ def install():
         d = tokens.size(-1) // 2
         inv = 1.0 / (self.base_frequency ** (torch.arange(0, d, 2, device=tokens.device).float() / d))
 
-        def rot(t, p):  # same arithmetic as the original: fp32 angles, cast to the token dtype, cos/sin there
-            a = (p.float()[..., None] * inv).to(tokens.dtype)
-            a = torch.cat((a, a), dim=-1)
-            return t * a.cos()[:, None] + self._rotate_features(t) * a.sin()[:, None]
+        def rot(t, p):
+            # Same arithmetic as the original table: the angles come from the same einsum, which under autocast is
+            # a bf16 matmul (bf16 positions x bf16 inv_freq, bf16 result), then token dtype, cos/sin there. An fp32
+            # product instead changes q/k by up to ~0.4 and the output depth by up to ~1 (see rope_dec_check.py).
+            a = torch.einsum("i,j->ij", p.float().reshape(-1), inv).to(tokens.dtype)
+            a = torch.cat((a, a), dim=-1).view(*p.shape, -1)
+            return t * a.cos().to(tokens.dtype)[:, None] + self._rotate_features(t) * a.sin().to(tokens.dtype)[:, None]
 
         v, h = tokens.chunk(2, dim=-1)
         return torch.cat((rot(v, positions[..., 0]), rot(h, positions[..., 1])), dim=-1)

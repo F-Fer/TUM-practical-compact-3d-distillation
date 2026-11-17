@@ -67,7 +67,9 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 2. Why NCC helps ETH3D/DTU (the loss or its 4,096 samples) and a stop rule for the NCC LM ([ncc](ideas/ncc.md)).
 3. Information for the weak pose directions: a wide-baseline term or tracks on top of B′
    ([pose prior](ideas/pose-prior-and-flat-directions.md), [correspondences](ideas/correspondences-in-pba.md)).
-4. TTO on DéjàView with fewer steps ([dejaview-steps](ideas/dejaview-steps.md), Antonin's jobs).
+4. TTO on DéjàView with fewer steps ([dejaview-steps](ideas/dejaview-steps.md), Antonin's jobs) or at 420 px with
+   RoPE scaling ([dejaview-speed](ideas/dejaview-speed.md)): both tie at ~67 after TTO; camera-head poses lift
+   K = 12 + TTO to 71.6 (why?); is 336 px worth a resolution distillation?
 5. One vs two radial coefficients in the same configuration on all 11 ETH3D scenes ([radial](ideas/radial-lens-model.md)).
 6. Track BA rerun with the shared focal / current polish, so it can be compared fairly ([track-ba](ideas/track-ba.md)).
 7. Re-tune the per-model priors (`w_prior`, `w_pose`) on the current configurations; GIANT never had any prior.
@@ -108,7 +110,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [benchmark-reproduction](ideas/benchmark-reproduction.md) | done | within ±1.5 / ±3 of the paper; ScanNet++ pose gap open |
 | [dejaview-steps](ideas/dejaview-steps.md) | in progress | K = 12 58.7 at 0.96 s; collapses below K = 6; TTO on it pending (Antonin) |
 | [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
-| [dejaview-speed](ideas/dejaview-speed.md) | in progress | profile: loop 59-78 % of K = 16, encoder 4-8 %; released model locked to 504 px (420 px: 61 → 27, + TTO 71 → 37) |
+| [dejaview-speed](ideas/dejaview-speed.md) | in progress | training-free: RoPE scaling fixes 420 px (59.2, + TTO 67.3), 336 px only partly; camera-head poses instead of the ray fit: −4 alone but K = 12 + head + TTO 71.6 at 2.8 s vs K = 16 + fit 70.9 at 3.7 s (3080) |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
 ## Session reports (the long form)
