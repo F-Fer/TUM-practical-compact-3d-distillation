@@ -8,6 +8,8 @@
 __pycache__
 .venv*/
 
+.envrc
+
 # Benchmark data, predictions and logs (large, machine-local)
 # no trailing slash: on tum2 it is a symlink to scratch
 /workspace
