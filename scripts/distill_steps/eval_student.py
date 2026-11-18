@@ -10,6 +10,7 @@
   DVLT_DEPTH_LR=1   depth head output stage at 216x288 (last upsampling stage), logits upsampled (fast_decode.py)
   DVLT_POSE=head    cameras from the camera head (pose_enc) instead of the RANSAC fit on the ray map; the ray map's
                     per-pixel output is then skipped (fast_decode.py)
+  DVLT_POSE=fit_headK  extrinsics from the RANSAC ray fit, intrinsics from the camera head
 
   DVLT_K=4 DVLT_CKPT=.../final.pt .venv/bin/python scripts/distill_steps/eval_student.py nvidia/dvlt \
       "eval.datasets=[hiroom,eth3d,dtu64,7scenes,scannetpp]" "eval.modes=[pose]" workspace.work_dir=...
@@ -33,7 +34,7 @@ RES = int(os.environ.get("DVLT_RES", "0"))
 ROPE = os.environ.get("DVLT_ROPE", "") not in ("", "0")
 DEPTH_LR = os.environ.get("DVLT_DEPTH_LR", "") not in ("", "0")
 POSE = os.environ.get("DVLT_POSE", "rays")
-assert POSE in ("rays", "head"), POSE
+assert POSE in ("rays", "head", "fit_headK"), POSE
 if ROPE:
     import rope_scale
 
@@ -69,6 +70,12 @@ def core(self, images):
     H, W = images.shape[-2:]
     pred = self.model({"images": images})
     w2c, Kmat = fast_decode.head_cameras(pred["pose_enc"][0], H, W)
+    if POSE == "fit_headK":
+        from dvlt.common.rays import rays_to_pose
+
+        with torch.autocast("cuda", enabled=False):
+            c2w, _ = rays_to_pose(pred["rays"], torch.ones_like(pred["depth_conf"]), H, W, self.patch_size)
+        w2c = torch.linalg.inv(c2w[0].float())[:, :3]
     return dict(depth=pred["depth"][0, ..., 0], conf=pred["depth_conf"][0], extrinsics=w2c, intrinsics=Kmat)
 
 

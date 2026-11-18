@@ -1,6 +1,6 @@
 # Where DéjàView spends its time, and cheaper inputs (resolution, encoder)
 
-Status: **in progress** · Area: feed-forward compute · Owner: Finn (+ Claude) · Updated 2026-11-16
+Status: **in progress** · Area: feed-forward compute · Owner: Finn (+ Claude) · Updated 2026-11-18
 
 **Answer so far:**
 - The 12-16 loop steps and the decoders take the time; the ViT-B encoder is only 4-9 % of a K = 16 forward
@@ -17,6 +17,15 @@ Status: **in progress** · Area: feed-forward compute · Owner: Finn (+ Claude) 
   better after TTO at 504 px. **K = 12 + camera head + TTO reaches 71.6 at 2.80 s forward (3080), above the released
   K = 16 + ray fit + TTO (70.9 at 3.67 s).** At 420 px the head hurts (66.7 → 63.6).
 - The depth head's output stage at 216x288 saves ~1 % and costs up to 2 AUC@3 after TTO: dropped.
+- **Resolution distillation works (R2, 3 h on 200 ARKit videos, 3080, 2026-11-18):** a student trained to reproduce
+  the released 504-px K = 16 output at 336/420/504 px (RoPE stretched) reaches at 336 px K = 16 **53.9 alone / 66.7
+  after TTO at 1.27 s** (released 34.0 / 49.0), at 336 px K = 12 52.0 / 66.0 at 1.08 s, at 420 px K = 12 58.5 / 70.3
+  at 1.76 s (released 56.0 / 66.7). Indoor-only data costs ETH3D and ~1.3 after TTO at 504 px.
+- **The camera head's gain after TTO comes from its intrinsics, not its poses (2026-11-18):** ray-fit extrinsics +
+  camera-head intrinsics (`DVLT_POSE=fit_headK`) reach **72.1** after TTO at K = 16 (held-out 71.5), head poses + fit
+  intrinsics 70.4. The fit's focal is as accurate (same median focal / GT), but its principal point is ~1 px off
+  centre and fx != fy by ~0.5 %; the TTO keeps the principal point fixed. Centring the fit's principal point and
+  setting fx = fy gives the same 72.1 without the head.
 
 Goal (from the strategy discussion, 2026-11-16): after K-reduction by self-distillation failed
 ([dejaview-few-step-distillation](dejaview-few-step-distillation.md)), cut DéjàView's fixed cost instead, so that a
@@ -199,6 +208,83 @@ All 81 pose scenes, TTO = `run_tto_pba.py` iters = 25, fwd s = median per scene 
 - **Depth at 216x288 is not worth it:** it saves ~1 % of a forward and costs 0.3-1.9 AUC@3 after TTO (SN++ most,
   79.6 → 76.6). Photometric TTO needs the full-resolution depth detail.
 
+### Head vs fit: extrinsics and intrinsics swapped (tum1, 2026-11-18)
+
+Predictions of `K16_3080` (ray fit) and `K16_head` mixed per scene (`workspace/dvlt_speed/make_hybrid.py`, same depth),
+then the evaluator (`eval_only`) and `run_tto_pba.py` iters = 25, all 81 pose scenes:
+
+| cameras | alone AUC@3 | dev → TTO | held-out → TTO | all → TTO | HiRoom / 7Sc / SN++ / DTU / ETH3D after TTO |
+|---|---|---|---|---|---|
+| fit extrinsics + fit intrinsics (released) | 61.3 | 58.6 → 70.9 | 62.3 → 70.7 | 61.3 → 70.9 | 88.4 / 28.9 / 79.6 / 94.4 / 63.1 |
+| head extrinsics + head intrinsics | 57.3 | 55.2 → 72.6 | 58.1 → 71.2 | 57.3 → 71.6 | 90.0 / 28.3 / 81.9 / 95.3 / 62.8 |
+| head extrinsics + fit intrinsics | 57.3 | 55.2 → 70.4 | 58.1 → 70.4 | 57.3 → 70.4 | 87.5 / 29.0 / 79.7 / 94.0 / 61.9 |
+| **fit extrinsics + head intrinsics** | 61.3 | 58.6 → **73.5** | 62.3 → **71.5** | 61.3 → **72.1** | 89.7 / 28.7 / 81.9 / 95.3 / 65.1 |
+| **fit extrinsics + fit focal, principal point centred, fx = fy** (`hyb_fit_cleanK`) | 61.3 | 58.6 → 73.1 | 62.3 → **71.6** | 61.3 → **72.1** | |
+
+- Intrinsics don't enter the pose AUC alone, so "alone" only depends on the extrinsics.
+- Focal / GT focal (median per scene) is the same for both (e.g. ScanNet++ 0.992 vs 0.989, DTU 0.966 vs 0.965).
+  The fit's principal point is 0.15-0.27 % of the width off centre (~1 px) and fx differs from fy by 0.35-0.9 %;
+  the head's principal point is the image centre and fx = fy by construction. The TTO optimises one shared focal
+  scale but not the principal point (`focal-and-intrinsics.md`: principal point rejected), so the fit's noise stays.
+  **Confirmed:** the fit's own focal with the principal point centred and fx = fy gives the same 72.1 (held-out
+  71.6). The cause is the fit's principal point / pixel aspect, not the head: a training-free +1.2 AUC@3 after TTO
+  for any ray-fit DéjàView prediction (`workspace/dvlt_speed/make_cleanK.py`).
+- `eval_student.py DVLT_POSE=fit_headK` now produces this combination directly.
+
+### Resolution distillation (tum1, RTX 3080, 2026-11-18)
+
+`scripts/distill_steps/train_res.py`: the student runs at a lower longest side with RoPE positions stretched to the
+native grid (`rope_scale.py`) and K_s loop steps; the teacher is the frozen released model at 504 px, K = 16, on the
+same frames. Loss vs the teacher: L1 rays at the student resolution (teacher area-downsampled), L1 log depth and
+0.1 L1 log conf at 504 px (student bilinearly upsampled, as at test time), L1 on the camera head's `pose_enc`. Whole
+model trained (encoder 0.1x lr), AdamW, cosine to 10 %, clip 1, decoders checkpointed per chunk, 12-32 views per
+step (6.3 GiB peak at 32 views). Data: 200 ARKitScenes Training videos, 240 frames each (`prep_arkit.py`, HTTP range
+reads of the raw `vga_wide` zips, JPEG q95), contiguous windows of 2-4x the view count; 8 Validation videos for the
+validation loss. No GT, nothing from the benchmark.
+
+- **R1** (lr 3e-5, res {336, 420}, K {12, 16}): stopped at step 500. Validation got worse at 420 px (ray 0.024 →
+  0.032, depth 0.045 → 0.073) and 504 px (2.4x). The released model starts close to the teacher there, so lr 3e-5
+  mostly adds noise. Don't repeat.
+- **R2** (lr 8e-6, 300 warmup, res {336, 420, 504}, K {12, 16}, 3 h, 2550 steps): validation (ray / depth / pose vs
+  the teacher, 8 val clips): 336 K16 0.039 / 0.067 / 0.028 → 0.020 / 0.037 / 0.016; 420 K12 0.024 / 0.045 / 0.018 →
+  0.020 / 0.032 / 0.016; 504 K12 0.016 / 0.032 / 0.011 → 0.015 / 0.026 / 0.010.
+
+Benchmark (all 81 pose scenes, TTO = `run_tto_pba.py` iters = 25, fwd s = median per scene on the 3080; `fhk` =
+`DVLT_POSE=fit_headK`, ray-fit extrinsics + camera-head intrinsics):
+
+| run | fwd s | AUC@3 | HiRoom / 7Sc / SN++ / DTU / ETH3D | dev: alone → TTO | held-out | all: alone → TTO |
+|---|---|---|---|---|---|---|
+| released 336 px + RoPE, K = 16, fit | 1.27 | 34.0 | 31.1 / 25.8 / 28.4 / 64.2 / 20.6 | 31.0 → 50.5 | 35.0 → 48.5 | 34.0 → 49.0 |
+| released 336 px + RoPE, K = 16, fhk | 1.27 | 34.0 | (same) | 31.0 → 44.6 | 35.0 → 44.3 | 34.0 → 44.5 |
+| **R2 336 px, K = 12, fhk** | 1.08 | 52.0 | 62.9 / 28.6 / 61.4 / 71.5 / 35.5 | 47.6 → 66.6 | 53.5 → 65.8 | 52.0 → **66.0** |
+| **R2 336 px, K = 16, fhk** | 1.27 | **53.9** | 64.3 / 28.2 / 65.6 / 74.4 / 37.1 | 50.3 → 68.5 | 55.2 → **65.9** | 53.9 → **66.7** |
+| released 420 px + RoPE, K = 12, fit | 1.76 | 56.0 | 71.2 / 28.5 / 62.0 / 73.8 / 44.6 | 51.5 → 67.3 | 57.6 → 66.3 | 56.0 → 66.7 |
+| released 420 px + RoPE, K = 12, fhk | 1.76 | 56.0 | (same) | 51.5 → 67.6 | 57.6 → 64.2 | 56.0 → 65.2 |
+| **R2 420 px, K = 12, fhk** | 1.76 | **58.5** | 76.0 / 30.2 / 74.5 / 78.5 / 33.4 | 56.1 → 72.2 | 59.5 → **69.4** | 58.5 → **70.3** |
+| released 504 px, K = 12, fhk | 2.98 | 58.7 | 76.0 / 29.8 / 72.0 / 79.5 / 36.0 | 56.1 → 73.0 | 59.7 → 71.0 | 58.7 → 71.7 |
+| R2 504 px, K = 12, fhk | 2.98 | 56.7 | 72.9 / 30.8 / 70.5 / 79.6 / 29.7 | 56.8 → 71.8 | 56.9 → 69.7 | 56.7 → 70.4 |
+| R3 336 px, K = 16, fhk (R2 + 25 % outdoor) | 1.28 | 54.2 | 66.8 / 27.8 / 65.0 / 73.9 / 37.5 | 50.7 → 67.1 | 55.6 → 64.7 | 54.2 → 65.3 |
+| R3 420 px, K = 12, fhk | 1.76 | 58.4 | 76.6 / 29.6 / 72.5 / 78.2 / 35.2 | 55.5 → 71.1 | 59.6 → 69.5 | 58.4 → 70.0 |
+| R3 504 px, K = 12, fhk | 2.98 | 56.4 | 72.7 / 29.9 / 69.1 / 80.5 / 29.7 | 56.4 → 72.3 | 56.6 → 70.1 | 56.4 → 70.7 |
+| released 504 px, K = 16, fit | 3.67 | 61.3 | 79.3 / 30.5 / 76.9 / 82.8 / 36.8 | 58.6 → 70.9 | 62.3 → 70.7 | 61.3 → 70.9 |
+
+- **336 px:** +19.9 alone and +17.7 after TTO over the best released option, at the same 1.27 s. It now equals the
+  released 420 px K = 12 + TTO (66.7 at 1.76 s) at 28 % less forward time.
+- **420 px K = 12:** alone it equals the released 504 px K = 12 (58.5 vs 58.7) at 59 % of the time; after TTO +3.6
+  (70.3, held-out 69.4 vs 66.3). At low resolution the released camera head hurts even as intrinsics only (fhk 65.2
+  vs fit 66.7); after R2 it works again.
+- ETH3D alone drops at 420 px (44.6 → 33.4): the released model was unusually good there at 420 px; the 504-px
+  teacher has 36.8. One seed, one run.
+- **At 504 px the R2 student is slightly worse** than the released model (K = 12: 56.7 vs 58.7 alone, 70.4 vs 71.7
+  after TTO), again mostly ETH3D (36.0 → 29.7). Training only on indoor ARKit clips biases the model; outdoor /
+  object data (Mip-NeRF 360, T&T, DL3DV) is the obvious next fix. Use R2 only below 504 px.
+- **R3 (2026-11-18): outdoor data doesn't fix it.** R2 + 1.75 h more with 25 % of clips from 11 outdoor/object
+  scenes (Mip-NeRF 360 images_4, T&T + Deep Blending; `prep_outdoor.py`), lr 5e-6. ETH3D alone recovers a little at
+  420 px (33.4 → 35.2) but not at 504 px (29.7), and after TTO R3 is within noise of R2 (336: 65.3 vs 66.7; 420: 70.0
+  vs 70.3; 504: 70.7 vs 70.4). 11 scenes are too few to matter; the 504-px drop is more likely the general cost of
+  fine-tuning on few videos (C0, 504 px only, kept 71.9, see [dejaview-tto-teacher](dejaview-tto-teacher.md)), i.e.
+  training the low resolutions pulls the shared weights away from 504 px. Keep R2 as the low-res checkpoint.
+
 ## Open / next
 
 - **Done (2026-11-16, tum1):** RoPE scaling at 420 / 336 / 252 px, decoder breakdown and the 3080 profile (above).
@@ -209,7 +295,8 @@ All 81 pose scenes, TTO = `run_tto_pba.py` iters = 25, fwd s = median per scene 
   DéjàView compute plot.
 - **Decoder ideas left (untested):** depth output stage in bf16 / channels-last at full resolution (216x288 output
   was tested and costs TTO accuracy).
-- **Resolution distillation** (now only for ≤ 336 px, since 420 px works training-free): fine-tune the model at
+- **Resolution distillation: works (R2 above).** Next: longer / more data, 252-336 px, K = 8 at 336-420 px,
+  held-out check on the 5090. Original note: fine-tune the model at
   336 px, starting from the RoPE-scaled model, to reproduce its own 504-px K = 16 output (the `train.py` loop with a
   downsampled student input).
   - This is a distribution shift rather than removed computation, so it may fine-tune more easily than K = 4 did.
