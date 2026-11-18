@@ -16,7 +16,7 @@ None of these models takes camera poses as input. In posed mode (recon_posed) th
 fuses the predicted depths with the GT poses after aligning the predicted poses to them, so the
 GT extrinsics/intrinsics passed to inference() are ignored, as in the DA3 paper's baselines.
 
-    load("facebook/VGGT-1B" | "yyfz233/Pi3" | "nvidia/dvlt") -> adapter
+    load("facebook/VGGT-1B" | "yyfz233/Pi3" | "nvidia/dvlt" | "jgkwak/solv3r") -> adapter
 """
 
 import json
@@ -32,6 +32,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PREPROCESS = "native"  # or "da3" (VGGT and Pi3 only); set by run_bench.py --da3-preprocess
 DVLT_STEPS = 12  # DéjàView refinement steps K; set by run_bench.py --dvlt-steps
+SOLV3R_CALLS = 16  # Solv3R solver calls (its offline default); set by run_bench.py --solv3r-calls
 
 
 def da3_preprocess(image_files):
@@ -211,10 +212,55 @@ class DVLTBaseline(Baseline):
         )
 
 
+class Solv3RBaseline(Baseline):
+    """jgkwak/solv3r (Solv3R, fine-tuned from DéjàView), SOLV3R_CALLS solver calls.
+
+    Not installed: third_party/solv3r is put on sys.path (its dependencies are light, but
+    onnxruntime must be importable). Own preprocessing: longest side 504, sides rounded to
+    multiples of 14, no crop (solv3r.images.load_images, sized by the first image). The first
+    view defines the world frame, so extrinsics are relative to it."""
+
+    def __init__(self, model_id):
+        sys.path.insert(0, os.path.join(REPO_ROOT, "third_party", "solv3r"))
+        from solv3r import Solv3R
+
+        self.model = Solv3R.from_pretrained()  # downloads jgkwak/solv3r on first use
+
+    def to(self, device):
+        self.device = torch.device(device)
+        self.model.to(self.device)
+        return self
+
+    def native_preprocess(self, image_files):
+        from solv3r import load_images
+
+        images = load_images(list(image_files))
+        return images[None] if images.dim() == 4 else images  # [1, S, 3, H, W] in [0, 1]
+
+    def forward(self, images):
+        from solv3r import cameras_from_pose_enc
+
+        ctx = self.model.encode(images[0])
+        z = self.model.solve(ctx, calls=SOLV3R_CALLS)
+        pred = self.model.decode(z, ctx)
+        c2w, intrinsics = cameras_from_pose_enc(pred["pose_enc"], (ctx.H, ctx.W))
+        depth, conf = pred["depth"], pred["depth_conf"]
+        depth = depth[..., 0] if depth.shape[-1] == 1 else depth
+        # drop a leading batch dim if the model returns one
+        squeeze = lambda t, n: t[0] if t.dim() == n + 1 else t
+        return dict(
+            depth=squeeze(depth, 3),
+            conf=squeeze(conf, 3),
+            extrinsics=torch.linalg.inv(squeeze(c2w, 3).float())[:, :3],
+            intrinsics=squeeze(intrinsics, 3),
+        )
+
+
 MODELS = {
     "facebook/VGGT-1B": VGGTBaseline,
     "yyfz233/Pi3": Pi3Baseline,
     "nvidia/dvlt": DVLTBaseline,
+    "jgkwak/solv3r": Solv3RBaseline,
 }
 
 
