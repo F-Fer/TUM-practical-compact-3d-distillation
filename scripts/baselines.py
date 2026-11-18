@@ -238,21 +238,18 @@ class Solv3RBaseline(Baseline):
         return images[None] if images.dim() == 4 else images  # [1, S, 3, H, W] in [0, 1]
 
     def forward(self, images):
-        from solv3r import cameras_from_pose_enc
+        from solv3r import cameras_from_rays
 
         ctx = self.model.encode(images[0])
         z = self.model.solve(ctx, calls=SOLV3R_CALLS)
         pred = self.model.decode(z, ctx)
-        c2w, intrinsics = cameras_from_pose_enc(pred["pose_enc"], (ctx.H, ctx.W))
-        depth, conf = pred["depth"], pred["depth_conf"]
-        depth = depth[..., 0] if depth.shape[-1] == 1 else depth
-        # drop a leading batch dim if the model returns one
-        squeeze = lambda t, n: t[0] if t.dim() == n + 1 else t
+        # cameras fitted to the rays with uniform weights, as the DéjàView adapter and Solv3R's benchmark protocol
+        c2w, intrinsics = cameras_from_rays(pred["rays"])
         return dict(
-            depth=squeeze(depth, 3),
-            conf=squeeze(conf, 3),
-            extrinsics=torch.linalg.inv(squeeze(c2w, 3).float())[:, :3],
-            intrinsics=squeeze(intrinsics, 3),
+            depth=pred["depth"][..., 0],
+            conf=pred["depth_conf"],
+            extrinsics=torch.linalg.inv(c2w.float())[:, :3],
+            intrinsics=intrinsics,
         )
 
 
