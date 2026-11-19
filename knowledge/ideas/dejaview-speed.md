@@ -44,7 +44,7 @@ Code in `scripts/distill_steps/`:
 
 `profile_dvlt.py` and `rope_dec_check.py` take `--images <folder>` to run on a local GPU without the ARKit zips.
 
-Raw logs and metric JSONs are in `results/distill_steps/{profile,res_sweep}/` on tum2 (local, not in git).
+Raw logs and metric JSONs are in `results/distill_steps/` (local, not in git).
 
 ## Evidence
 
@@ -301,8 +301,8 @@ Benchmark (all 81 pose scenes, TTO = `run_tto_pba.py` iters = 25, fwd s = median
   downsampled student input).
   - This is a distribution shift rather than removed computation, so it may fine-tune more easily than K = 4 did.
   - It would cut the 100-view forward by ~3x.
-- **Encoder distillation** (job 2888, ViT-S/14 + projection, regressing z_0): running. It is now mainly a test of
-  whether the loop tolerates a different encoder; by the profile, it cannot give more than ~5 % speed.
+- **Encoder distillation** (tum2 job 2888, ViT-S/14 + projection, regressing z_0, `train_encoder.py`): result never
+  collected (no access to tum2 from tum1 since). By the profile it cannot give more than ~5 % speed, so it is parked.
 
 Related: [dejaview-steps](dejaview-steps.md), [dejaview-few-step-distillation](dejaview-few-step-distillation.md),
 [matched-compute](matched-compute.md)

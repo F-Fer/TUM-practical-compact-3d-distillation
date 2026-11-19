@@ -1,9 +1,13 @@
-"""Rotation vs translation split of DA3-SMALL's pose error (follow-up to results/failure_modes/DA3-SMALL/REPORT.md).
+"""Rotation vs translation split of a model's pose error (follow-up to results/failure_modes/<model>/REPORT.md).
 
 Reuses analyse_failure_modes.load_scene / pose_errors (same gauge, same smooth/jitter split, same units) and adds
 per-component statistics plus oracle counterfactuals that remove only the smooth rotation or only the smooth
-translation. Writes one row per scene to drift_split.json next to this script.
+translation. CPU only. Writes one row per scene to results/failure_modes/<model>/drift_split.json.
+
+Usage:
+    .venv/bin/python scripts/analyse_drift_split.py DA3-SMALL [--workers 8]
 """
+import argparse
 import glob
 import json
 import multiprocessing
@@ -12,12 +16,11 @@ import sys
 
 import numpy as np
 
-REPO = "/home/student/dev/TUM-compact-3d-finn"
-sys.path.insert(0, os.path.join(REPO, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import analyse_failure_modes as A  # noqa: E402
 from scipy.spatial.transform import Rotation  # noqa: E402
 
-MODEL = "DA3-SMALL"
+REPO = A.REPO_ROOT
 GROSS_R, GROSS_T = 15.0, 0.25
 
 
@@ -34,11 +37,11 @@ def neighbour_cos(x, c_gt, max_dist=0.05):
 
 
 def scene(args):
-    dataset, sc = args
+    model, dataset, sc = args
     import cv2, torch
     cv2.setNumThreads(1)
     torch.set_num_threads(1)
-    data = A.load_scene(MODEL, dataset, sc)
+    data = A.load_scene(model, dataset, sc)
     depth_scale = float(np.median(data["gt_depth"][data["valid"]]))
     p = A.pose_errors(data["pred_w2c"], data["gt_w2c"], depth_scale, data["bench_order"])
     r, t = p["r_res"], p["t_res"]
@@ -90,17 +93,23 @@ def scene(args):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("model")
+    ap.add_argument("--workers", type=int, default=8)
+    a = ap.parse_args()
     tasks = []
     for d in A.DATASETS:
-        root = os.path.join(REPO, "workspace/evaluation", MODEL, "model_results", d)
+        root = os.path.join(REPO, "workspace/evaluation", a.model, "model_results", d)
         for res in sorted(glob.glob(os.path.join(root, "**/unposed/exports/mini_npz/results.npz"), recursive=True)):
-            tasks.append((d, os.path.relpath(res, root).split("/unposed/")[0]))
+            tasks.append((a.model, d, os.path.relpath(res, root).split("/unposed/")[0]))
+    if not tasks:
+        sys.exit(f"No predictions found for {a.model}")
     rows = []
-    with multiprocessing.get_context("fork").Pool(8) as pool:
+    with multiprocessing.get_context("fork").Pool(a.workers) as pool:
         for k, row in enumerate(pool.imap_unordered(scene, tasks), 1):
             rows.append(row)
             print(f"[{k}/{len(tasks)}] {row['dataset']}/{row['scene']}", flush=True)
-    out = os.path.join(REPO, "results/failure_modes", MODEL, "drift_split.json")
+    out = os.path.join(REPO, "results/failure_modes", a.model, "drift_split.json")
     json.dump(rows, open(out, "w"), indent=1)
     print("wrote", out)
 
