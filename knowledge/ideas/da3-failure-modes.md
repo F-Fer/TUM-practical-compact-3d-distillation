@@ -1,6 +1,6 @@
 # How DA3 fails: structure of its pose and depth errors
 
-Status: **analysed for DA3-SMALL** (all 90 scenes) · **open:** the same on larger models · Area: diagnosis · Updated 2026-11-10
+Status: **analysed for DA3-SMALL** (all 90 scenes) · **open:** the same on larger models · Area: diagnosis · Updated 2026-11-19
 
 Report: `results/failure_modes/DA3-SMALL/REPORT.md` (2026-11-07). Scripts: `analyse_failure_modes.py`,
 `plot_failure_modes.py`, `reconstruction_errors.py` (all take the model name).
@@ -23,6 +23,14 @@ reconstruction the **cameras (incl. intrinsics) cost more F1 than the depth** on
   sampling effect (its cameras are ≥ 0.2 depths apart).
 - Removing outliers adds 1-3 AUC@3 but 5-7 AUC@30 on ScanNet++/ETH3D. AUC@3 is low because the median pair is already
   near 3°; translation direction of close pairs (< 0.1 depths) is off by 20° (7-Scenes) / 34° (ScanNet++).
+- **Rotation vs translation (2026-11-19, `scripts/analyse_drift_split.py`, `results/failure_modes/DA3-SMALL/drift_split.json`):**
+  the drift is in both. Smooth share of the error energy (non-gross frames, rot / trans): 7-Scenes 77 / 75 %, ScanNet++
+  52 / 50 %, DTU 59 / 57 %, ETH3D 55 / 48 %, HiRoom 23 / 26 % (sampling). Removing only one component's drift gains
+  little because a pair fails if either error is large (7-Scenes AUC@3 14.5 → 22.6 rot only, 23.1 trans only, 52.6
+  both; DTU 23.4 → 38.4 / 29.9 / 59.9). Gross failures are mostly translation (ScanNet++ 156 trans-only, 16 rot-only,
+  99 both of 271; ETH3D 60 / 4 / 3 of 67). Translation direction is the larger pairwise error in 57-79 % of pairs
+  (DTU 48 %), by far for close pairs (< 0.1 depths: 16-39° vs ~2° rotation): short baselines amplify small centre
+  errors.
 - Gross failures and the reference view: [gross-failures-and-reference-view](gross-failures-and-reference-view.md).
 
 ## Depth
