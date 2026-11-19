@@ -5,7 +5,7 @@ DA3-BASE,ba_fast_it100,track,dev,50.7,88.7,49.7,hiroom+7scenes+scannetpp+eth3d,2
 DA3-BASE,ba_fast_it2,track,dev,43.4,88.0,48.1,hiroom+7scenes+scannetpp+eth3d,12.31,32.5,34.4,25.4,99.3,25.5,36.6,61.5,42.2,52.1,,2026-11-07,workspace/tto/DA3-BASE/ba_fast_it2
 DA3-BASE,ba_fast_it25,track,dev,50.0,89.2,49.0,hiroom+7scenes+scannetpp+eth3d,14.51,42.5,34.2,38.7,100.0,34.6,51.4,59.5,36.4,48.6,,2026-11-07,workspace/tto/DA3-BASE/ba_fast_it25
 DA3-BASE,ba_fast_it5,track,dev,48.7,89.6,49.6,hiroom+7scenes+scannetpp+eth3d,12.45,42.1,34.3,33.2,99.8,34.2,48.4,58.1,41.7,50.2,,2026-11-07,workspace/tto/DA3-BASE/ba_fast_it5
-DA3-BASE,eval,feedforward,full,27.3,83.4,,,0.76,19.0,21.4,20.2,60.8,15.0,,,,,,2026-10-29,workspace/evaluation/DA3-BASE
+DA3-BASE,eval,feedforward,full,27.3,83.4,42.2,hiroom+7scenes+scannetpp+eth3d,1.37,18.9,21.4,20.2,60.9,14.9,23.4,49.7,47.7,48.1,,2026-10-24,workspace/evaluation/DA3-BASE
 DA3-BASE,fast50_full,pba,full,37.2,87.0,47.9,hiroom+7scenes+scannetpp,0.86,30.6,26.0,40.3,65.4,23.6,38.2,48.3,57.3,,"levels=8,4,2,1 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-BASE/fast50_full
 DA3-BASE,fast_it200,pba,dev,39.9,89.0,50.1,hiroom+7scenes+scannetpp+eth3d,3.35,47.3,36.9,34.5,49.9,31.1,59.6,64.5,47.5,28.7,"levels=8,4,2,1 iters=200 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-BASE/fast_it200
 DA3-BASE,fast_it400,pba,dev,38.1,88.7,51.7,hiroom+7scenes+scannetpp+eth3d,6.76,49.0,37.3,34.6,41.2,28.2,60.7,66.4,46.7,33.0,"levels=8,4,2,1 iters=400 focal_init=pred bright_rel=False impl=autograd radial=False",2026-11-02,workspace/tto/DA3-BASE/fast_it400
@@ -23,7 +23,7 @@ DA3-BASE,fmh_it25,pba,dev,58.3,91.6,63.5,hiroom+7scenes+scannetpp+eth3d,0.57,58.
 DA3-BASE,fmh_it400,pba,dev,59.0,91.6,62.1,hiroom+7scenes+scannetpp+eth3d,2.47,66.9,37.4,45.6,90.4,54.5,69.7,65.8,49.9,63.0,iters=400 features=vgg,2026-11-09,workspace/tto/DA3-BASE/fmh_it400
 DA3-BASE,fmh_it50,pba,dev,58.7,91.7,60.9,hiroom+7scenes+scannetpp+eth3d,0.64,59.1,37.7,49.3,90.4,57.1,68.3,62.6,50.5,62.1,features=vgg,2026-11-09,workspace/tto/DA3-BASE/fmh_it50
 DA3-BASE,fmh_it800,pba,dev,60.8,92.1,62.5,hiroom+7scenes+scannetpp+eth3d,4.66,70.0,37.1,47.5,91.1,58.6,71.3,66.2,49.3,63.1,iters=800 features=vgg,2026-11-09,workspace/tto/DA3-BASE/fmh_it800
-DA3-BASE,init_dev,pba,dev,27.1,83.6,44.7,hiroom+7scenes+scannetpp+eth3d,0.00,21.3,32.6,13.3,55.5,13.0,34.5,63.6,37.8,43.0,levels=,2026-10-30,workspace/tto/DA3-BASE/init_dev
+DA3-BASE,init_dev,track,dev,27.1,83.6,45.2,hiroom+7scenes+scannetpp,0.00,21.1,32.6,13.3,55.6,12.9,34.5,63.2,37.8,,,2026-11-04,workspace/tto/DA3-BASE/init_dev
 DA3-BASE,init_full,pba,full,27.3,83.4,40.3,hiroom+7scenes+scannetpp,0.00,19.0,21.4,20.2,60.8,15.0,23.2,49.8,47.9,,levels=,2026-10-30,workspace/tto/DA3-BASE/init_full
 DA3-BASE,loss_C1_d02gray_s0,pba,dev,43.4,89.3,60.1,hiroom+7scenes+scannetpp,1.26,50.0,37.9,46.1,58.7,24.0,63.0,65.1,52.0,,lm_iters=5 focal_init=pred huber_photo=0.02 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-02,workspace/tto/DA3-BASE/loss_C1_d02gray_s0
 DA3-BASE,loss_V1_gray,pba,dev,42.7,89.2,60.2,hiroom+7scenes+scannetpp,1.25,49.0,37.5,46.4,57.2,23.2,60.0,64.6,55.9,,lm_iters=5 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-02,workspace/tto/DA3-BASE/loss_V1_gray
@@ -55,7 +55,7 @@ DA3-BASE,rec_it400,pba,dev,40.1,89.2,56.6,hiroom+7scenes+scannetpp+eth3d,1.91,48
 DA3-BASE,rec_it800,pba,dev,38.3,88.8,56.1,hiroom+7scenes+scannetpp+eth3d,3.78,45.4,37.8,35.2,35.4,37.7,63.1,66.6,45.1,49.6,iters=800 focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-BASE/rec_it800
 DA3-BASE,recommended,pba,dev,50.6,91.1,58.9,hiroom+7scenes+scannetpp+eth3d,11.53,51.1,37.9,47.1,60.5,56.6,58.0,65.1,54.0,58.4,focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-BASE/recommended
 DA3-BASE,recommended_t,pba,dev,50.1,90.8,,,0.34,49.9,37.8,46.3,59.6,56.8,,,,,focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-BASE/recommended_t
-DA3-BASE,roma_turbo_q4,track,10/1/0/0/0,32.5,87.4,,,11.03,42.6,22.4,,,,,,,,,2026-11-05,workspace/tto/DA3-BASE/roma_turbo_q4
+DA3-BASE,roma_turbo_q4,track,dev,47.6,88.0,40.1,hiroom+7scenes+scannetpp,46.89,43.3,34.1,49.8,100.0,10.8,37.0,64.2,19.1,,,2026-11-04,workspace/tto/DA3-BASE/roma_turbo_q4
 DA3-BASE,time_ba_it10,track,dev,50.1,89.5,49.1,hiroom+7scenes+scannetpp,34.47,44.1,34.1,36.6,100.0,35.8,50.7,58.2,38.2,,,2026-11-05,workspace/tto/DA3-BASE/time_ba_it10
 DA3-BASE,time_ba_it2,track,dev,43.4,88.0,46.7,hiroom+7scenes+scannetpp,16.29,32.5,34.4,25.4,99.3,25.5,36.5,61.4,42.3,,,2026-11-05,workspace/tto/DA3-BASE/time_ba_it2
 DA3-BASE,time_ba_it25,track,dev,50.1,89.2,49.1,hiroom+7scenes+scannetpp,68.27,42.5,34.2,39.2,100.0,34.6,51.4,59.5,36.4,,,2026-11-05,workspace/tto/DA3-BASE/time_ba_it25
@@ -136,7 +136,7 @@ DA3-LARGE-1.1,dtu_nofocal,pba,0/0/0/4/0,72.7,97.1,,,20.57,,,,72.7,,,,,,"samples=
 DA3-LARGE-1.1,dtu_wf10,pba,0/0/0/4/0,72.7,97.1,,,20.67,,,,72.7,,,,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred w_focal=10.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/dtu_wf10
 DA3-LARGE-1.1,dtu_wf100,pba,0/0/0/4/0,72.8,97.1,,,20.66,,,,72.8,,,,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred w_focal=100.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/dtu_wf100
 DA3-LARGE-1.1,dtu_wf10_nogrid,pba,0/0/0/4/0,70.6,96.9,,,15.79,,,,70.6,,,,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred depth_grid=0 w_focal=10.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/dtu_wf10_nogrid
-DA3-LARGE-1.1,eval,feedforward,full,51.3,92.0,,,1.54,59.7,27.6,56.5,78.0,34.9,,,,,,2026-10-29,workspace/evaluation/DA3-LARGE-1.1
+DA3-LARGE-1.1,eval,feedforward,full,51.4,92.0,64.2,hiroom+7scenes+scannetpp+eth3d,4.49,59.9,27.6,56.6,77.9,34.8,69.1,50.4,68.5,68.7,,2026-10-24,workspace/evaluation/DA3-LARGE-1.1
 DA3-LARGE-1.1,fast50_full,pba,full,58.7,93.1,68.0,hiroom+7scenes+scannetpp,0.87,73.2,27.6,72.4,77.1,43.0,78.3,53.6,72.3,,"levels=8,4,2,1 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/fast50_full
 DA3-LARGE-1.1,fast50w100_full,pba,full,58.7,93.1,68.7,hiroom+7scenes+scannetpp,0.86,73.3,27.8,70.0,78.7,43.7,80.7,53.1,72.2,,"levels=8,4,2,1 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/fast50w100_full
 DA3-LARGE-1.1,fast_it200,pba,dev,57.5,94.3,67.6,hiroom+7scenes+scannetpp+eth3d,3.34,72.1,38.4,64.6,66.3,46.2,87.5,58.1,66.5,58.2,"levels=8,4,2,1 iters=200 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-31,workspace/tto/DA3-LARGE-1.1/fast_it200
@@ -157,7 +157,7 @@ DA3-LARGE-1.1,fmh_it50,pba,dev,69.8,95.8,70.1,hiroom+7scenes+scannetpp+eth3d,0.5
 DA3-LARGE-1.1,fmh_it800,pba,dev,72.3,96.0,70.2,hiroom+7scenes+scannetpp+eth3d,4.67,77.6,38.3,66.6,93.9,84.9,86.5,63.3,61.6,69.5,iters=800 features=vgg,2026-11-09,workspace/tto/DA3-LARGE-1.1/fmh_it800
 DA3-LARGE-1.1,head50,pba,dev,58.0,94.2,68.7,hiroom+7scenes+scannetpp,39.08,68.5,40.3,58.8,72.6,49.8,76.1,63.6,66.4,,"samples=4096 levels=8,4,2,1 focal_init=pred depth_grid=0 depth_param=head photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-31,workspace/tto/DA3-LARGE-1.1/head50
 DA3-LARGE-1.1,hr_wf10,pba,10/2/0/0/0,52.2,93.2,63.2,hiroom+7scenes,11.97,68.7,35.6,,,,70.9,55.5,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred w_focal=10.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-LARGE-1.1/hr_wf10
-DA3-LARGE-1.1,init_dev,pba,dev,48.6,92.6,59.8,hiroom+7scenes+scannetpp+eth3d,0.00,53.8,42.1,44.2,72.3,30.4,69.9,67.2,60.2,42.0,levels=,2026-10-30,workspace/tto/DA3-LARGE-1.1/init_dev
+DA3-LARGE-1.1,init_dev,track,dev,48.8,92.6,59.8,hiroom+7scenes+scannetpp+eth3d,0.00,54.3,42.2,44.4,72.3,30.6,68.3,67.2,61.5,42.2,,2026-11-04,workspace/tto/DA3-LARGE-1.1/init_dev
 DA3-LARGE-1.1,init_full,pba,full,51.3,92.0,62.9,hiroom+7scenes+scannetpp,0.00,59.7,27.6,56.5,78.0,34.9,69.5,50.7,68.5,,levels=,2026-10-30,workspace/tto/DA3-LARGE-1.1/init_full
 DA3-LARGE-1.1,lm10,pba,dev,52.6,91.8,63.2,hiroom+7scenes+scannetpp+eth3d,7.27,65.0,33.3,68.4,74.4,22.0,75.4,56.5,60.7,60.3,"samples=4096 levels=8,4,2,1 iters=10 optimizer=lm lm_levels= lm_iters=10 lm_samples=0 focal_init=pred photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-10-31,workspace/tto/DA3-LARGE-1.1/lm10
 DA3-LARGE-1.1,loss_C1_d02gray_s0,pba,dev,56.4,93.7,68.8,hiroom+7scenes+scannetpp,1.24,73.6,38.1,66.9,73.5,29.9,84.8,57.8,63.8,,lm_iters=5 focal_init=pred huber_photo=0.02 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-02,workspace/tto/DA3-LARGE-1.1/loss_C1_d02gray_s0
@@ -299,7 +299,7 @@ DA3-SMALL,dtu_wf10,pba,0/0/0/4/0,59.0,95.0,,,20.43,,,,59.0,,,,,,"samples=4096 le
 DA3-SMALL,dtu_wf100,pba,0/0/0/4/0,58.8,95.0,,,20.48,,,,58.8,,,,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred w_focal=100.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/dtu_wf100
 DA3-SMALL,dtu_wf10_nogrid,pba,0/0/0/4/0,35.7,90.9,,,15.87,,,,35.7,,,,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred depth_grid=0 w_focal=10.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/dtu_wf10_nogrid
 DA3-SMALL,e_geo_only,pba,dev,22.0,76.6,37.3,hiroom+7scenes+scannetpp,34.20,19.0,36.2,6.9,35.5,12.2,27.4,63.1,21.4,,"neighbors=6 nbr_mode=top samples=4096 levels=8,4,2,1 iters=100 lr_rot=0.001 lr_trans=0.001 lr_focal=0.001 focal_init=pred w_photo=0.0 bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/e_geo_only
-DA3-SMALL,eval,feedforward,full,14.4,75.0,,,0.37,9.4,14.6,8.9,30.6,8.6,,,,,,2026-10-29,workspace/evaluation/DA3-SMALL
+DA3-SMALL,eval,feedforward,full,14.4,75.0,32.3,hiroom+7scenes+scannetpp+eth3d,0.60,9.5,14.5,9.0,30.7,8.6,18.5,39.0,32.9,39.0,,2026-10-24,workspace/evaluation/DA3-SMALL
 DA3-SMALL,f_vgg,pba,dev,25.9,78.4,42.9,hiroom+7scenes+scannetpp,37.54,24.7,41.1,9.5,41.0,13.2,44.9,62.3,21.6,,"neighbors=6 nbr_mode=top samples=4096 levels=8,4,2,1 iters=100 lr_rot=0.001 lr_trans=0.001 lr_focal=0.001 focal_init=pred features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/f_vgg
 DA3-SMALL,fast50_full,pba,full,24.3,80.2,37.5,hiroom+7scenes+scannetpp,0.86,19.7,22.4,19.5,44.8,15.1,29.0,43.0,40.6,,"levels=8,4,2,1 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/fast50_full
 DA3-SMALL,fast_it200,pba,dev,27.2,81.1,41.0,hiroom+7scenes+scannetpp+eth3d,3.33,31.6,38.0,11.5,39.5,15.4,46.5,56.0,31.5,30.0,"levels=8,4,2,1 iters=200 focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/fast_it200
@@ -326,7 +326,7 @@ DA3-SMALL,h_grid16,pba,dev,25.1,78.0,41.2,hiroom+7scenes+scannetpp,33.32,23.7,40
 DA3-SMALL,head50,pba,dev,24.7,78.7,39.6,hiroom+7scenes+scannetpp,10.55,23.6,39.1,10.1,37.9,13.1,42.3,51.2,25.1,,"samples=4096 levels=8,4,2,1 focal_init=pred depth_grid=0 depth_param=head photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-31,workspace/tto/DA3-SMALL/head50
 DA3-SMALL,hr_wf10,pba,10/2/0/0/0,29.2,85.8,43.5,hiroom+7scenes,11.84,21.2,37.2,,,,33.1,54.0,,,"samples=4096 levels=8,4,2,1 iters=200 focal_init=pred w_focal=10.0 photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/hr_wf10
 DA3-SMALL,i_grid_nofocal,pba,dev,23.6,77.6,37.8,hiroom+7scenes+scannetpp,20.98,18.4,40.6,8.9,40.6,9.4,30.8,60.1,22.6,,"neighbors=6 nbr_mode=top samples=4096 levels=8,4,2,1 iters=100 lr_rot=0.001 lr_trans=0.001 lr_focal=0.001 focal=none focal_init=pred bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/i_grid_nofocal
-DA3-SMALL,init_dev,pba,dev,16.2,73.8,31.5,hiroom+7scenes+scannetpp+eth3d,0.00,10.6,29.3,5.9,29.9,5.1,23.9,50.9,19.2,32.1,levels=,2026-10-30,workspace/tto/DA3-SMALL/init_dev
+DA3-SMALL,init_dev,track,dev,16.2,73.7,31.4,hiroom+7scenes+scannetpp+eth3d,0.00,10.7,29.2,5.9,30.0,5.1,23.9,51.0,18.6,32.1,,2026-11-04,workspace/tto/DA3-SMALL/init_dev
 DA3-SMALL,init_full,pba,full,14.4,75.0,30.0,hiroom+7scenes+scannetpp,0.00,9.4,14.6,8.9,30.6,8.6,18.4,39.2,32.6,,levels=,2026-10-30,workspace/tto/DA3-SMALL/init_full
 DA3-SMALL,init_rc,other,dev,16.2,73.8,30.7,hiroom+7scenes+scannetpp,0.00,10.6,29.3,5.9,29.9,5.1,21.9,48.4,21.9,,,2026-11-07,results/pba/runs/DA3-SMALL/init_rc
 DA3-SMALL,j_wgeo3,pba,dev,25.1,77.8,41.0,hiroom+7scenes+scannetpp,2.67,23.1,40.2,8.8,41.2,12.3,41.0,60.3,21.6,,"neighbors=6 nbr_mode=top samples=4096 levels=8,4,2,1 iters=100 lr_rot=0.001 lr_trans=0.001 lr_focal=0.001 focal_init=pred w_geo=3.0 bright_rel=False impl=autograd radial=False",2026-10-30,workspace/tto/DA3-SMALL/j_wgeo3
@@ -577,7 +577,7 @@ DA3-SMALL,rec_it400,pba,dev,25.8,81.9,42.9,hiroom+7scenes+scannetpp+eth3d,1.90,2
 DA3-SMALL,rec_it800,pba,dev,23.2,79.8,41.5,hiroom+7scenes+scannetpp+eth3d,3.78,24.0,33.5,15.7,26.9,16.1,33.4,61.5,33.1,37.9,iters=800 focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-SMALL/rec_it800
 DA3-SMALL,recommended,pba,dev,32.8,85.3,46.1,hiroom+7scenes+scannetpp+eth3d,13.69,32.5,36.9,21.5,51.4,21.8,50.8,57.7,35.3,40.5,focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-SMALL/recommended
 DA3-SMALL,recommended_t,pba,dev,32.6,85.3,,,0.38,32.4,36.7,20.9,51.0,21.9,,,,,focal_init=pred bright_rel=False,2026-11-06,workspace/tto/DA3-SMALL/recommended_t
-DA3-SMALL,roma_turbo_q4,track,10/2/1/0/0,35.5,86.6,,,20.00,48.4,34.9,23.3,,,,,,,,2026-11-05,workspace/tto/DA3-SMALL/roma_turbo_q4
+DA3-SMALL,roma_turbo_q4,track,dev,47.4,85.3,37.6,hiroom+7scenes+scannetpp,47.30,49.1,34.8,44.3,100.0,8.8,38.7,56.1,18.0,,,2026-11-04,workspace/tto/DA3-SMALL/roma_turbo_q4
 DA3-SMALL,runs6/eth3d_all/base,pba,0/0/0/0/11,20.9,76.6,,,55.54,,,,,20.9,,,,,samples=4096 iters=200 lm_iters=5 lm_samples=0 focal_init=pred photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-10,results/pba/runs6/eth3d_all/DA3-SMALL/base
 DA3-SMALL,runs6/eth3d_all/radial,pba,0/0/0/0/11,48.6,82.6,,,58.67,,,,,48.6,,,,,samples=4096 iters=200 lm_iters=5 lm_samples=0 focal_init=pred photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False camera=radial,2026-11-10,results/pba/runs6/eth3d_all/DA3-SMALL/radial
 DA3-SMALL,runs6/subset/allpairs,pba,4/0/0/2/3,38.6,85.9,55.7,hiroom,237.70,45.6,,,55.6,14.6,55.7,,,,neighbors=1000 nbr_mode=top samples=4096 iters=200 lm_iters=5 lm_samples=0 focal_init=pred photo_loss=ncc features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False sample_chunk=1024,2026-11-10,results/pba/runs6/subset/DA3-SMALL/allpairs
@@ -942,10 +942,283 @@ DA3-SMALL,y_wsm_s1,pba,dev,34.0,85.1,,,1.52,36.6,35.0,20.8,55.0,22.6,,,,,focal_i
 DA3-SMALL,y_wsm_s2,pba,dev,34.5,85.2,,,1.57,34.7,35.1,21.2,55.7,25.6,,,,,focal_init=pred w_smooth=0.14 seed=2,2026-11-10,results/pba/runs/DA3-SMALL/y_wsm_s2
 DA3-SMALL-ba,eval,feedforward,full,25.9,76.2,,,,22.9,18.5,11.2,68.2,8.5,,,,,,2026-10-29,workspace/evaluation/DA3-SMALL-ba
 DA3-SMALL-cu128check,eval,feedforward,30/0/0/0/0,9.4,75.2,18.4,hiroom,0.10,9.4,,,,,18.4,,,,,2026-10-30,workspace/evaluation/DA3-SMALL-cu128check
-dvlt,eval,feedforward,full,58.7,94.0,67.7,hiroom+7scenes+scannetpp+eth3d,0.96,76.6,29.7,72.0,79.5,35.9,76.8,53.3,70.6,69.9,,2026-11-08,workspace/evaluation/dvlt
+dvlt,eval,feedforward,full,58.7,94.0,67.4,hiroom+7scenes+scannetpp+eth3d,2.98,76.0,29.8,72.0,79.5,36.0,76.5,53.2,70.8,69.2,,2026-10-26,workspace/evaluation/dvlt
 dvlt_K1,eval,feedforward,full,0.0,5.1,,,0.42,0.0,0.0,0.0,0.0,0.0,,,,,,2026-11-08,workspace/evaluation/dvlt_K1
 dvlt_K2,eval,feedforward,full,0.2,23.9,4.0,hiroom+eth3d,0.47,0.2,0.1,0.0,0.3,0.2,2.1,,,5.9,,2026-11-08,workspace/evaluation/dvlt_K2
 dvlt_K3,eval,feedforward,full,2.1,52.5,17.6,hiroom+7scenes+scannetpp+eth3d,0.52,3.4,2.1,1.2,2.5,1.3,13.3,20.6,15.5,20.9,,2026-11-08,workspace/evaluation/dvlt_K3
 dvlt_K4,eval,feedforward,full,9.0,72.0,32.6,hiroom+7scenes+scannetpp+eth3d,0.56,14.5,6.8,6.2,11.6,5.9,27.8,29.4,28.2,45.0,,2026-11-08,workspace/evaluation/dvlt_K4
 dvlt_K6,eval,feedforward,full,31.1,87.9,54.3,hiroom+7scenes+scannetpp+eth3d,0.66,44.1,21.7,30.4,40.0,19.6,58.3,43.5,52.6,62.9,,2026-11-08,workspace/evaluation/dvlt_K6
 dvlt_K8,eval,feedforward,full,47.6,91.9,63.4,hiroom+7scenes+scannetpp+eth3d,0.76,64.1,27.6,55.7,59.0,31.7,71.3,49.2,67.4,65.8,,2026-11-08,workspace/evaluation/dvlt_K8
+DA3-BASE,ba_iters_test,track,1/0/0/0/0,83.8,96.9,,,12.89,83.8,,,,,,,,,,2026-11-04,workspace/tto/DA3-BASE/ba_iters_test
+DA3-BASE,ba_iters_test2,track,1/0/0/0/0,83.8,96.9,,,13.69,83.8,,,,,,,,,,2026-11-04,workspace/tto/DA3-BASE/ba_iters_test2
+DA3-BASE,depth_only_fit,pba,dev,47.6,88.0,45.8,hiroom+7scenes+scannetpp,2.70,43.3,34.1,49.7,100.0,10.8,43.9,65.1,28.4,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/depth_only_fit
+DA3-BASE,depth_only_rad,pba,dev,54.3,90.6,48.5,hiroom+7scenes+scannetpp,2.67,42.2,33.9,55.1,100.0,40.4,43.7,63.7,38.2,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/depth_only_rad
+DA3-BASE,fit_frame_rej,track,dev,47.5,88.0,53.3,hiroom+7scenes+scannetpp,46.55,43.3,34.1,49.6,100.0,10.8,51.9,61.9,46.0,,,2026-11-04,workspace/tto/DA3-BASE/fit_frame_rej
+DA3-BASE,fit_grid8_rej,track,dev,47.5,88.0,53.5,hiroom+7scenes+scannetpp,47.38,43.3,34.1,49.6,100.0,10.8,52.6,61.3,46.7,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid8_rej
+DA3-BASE,fit_grid_r100,track,dev,47.6,88.0,54.5,hiroom+7scenes+scannetpp,47.60,43.3,34.1,49.8,100.0,10.8,52.8,62.6,48.1,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_r100
+DA3-BASE,fit_grid_r1000,track,dev,47.6,88.0,53.5,hiroom+7scenes+scannetpp,47.49,43.3,34.1,49.7,100.0,10.8,51.8,62.3,46.3,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_r1000
+DA3-BASE,fit_grid_rej,track,dev,47.6,88.0,53.7,hiroom+7scenes+scannetpp,48.87,43.3,34.1,49.7,100.0,10.8,52.8,62.3,45.9,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_rej
+DA3-BASE,hyb_rad,pba,dev,49.6,90.4,59.3,hiroom+7scenes+scannetpp,2.53,51.4,36.3,49.0,87.4,23.8,65.1,62.4,50.4,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/hyb_rad
+DA3-BASE,hyb_rej,pba,dev,49.3,89.7,57.8,hiroom+7scenes+scannetpp,2.54,51.1,36.7,49.2,87.7,21.6,63.8,61.4,48.1,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/hyb_rej
+DA3-BASE,polish_epi_w10,pba,7/0/0/0/0,39.6,85.2,,,2.51,39.6,,,,,,,,,"lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False w_match=10.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-11-04,workspace/tto/DA3-BASE/polish_epi_w10
+DA3-BASE,polish_only,pba,dev,43.2,89.3,60.6,hiroom+7scenes+scannetpp,2.53,51.9,37.2,45.8,56.8,24.4,61.8,65.9,53.9,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/polish_only
+DA3-BASE,polish_trk_w10,pba,8/0/0/0/0,39.4,83.2,,,2.52,39.4,,,,,,,,,"lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False w_match=10.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-11-04,workspace/tto/DA3-BASE/polish_trk_w10
+DA3-BASE,rad_frame_rej,track,dev,54.3,90.6,53.7,hiroom+7scenes+scannetpp,49.41,42.2,33.9,55.1,100.0,40.4,51.3,60.3,49.4,,,2026-11-04,workspace/tto/DA3-BASE/rad_frame_rej
+DA3-BASE,roma_turbo_q8,track,dev,51.5,89.0,42.7,hiroom+7scenes+scannetpp,79.00,47.1,34.2,64.9,100.0,11.2,37.1,60.7,30.3,,,2026-11-04,workspace/tto/DA3-BASE/roma_turbo_q8
+DA3-BASE,roma_turbo_q8_s1,track,dev,51.8,89.4,43.5,hiroom+7scenes+scannetpp,78.98,47.3,34.4,66.2,100.0,11.3,38.6,60.8,31.0,,,2026-11-04,workspace/tto/DA3-BASE/roma_turbo_q8_s1
+DA3-BASE,roma_turbo_q8_s2,track,dev,52.1,88.9,42.6,hiroom+7scenes+scannetpp,79.13,49.4,34.4,65.1,100.0,11.4,36.5,60.9,30.3,,,2026-11-04,workspace/tto/DA3-BASE/roma_turbo_q8_s2
+DA3-BASE,stride/eval,feedforward,0/7/20/0/0,22.9,83.2,47.0,7scenes+scannetpp,4.49,,20.7,25.1,,,,47.0,47.1,,,2026-11-02,workspace/evaluation/stride/DA3-BASE
+DA3-BASE,stride_7s_test/eval,feedforward,0/7/0/0/0,20.7,82.9,,,4.55,,20.7,,,,,,,,,2026-11-02,workspace/evaluation/stride_7s_test/DA3-BASE
+DA3-BASE,vggsfm_cauchy,track,dev,42.5,83.4,33.0,hiroom+7scenes+scannetpp,240.62,40.1,33.1,34.1,100.0,5.0,33.0,38.5,27.6,,,2026-11-04,workspace/tto/DA3-BASE/vggsfm_cauchy
+DA3-BASE,vggsfm_trivial,track,dev,27.8,81.9,41.4,hiroom+7scenes+scannetpp,196.02,23.2,34.2,13.3,55.6,12.9,25.8,60.4,37.9,,,2026-11-04,workspace/tto/DA3-BASE/vggsfm_trivial
+DA3-BASE-roma-turbo-q4,.,other,30/0/0/0/0,51.1,88.1,43.7,hiroom,,51.1,,,,,43.7,,,,,2026-11-03,workspace/tto/DA3-BASE-roma-turbo-q4
+DA3-BASE-roma-turbo-q8,.,other,30/0/0/0/0,63.7,92.6,44.9,hiroom,,63.7,,,,,44.9,,,,,2026-11-03,workspace/tto/DA3-BASE-roma-turbo-q8
+DA3-BASE_first100,spp_frames/eval,feedforward,0/0/20/0/0,27.0,81.5,,,5.20,,,27.0,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/DA3-BASE_first100
+DA3-BASE_linspace,spp_frames/eval,feedforward,0/0/20/0/0,24.0,83.2,,,5.18,,,24.0,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/DA3-BASE_linspace
+DA3-BASE_s0,seeds/eval,feedforward,full,27.9,83.4,42.7,hiroom+7scenes+scannetpp+eth3d,5.21,18.9,20.3,24.5,60.9,14.9,23.7,49.1,48.2,49.8,,2026-10-30,workspace/evaluation/seeds/DA3-BASE_s0
+DA3-BASE_s0,stride/seeds/eval,feedforward,0/7/20/0/0,22.9,83.2,47.1,7scenes+scannetpp,,,20.7,25.1,,,,46.9,47.3,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-BASE_s0
+DA3-BASE_s1,seeds/eval,feedforward,full,27.7,83.3,42.1,hiroom+7scenes+scannetpp+eth3d,5.19,18.9,21.3,22.4,60.9,14.9,25.6,49.2,46.4,47.1,,2026-10-31,workspace/evaluation/seeds/DA3-BASE_s1
+DA3-BASE_s1,stride/seeds/eval,feedforward,0/7/20/0/0,22.9,83.2,48.6,7scenes+scannetpp,,,20.7,25.1,,,,49.4,47.7,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-BASE_s1
+DA3-BASE_s2,seeds/eval,feedforward,full,28.3,83.7,41.4,hiroom+7scenes+scannetpp+eth3d,5.17,18.9,22.2,24.5,60.9,14.9,23.2,44.5,48.8,49.3,,2026-10-31,workspace/evaluation/seeds/DA3-BASE_s2
+DA3-BASE_s2,stride/seeds/eval,feedforward,0/7/20/0/0,22.9,83.2,48.3,7scenes+scannetpp,,,20.7,25.1,,,,50.4,46.1,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-BASE_s2
+DA3-BASE_s3,seeds/eval,feedforward,full,27.9,83.6,41.6,hiroom+7scenes+scannetpp+eth3d,5.17,18.9,21.0,23.9,60.9,14.9,23.7,47.2,46.5,49.0,,2026-10-31,workspace/evaluation/seeds/DA3-BASE_s3
+DA3-BASE_s3,stride/seeds/eval,feedforward,0/7/20/0/0,22.9,83.2,48.3,7scenes+scannetpp,,,20.7,25.1,,,,49.2,47.5,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-BASE_s3
+DA3-BASE_seed0,frame_seeds/eval,feedforward,0/7/20/0/0,22.4,81.7,,,5.16,,20.3,24.5,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed0
+DA3-BASE_seed1,frame_seeds/eval,feedforward,0/7/20/0/0,21.8,81.4,,,5.16,,21.3,22.4,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed1
+DA3-BASE_seed2,frame_seeds/eval,feedforward,0/7/20/0/0,23.4,82.3,,,5.19,,22.2,24.5,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed2
+DA3-BASE_seed3,frame_seeds/eval,feedforward,0/7/20/0/0,22.5,82.1,,,5.18,,21.0,23.9,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed3
+DA3-BASE_seed4,frame_seeds/eval,feedforward,0/7/20/0/0,21.3,82.3,,,5.16,,20.0,22.5,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed4
+DA3-BASE_seed42,frame_seeds/eval,feedforward,0/7/20/0/0,20.8,81.6,,,5.14,,21.4,20.2,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-BASE_seed42
+DA3-BASE_stride5,spp_frames/eval,feedforward,0/0/20/0/0,25.1,83.5,47.1,scannetpp,2.63,,,25.1,,,,,47.1,,,2026-11-02,workspace/evaluation/spp_frames/DA3-BASE_stride5
+DA3-LARGE,eval,feedforward,full,49.2,91.6,,,4.56,58.9,28.7,56.0,70.2,32.1,,,,,,2026-11-04,workspace/evaluation/DA3-LARGE
+DA3-LARGE-1.1,abl_cauchy_s01,track,dev,48.7,90.1,,,103.90,51.7,35.1,45.8,100.0,10.7,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/abl_cauchy_s01
+DA3-LARGE-1.1,abl_cauchy_s05,track,dev,48.9,89.4,,,104.81,44.9,35.0,50.4,100.0,14.1,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/abl_cauchy_s05
+DA3-LARGE-1.1,abl_loss_trivial,track,dev,31.2,61.0,,,53.21,21.6,36.1,0.3,98.1,0.2,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/abl_loss_trivial
+DA3-LARGE-1.1,abl_radial,track,dev,57.1,92.3,,,105.57,48.6,34.8,52.8,100.0,49.3,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/abl_radial
+DA3-LARGE-1.1,ba_it10,track,dev,56.3,93.1,,,60.23,56.5,35.2,54.7,99.9,35.3,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_it10
+DA3-LARGE-1.1,ba_it2,track,dev,58.5,94.1,,,31.64,61.7,36.8,49.9,99.3,44.5,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_it2
+DA3-LARGE-1.1,ba_it25,track,dev,56.0,92.6,,,114.57,55.6,35.0,54.9,100.0,34.5,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_it25
+DA3-LARGE-1.1,ba_it5,track,dev,56.9,93.6,,,42.26,58.7,35.5,52.4,99.7,38.1,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_it5
+DA3-LARGE-1.1,ba_iters,track,2/0/0/0/0,65.9,94.4,,,9.82,65.9,,,,,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/ba_iters
+DA3-LARGE-1.1,ba_iters_all,track,dev,57.4,92.7,,,61.33,49.6,34.8,53.2,100.0,49.3,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/ba_iters_all
+DA3-LARGE-1.1,ba_prior1000_it25,track,dev,53.9,93.3,,,114.37,57.7,42.3,47.3,88.7,33.4,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_prior1000_it25
+DA3-LARGE-1.1,ba_prior100_it25,track,dev,61.0,94.8,,,114.11,64.4,37.7,59.5,99.7,43.4,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_prior100_it25
+DA3-LARGE-1.1,ba_prior300_it25,track,dev,59.4,94.3,,,114.28,63.9,40.8,55.1,98.8,38.4,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_prior300_it25
+DA3-LARGE-1.1,ba_prior30_it25,track,dev,58.8,94.1,,,114.36,59.1,35.5,60.5,100.0,39.0,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/ba_prior30_it25
+DA3-LARGE-1.1,depth_only_fit,pba,dev,48.9,90.3,60.0,hiroom+7scenes+scannetpp,2.69,50.3,35.1,47.9,100.0,11.5,56.0,65.2,58.8,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/depth_only_fit
+DA3-LARGE-1.1,depth_only_prior100,pba,dev,61.0,94.8,65.9,hiroom+7scenes+scannetpp,2.67,64.4,37.7,59.5,99.7,43.4,71.8,64.2,61.8,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-LARGE-1.1/depth_only_prior100
+DA3-LARGE-1.1,depth_only_prior300,pba,dev,59.4,94.3,65.6,hiroom+7scenes+scannetpp,2.69,63.9,40.8,55.1,98.8,38.4,71.5,66.0,59.3,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-LARGE-1.1/depth_only_prior300
+DA3-LARGE-1.1,depth_only_rad,pba,dev,57.4,92.7,62.2,hiroom+7scenes+scannetpp,2.67,49.6,34.8,53.2,100.0,49.3,58.4,64.0,64.0,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/depth_only_rad
+DA3-LARGE-1.1,fit_frame_rej,track,dev,48.9,90.3,56.8,hiroom+7scenes+scannetpp,46.29,50.3,35.1,47.9,100.0,11.5,60.6,58.8,51.1,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_frame_rej
+DA3-LARGE-1.1,fit_grid8_rej,track,dev,48.9,90.3,56.0,hiroom+7scenes+scannetpp,47.51,50.3,35.1,47.9,100.0,11.5,59.8,57.4,50.7,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid8_rej
+DA3-LARGE-1.1,fit_grid_r100,track,dev,48.9,90.3,56.9,hiroom+7scenes+scannetpp,48.10,50.3,35.1,47.9,100.0,11.5,60.8,58.6,51.2,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_r100
+DA3-LARGE-1.1,fit_grid_r1000,track,dev,48.9,90.3,57.0,hiroom+7scenes+scannetpp,47.34,50.3,35.1,47.9,100.0,11.5,60.8,59.0,51.4,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_r1000
+DA3-LARGE-1.1,fit_grid_rej,track,dev,48.9,90.3,55.5,hiroom+7scenes+scannetpp,48.70,50.3,35.1,47.9,100.0,11.5,58.9,57.7,49.8,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_rej
+DA3-LARGE-1.1,hyb_focal10,pba,dev,51.9,92.1,64.7,hiroom+7scenes+scannetpp,2.52,56.8,42.5,58.8,86.1,15.4,69.5,63.3,61.3,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 w_focal=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_focal10
+DA3-LARGE-1.1,hyb_focal100,pba,dev,51.6,91.9,64.7,hiroom+7scenes+scannetpp,2.53,57.5,42.5,57.6,85.7,14.5,70.6,63.4,60.3,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 w_focal=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_focal100
+DA3-LARGE-1.1,hyb_prior100,pba,dev,58.7,94.4,70.8,hiroom+7scenes+scannetpp,2.53,73.4,42.7,64.3,83.9,29.3,80.7,64.7,66.9,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-LARGE-1.1/hyb_prior100
+DA3-LARGE-1.1,hyb_prior300,pba,dev,58.9,94.2,71.9,hiroom+7scenes+scannetpp,2.52,72.8,42.7,63.7,85.0,30.4,80.7,65.8,69.1,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-LARGE-1.1/hyb_prior300
+DA3-LARGE-1.1,hyb_rad,pba,dev,55.2,93.1,70.2,hiroom+7scenes+scannetpp,2.53,64.1,43.0,59.6,84.4,24.6,78.3,64.8,67.5,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_rad
+DA3-LARGE-1.1,hyb_rej,pba,dev,54.3,92.4,70.8,hiroom+7scenes+scannetpp,2.52,62.5,42.4,63.9,85.6,17.0,79.4,66.3,66.9,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_rej
+DA3-LARGE-1.1,hyb_rej_it100,pba,dev,55.0,92.7,72.2,hiroom+7scenes+scannetpp,4.46,65.0,43.9,64.4,81.3,20.3,81.9,68.3,66.5,,iters=100 lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_rej_it100
+DA3-LARGE-1.1,hyb_rej_it12,pba,dev,52.6,92.2,67.8,hiroom+7scenes+scannetpp,1.05,51.9,42.1,62.0,90.0,16.9,70.9,66.0,66.4,,iters=12 lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_rej_it12
+DA3-LARGE-1.1,hyb_rej_it25,pba,dev,54.1,92.3,68.7,hiroom+7scenes+scannetpp,1.54,60.8,42.2,62.5,88.0,17.3,75.7,63.7,66.7,,iters=25 lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_rej_it25
+DA3-LARGE-1.1,polish_only,pba,dev,58.4,94.4,70.7,hiroom+7scenes+scannetpp,2.54,70.6,41.5,59.5,74.4,45.8,79.5,64.5,68.1,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 w_pose=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/polish_only
+DA3-LARGE-1.1,rad_frame_rej,track,dev,57.4,92.7,59.1,hiroom+7scenes+scannetpp,49.02,49.6,34.8,53.2,100.0,49.3,62.5,55.7,59.2,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/rad_frame_rej
+DA3-LARGE-1.1,roma_turbo_q4,track,dev,48.7,89.9,59.7,hiroom+7scenes+scannetpp,46.30,49.3,35.1,47.5,100.0,11.5,56.3,65.4,57.3,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/roma_turbo_q4
+DA3-LARGE-1.1,roma_turbo_q8,track,dev,52.1,89.6,54.4,hiroom+7scenes+scannetpp+eth3d,79.05,51.5,35.2,62.5,100.0,11.5,58.7,63.6,58.5,36.9,,2026-11-04,workspace/tto/DA3-LARGE-1.1/roma_turbo_q8
+DA3-LARGE-1.1,roma_turbo_q8_off3,track,dev,50.1,90.5,59.9,hiroom+7scenes+scannetpp,75.46,46.9,35.2,59.0,100.0,9.4,58.5,63.6,57.7,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/roma_turbo_q8_off3
+DA3-LARGE-1.1,roma_turbo_q8_s1,track,dev,51.6,89.6,60.8,hiroom+7scenes+scannetpp,78.84,49.4,35.3,61.9,100.0,11.3,60.2,63.8,58.6,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/roma_turbo_q8_s1
+DA3-LARGE-1.1,roma_turbo_q8_s2,track,dev,52.7,89.7,60.8,hiroom+7scenes+scannetpp,78.98,54.5,35.2,62.3,100.0,11.5,60.7,63.7,58.1,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/roma_turbo_q8_s2
+DA3-LARGE-1.1,stride/eval,feedforward,0/7/20/0/0,44.8,90.5,60.9,7scenes+scannetpp,10.34,,28.1,61.5,,,,52.9,68.9,,,2026-11-02,workspace/evaluation/stride/DA3-LARGE-1.1
+DA3-LARGE-1.1,vggsfm_cauchy,track,dev,43.8,84.7,54.8,hiroom+7scenes+scannetpp,245.42,44.3,33.8,36.0,99.9,5.2,45.7,64.7,54.0,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/vggsfm_cauchy
+DA3-LARGE-1.1,vggsfm_trivial,track,dev,42.6,89.5,,,208.05,34.1,37.9,44.4,66.1,30.6,,,,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/vggsfm_trivial
+DA3-LARGE-1.1,vggsfm_trivial_rescaled,track,dev,42.6,89.5,,,208.05,34.1,37.9,44.4,66.1,30.6,,,,,,2026-11-05,workspace/tto/DA3-LARGE-1.1/vggsfm_trivial_rescaled
+DA3-LARGE-1.1-roma-turbo-q4,.,other,30/0/0/0/0,58.2,89.8,62.7,hiroom,,58.2,,,,,62.7,,,,,2026-11-03,workspace/tto/DA3-LARGE-1.1-roma-turbo-q4
+DA3-LARGE-1.1-roma-turbo-q8,.,other,30/0/0/0/0,65.6,93.5,68.3,hiroom,,65.6,,,,,68.3,,,,,2026-11-03,workspace/tto/DA3-LARGE-1.1-roma-turbo-q8
+DA3-LARGE-1.1_s0,seeds/eval,feedforward,full,52.4,92.1,65.4,hiroom+7scenes+scannetpp+eth3d,11.94,59.9,28.5,60.9,77.9,34.8,68.9,54.6,69.1,69.2,,2026-10-30,workspace/evaluation/seeds/DA3-LARGE-1.1_s0
+DA3-LARGE-1.1_s0,stride/seeds/eval,feedforward,0/7/20/0/0,44.8,90.5,61.3,7scenes+scannetpp,,,28.1,61.5,,,,53.8,68.9,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-LARGE-1.1_s0
+DA3-LARGE-1.1_s1,seeds/eval,feedforward,full,51.9,91.9,65.5,hiroom+7scenes+scannetpp+eth3d,11.91,59.9,28.5,58.2,77.9,34.8,68.9,54.8,68.9,69.5,,2026-10-31,workspace/evaluation/seeds/DA3-LARGE-1.1_s1
+DA3-LARGE-1.1_s1,stride/seeds/eval,feedforward,0/7/20/0/0,44.8,90.5,61.3,7scenes+scannetpp,,,28.1,61.5,,,,53.7,68.9,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-LARGE-1.1_s1
+DA3-LARGE-1.1_s2,seeds/eval,feedforward,full,52.5,91.9,64.3,hiroom+7scenes+scannetpp+eth3d,11.92,59.9,29.0,61.1,77.9,34.8,68.2,52.1,69.3,67.9,,2026-10-31,workspace/evaluation/seeds/DA3-LARGE-1.1_s2
+DA3-LARGE-1.1_s2,stride/seeds/eval,feedforward,0/7/20/0/0,44.8,90.5,61.0,7scenes+scannetpp,,,28.1,61.5,,,,53.2,68.8,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-LARGE-1.1_s2
+DA3-LARGE-1.1_s3,seeds/eval,feedforward,full,52.2,92.0,64.5,hiroom+7scenes+scannetpp+eth3d,11.90,59.9,28.1,60.1,77.9,34.8,66.7,52.7,69.4,69.1,,2026-10-31,workspace/evaluation/seeds/DA3-LARGE-1.1_s3
+DA3-LARGE-1.1_s3,stride/seeds/eval,feedforward,0/7/20/0/0,44.8,90.5,61.3,7scenes+scannetpp,,,28.1,61.5,,,,53.9,68.6,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-LARGE-1.1_s3
+DA3-LARGE-1.1_stride5,spp_frames/eval,feedforward,0/0/20/0/0,61.5,94.9,68.9,scannetpp,5.93,,,61.5,,,,,68.9,,,2026-11-02,workspace/evaluation/spp_frames/DA3-LARGE-1.1_stride5
+DA3-SMALL,abl_cauchy_s01,track,dev,46.0,84.8,,,98.57,48.1,34.8,38.8,100.0,8.3,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_cauchy_s01
+DA3-SMALL,abl_cauchy_s05,track,dev,47.1,85.2,,,100.41,47.1,34.9,43.7,100.0,10.0,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_cauchy_s05
+DA3-SMALL,abl_cauchy_s10,track,dev,46.4,85.3,,,100.38,42.5,35.3,42.4,100.0,12.0,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_cauchy_s10
+DA3-SMALL,abl_fixfocal,track,dev,42.1,82.1,,,96.64,17.5,35.0,50.4,100.0,7.3,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_fixfocal
+DA3-SMALL,abl_gate30,track,dev,36.8,77.1,,,68.40,38.9,35.3,5.9,99.0,5.1,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_gate30
+DA3-SMALL,abl_gate8,track,dev,17.2,73.6,,,17.30,16.0,29.2,5.9,30.0,5.1,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_gate8
+DA3-SMALL,abl_loss_trivial,track,dev,30.3,58.0,,,52.92,16.9,36.0,0.0,98.2,0.6,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_loss_trivial
+DA3-SMALL,abl_radial,track,dev,54.1,86.3,,,101.81,48.6,34.6,49.5,100.0,37.6,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_radial
+DA3-SMALL,abl_sepcam,track,dev,43.7,83.1,,,130.54,38.5,36.2,37.2,97.0,9.4,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_sepcam
+DA3-SMALL,abl_shrink25,track,dev,40.6,83.7,,,87.61,42.8,36.9,28.1,86.7,8.4,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_shrink25
+DA3-SMALL,abl_shrink50,track,dev,30.4,80.5,,,72.95,30.7,36.4,16.5,62.1,6.2,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_shrink50
+DA3-SMALL,abl_shrink75,track,dev,22.2,77.2,,,69.56,18.3,33.7,9.7,43.5,5.8,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_shrink75
+DA3-SMALL,abl_vis02,track,dev,45.5,82.1,,,109.65,47.3,35.3,36.3,100.0,8.7,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_vis02
+DA3-SMALL,abl_vis08,track,dev,46.9,86.6,,,85.48,47.7,34.0,45.8,99.9,7.1,,,,,,2026-11-04,workspace/tto/DA3-SMALL/abl_vis08
+DA3-SMALL,ba_it10,track,dev,49.9,86.1,,,62.09,45.2,35.2,37.8,100.0,31.3,,,,,,2026-11-05,workspace/tto/DA3-SMALL/ba_it10
+DA3-SMALL,ba_it2,track,dev,38.1,82.2,,,32.38,30.3,36.4,13.3,99.2,11.1,,,,,,2026-11-05,workspace/tto/DA3-SMALL/ba_it2
+DA3-SMALL,ba_it5,track,dev,46.3,85.6,,,43.39,43.0,35.7,28.6,99.8,24.5,,,,,,2026-11-05,workspace/tto/DA3-SMALL/ba_it5
+DA3-SMALL,ba_iters,track,2/1/1/1/1,58.8,90.7,,,60.79,61.0,23.6,24.4,100.0,85.0,,,,,,2026-11-04,workspace/tto/DA3-SMALL/ba_iters
+DA3-SMALL,ba_iters_all,track,dev,54.1,86.3,,,60.79,48.6,34.6,49.5,100.0,37.6,,,,,,2026-11-04,workspace/tto/DA3-SMALL/ba_iters_all
+DA3-SMALL,depth_only_fit,pba,dev,47.4,85.3,45.1,hiroom+7scenes+scannetpp,2.68,49.2,34.8,44.2,100.0,8.8,49.2,55.5,30.5,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/depth_only_fit
+DA3-SMALL,depth_only_rad,pba,dev,54.1,86.3,46.6,hiroom+7scenes+scannetpp,2.69,48.6,34.6,49.5,100.0,37.6,48.5,56.4,34.8,,lm_iters=5 lm_samples=0 focal=none focal_init=pred poses=False bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/depth_only_rad
+DA3-SMALL,fit_frame,track,dev,47.4,85.3,48.3,hiroom+7scenes+scannetpp,47.78,49.1,34.8,44.3,100.0,8.8,52.6,52.5,39.7,,,2026-11-04,workspace/tto/DA3-SMALL/fit_frame
+DA3-SMALL,fit_frame_rej,track,dev,47.4,85.3,48.3,hiroom+7scenes+scannetpp,47.78,49.2,34.8,44.2,100.0,8.8,52.6,52.4,39.7,,,2026-11-04,workspace/tto/DA3-SMALL/fit_frame_rej
+DA3-SMALL,fit_grid8_rej,track,dev,47.4,85.3,48.9,hiroom+7scenes+scannetpp,48.46,49.2,34.8,44.2,100.0,8.8,53.0,52.5,41.2,,,2026-11-04,workspace/tto/DA3-SMALL/fit_grid8_rej
+DA3-SMALL,fit_grid_r100,track,dev,47.4,85.3,49.2,hiroom+7scenes+scannetpp,48.59,49.2,34.8,44.2,100.0,8.8,52.8,53.8,41.1,,,2026-11-04,workspace/tto/DA3-SMALL/fit_grid_r100
+DA3-SMALL,fit_grid_r1000,track,dev,47.4,85.3,48.9,hiroom+7scenes+scannetpp,48.43,49.2,34.8,44.2,100.0,8.8,52.8,53.6,40.2,,,2026-11-04,workspace/tto/DA3-SMALL/fit_grid_r1000
+DA3-SMALL,fit_grid_rej,track,dev,47.4,85.3,48.1,hiroom+7scenes+scannetpp,49.47,49.2,34.8,44.2,100.0,8.8,52.6,52.8,38.8,,,2026-11-04,workspace/tto/DA3-SMALL/fit_grid_rej
+DA3-SMALL,fit_none,track,dev,47.4,85.3,37.6,hiroom+7scenes+scannetpp,45.56,49.1,34.8,44.2,100.0,8.8,38.7,56.1,18.0,,,2026-11-04,workspace/tto/DA3-SMALL/fit_none
+DA3-SMALL,fit_scene,track,dev,47.4,85.3,47.9,hiroom+7scenes+scannetpp,47.63,49.1,34.8,44.2,100.0,8.8,48.0,55.2,40.7,,,2026-11-04,workspace/tto/DA3-SMALL/fit_scene
+DA3-SMALL,hyb_focal10,pba,dev,43.1,84.9,49.8,hiroom+7scenes+scannetpp,2.53,49.4,37.5,43.0,76.9,8.8,54.5,55.2,39.7,,lm_iters=5 lm_samples=0 focal_init=pred w_focal=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_focal10
+DA3-SMALL,hyb_focal100,pba,dev,43.3,84.9,49.6,hiroom+7scenes+scannetpp,2.52,51.4,37.5,42.2,76.7,8.6,53.8,55.4,39.8,,lm_iters=5 lm_samples=0 focal_init=pred w_focal=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_focal100
+DA3-SMALL,hyb_q1,pba,dev,37.5,83.8,47.8,hiroom+7scenes+scannetpp,2.51,40.9,37.6,19.0,81.2,9.1,53.1,54.1,36.3,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_q1
+DA3-SMALL,hyb_q2,pba,dev,42.1,83.1,48.6,hiroom+7scenes+scannetpp,2.52,48.8,37.1,36.1,81.4,7.3,53.9,57.1,34.8,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_q2
+DA3-SMALL,hyb_rad,pba,dev,46.6,85.7,53.5,hiroom+7scenes+scannetpp,2.51,53.2,40.3,47.4,81.0,10.9,59.0,57.8,43.6,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_rad
+DA3-SMALL,hyb_rej,pba,dev,45.6,85.5,52.0,hiroom+7scenes+scannetpp,2.51,51.1,37.8,47.5,81.4,10.2,59.1,56.9,40.0,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_rej
+DA3-SMALL,hyb_rej_it100,pba,dev,44.5,85.4,52.3,hiroom+7scenes+scannetpp,4.43,52.6,38.1,46.7,74.0,11.3,57.6,57.5,41.9,,iters=100 lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_rej_it100
+DA3-SMALL,hyb_rej_it12,pba,dev,45.3,85.2,48.6,hiroom+7scenes+scannetpp,1.05,50.1,36.4,43.3,86.9,9.8,58.9,53.7,33.1,,iters=12 lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_rej_it12
+DA3-SMALL,hyb_rej_it25,pba,dev,46.3,85.5,50.3,hiroom+7scenes+scannetpp,1.55,51.3,37.2,45.7,86.2,10.8,58.8,56.0,35.9,,iters=25 lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_rej_it25
+DA3-SMALL,polish_epi_nolm_w100,pba,dev,21.4,75.1,,,3.26,17.4,33.9,2.8,50.8,2.3,,,,,"focal_init=pred bright_rel=False w_match=100.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd radial=False",2026-11-04,workspace/tto/DA3-SMALL/polish_epi_nolm_w100
+DA3-SMALL,polish_epi_w10,pba,dev,27.8,81.6,46.2,hiroom+7scenes+scannetpp,3.18,29.0,35.1,15.5,54.3,5.2,45.7,56.6,36.2,,"lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False w_match=10.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-11-04,workspace/tto/DA3-SMALL/polish_epi_w10
+DA3-SMALL,polish_epi_w100,pba,dev,27.1,80.6,44.2,hiroom+7scenes+scannetpp,3.18,28.6,34.8,13.5,54.3,4.2,41.9,56.7,33.9,,"lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False w_match=100.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-11-04,workspace/tto/DA3-SMALL/polish_epi_w100
+DA3-SMALL,polish_only,pba,dev,29.9,82.9,47.5,hiroom+7scenes+scannetpp,2.48,33.8,35.5,18.9,51.7,9.9,49.4,56.8,36.3,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/polish_only
+DA3-SMALL,polish_trk_w10,pba,dev,26.6,78.2,43.1,hiroom+7scenes+scannetpp,3.28,22.4,35.3,19.3,53.0,2.8,37.3,55.6,36.3,,"lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False w_match=10.0 match_levels=0,1,2,3,4 match_max=256 impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False",2026-11-04,workspace/tto/DA3-SMALL/polish_trk_w10
+DA3-SMALL,rad_frame_rej,track,dev,54.1,86.3,51.2,hiroom+7scenes+scannetpp,111.40,48.6,34.6,49.5,100.0,37.6,53.2,53.6,47.0,,,2026-11-04,workspace/tto/DA3-SMALL/rad_frame_rej
+DA3-SMALL,roma_turbo_q8,track,dev,50.6,88.3,36.5,hiroom+7scenes+scannetpp+eth3d,79.02,58.1,34.5,48.8,100.0,11.7,43.4,55.5,18.2,28.9,,2026-11-04,workspace/tto/DA3-SMALL/roma_turbo_q8
+DA3-SMALL,roma_turbo_q8_off3,track,dev,49.7,89.4,36.3,hiroom+7scenes+scannetpp,75.64,43.2,34.6,53.7,100.0,16.8,47.3,56.6,4.9,,,2026-11-04,workspace/tto/DA3-SMALL/roma_turbo_q8_off3
+DA3-SMALL,roma_turbo_q8_s1,track,dev,49.7,88.0,38.7,hiroom+7scenes+scannetpp,78.73,54.8,34.6,47.7,100.0,11.3,43.0,55.4,17.5,,,2026-11-04,workspace/tto/DA3-SMALL/roma_turbo_q8_s1
+DA3-SMALL,roma_turbo_q8_s2,track,dev,49.8,87.9,38.8,hiroom+7scenes+scannetpp,79.00,56.4,34.8,46.2,100.0,11.4,42.9,55.7,17.9,,,2026-11-04,workspace/tto/DA3-SMALL/roma_turbo_q8_s2
+DA3-SMALL,stride/eval,feedforward,0/7/20/0/0,12.4,75.3,36.4,7scenes+scannetpp,2.13,,14.0,10.8,,,,39.0,33.8,,,2026-11-02,workspace/evaluation/stride/DA3-SMALL
+DA3-SMALL,stride_7s_test/eval,feedforward,0/7/0/0/0,14.0,78.7,,,2.14,,14.0,,,,,,,,,2026-11-02,workspace/evaluation/stride_7s_test/DA3-SMALL
+DA3-SMALL,tracks_q1,track,dev,37.0,79.4,38.9,hiroom+7scenes+scannetpp,20.30,33.4,36.3,5.9,100.0,9.4,41.5,56.5,18.6,,,2026-11-04,workspace/tto/DA3-SMALL/tracks_q1
+DA3-SMALL,tracks_q2,track,dev,41.8,81.7,44.7,hiroom+7scenes+scannetpp,30.02,37.6,34.6,27.1,99.8,10.2,42.8,55.5,35.9,,,2026-11-04,workspace/tto/DA3-SMALL/tracks_q2
+DA3-SMALL,vggsfm_cauchy,track,dev,40.8,82.0,37.1,hiroom+7scenes+scannetpp,251.17,36.4,33.5,29.2,100.0,5.3,37.1,57.4,16.9,,,2026-11-04,workspace/tto/DA3-SMALL/vggsfm_cauchy
+DA3-SMALL,vggsfm_trivial,track,dev,18.5,72.7,30.7,hiroom+7scenes+scannetpp,200.70,12.3,29.2,5.9,40.2,5.1,22.5,50.9,18.5,,,2026-11-04,workspace/tto/DA3-SMALL/vggsfm_trivial
+DA3-SMALL,viz_featuremetric,pba,1/0/0/0/0,21.7,85.0,,,8.80,21.7,,,,,,,,,lm_iters=5 lm_samples=0 focal_init=pred features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-SMALL/viz_featuremetric
+DA3-SMALL-roma-base,eval,feedforward,1/0/0/0/0,2.0,52.7,,,,2.0,,,,,,,,,,2026-11-02,workspace/evaluation/DA3-SMALL-roma-base
+DA3-SMALL-roma-base-q4,.,other,30/0/0/0/0,65.9,90.4,37.6,hiroom,,65.9,,,,,37.6,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-base-q4
+DA3-SMALL-roma-fast-q4,.,other,30/0/0/0/0,63.9,89.6,36.8,hiroom,,63.9,,,,,36.8,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-fast-q4
+DA3-SMALL-roma-turbo-q4,.,other,30/0/0/0/0,56.9,90.7,37.2,hiroom,,56.9,,,,,37.2,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-turbo-q4
+DA3-SMALL-roma-turbo-q8,.,other,30/0/0/0/0,66.4,93.2,39.7,hiroom,,66.4,,,,,39.7,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-turbo-q8
+DA3-SMALL-vggsfm-cauchy,.,other,30/0/0/0/0,49.7,78.9,34.4,hiroom,,49.7,,,,,34.4,,,,,2026-11-03,workspace/tto/DA3-SMALL-vggsfm-cauchy
+DA3-SMALL-vggsfm-trivial,.,other,30/0/0/0/0,13.4,71.7,24.1,hiroom,,13.4,,,,,24.1,,,,,2026-11-03,workspace/tto/DA3-SMALL-vggsfm-trivial
+DA3-SMALL_first100,spp_frames/eval,feedforward,0/0/20/0/0,13.4,71.4,,,2.45,,,13.4,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/DA3-SMALL_first100
+DA3-SMALL_linspace,spp_frames/eval,feedforward,0/0/20/0/0,11.0,70.8,,,2.44,,,11.0,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/DA3-SMALL_linspace
+DA3-SMALL_s0,seeds/eval,feedforward,full,14.7,75.1,33.7,hiroom+7scenes+scannetpp+eth3d,2.44,9.5,13.4,11.3,30.7,8.6,16.6,41.4,34.2,42.6,,2026-10-30,workspace/evaluation/seeds/DA3-SMALL_s0
+DA3-SMALL_s0,stride/seeds/eval,feedforward,0/7/20/0/0,12.4,75.3,36.3,7scenes+scannetpp,,,14.0,10.8,,,,39.5,33.1,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-SMALL_s0
+DA3-SMALL_s1,seeds/eval,feedforward,full,14.3,74.9,32.4,hiroom+7scenes+scannetpp+eth3d,2.44,9.5,13.1,9.6,30.7,8.6,18.4,38.1,33.6,39.5,,2026-10-31,workspace/evaluation/seeds/DA3-SMALL_s1
+DA3-SMALL_s1,stride/seeds/eval,feedforward,0/7/20/0/0,12.4,75.3,36.2,7scenes+scannetpp,,,14.0,10.8,,,,40.0,32.4,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-SMALL_s1
+DA3-SMALL_s2,seeds/eval,feedforward,full,15.0,76.0,32.6,hiroom+7scenes+scannetpp+eth3d,2.44,9.5,14.3,12.1,30.7,8.6,16.5,38.8,35.7,39.2,,2026-10-31,workspace/evaluation/seeds/DA3-SMALL_s2
+DA3-SMALL_s2,stride/seeds/eval,feedforward,0/7/20/0/0,12.4,75.3,36.4,7scenes+scannetpp,,,14.0,10.8,,,,40.0,32.8,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-SMALL_s2
+DA3-SMALL_s3,seeds/eval,feedforward,full,14.2,75.1,33.0,hiroom+7scenes+scannetpp+eth3d,2.44,9.5,12.2,10.1,30.7,8.6,17.4,36.8,34.6,43.3,,2026-10-31,workspace/evaluation/seeds/DA3-SMALL_s3
+DA3-SMALL_s3,stride/seeds/eval,feedforward,0/7/20/0/0,12.4,75.3,37.9,7scenes+scannetpp,,,14.0,10.8,,,,41.8,34.1,,,2026-11-02,workspace/evaluation/stride/seeds/DA3-SMALL_s3
+DA3-SMALL_seed0,frame_seeds/eval,feedforward,0/7/20/0/0,12.4,73.5,,,2.43,,13.4,11.3,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed0
+DA3-SMALL_seed1,frame_seeds/eval,feedforward,0/7/20/0/0,11.3,73.1,,,2.43,,13.1,9.6,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed1
+DA3-SMALL_seed2,frame_seeds/eval,feedforward,0/7/20/0/0,13.2,75.6,,,2.44,,14.3,12.1,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed2
+DA3-SMALL_seed3,frame_seeds/eval,feedforward,0/7/20/0/0,11.2,73.5,,,2.45,,12.2,10.1,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed3
+DA3-SMALL_seed4,frame_seeds/eval,feedforward,0/7/20/0/0,11.6,73.7,,,2.44,,12.7,10.4,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed4
+DA3-SMALL_seed42,frame_seeds/eval,feedforward,0/7/20/0/0,11.7,73.3,,,2.41,,14.5,9.0,,,,,,,,2026-10-30,workspace/evaluation/frame_seeds/DA3-SMALL_seed42
+DA3-SMALL_stride5,spp_frames/eval,feedforward,0/0/20/0/0,10.8,71.8,33.8,scannetpp,1.23,,,10.8,,,,,33.8,,,2026-11-02,workspace/evaluation/spp_frames/DA3-SMALL_stride5
+Pi3,eval,feedforward,full,48.2,91.0,61.9,hiroom+7scenes+scannetpp+eth3d,8.45,65.1,25.9,55.0,63.0,32.2,73.1,41.9,63.1,69.5,,2026-10-26,workspace/evaluation/Pi3
+Pi3_da3pre,eval,feedforward,full,48.3,91.1,62.9,hiroom+7scenes+scannetpp+eth3d,5.61,67.1,26.3,50.4,62.6,35.2,76.0,42.1,61.9,71.8,,2026-10-30,workspace/evaluation/Pi3_da3pre
+Pi3_da3pre,stride/eval,feedforward,0/7/20/0/0,38.3,89.2,53.0,7scenes+scannetpp,14.77,,25.2,51.4,,,,42.6,63.5,,,2026-11-02,workspace/evaluation/stride/Pi3_da3pre
+Pi3_da3pre,stride_7s_test/eval,feedforward,0/7/0/0/0,25.2,86.3,,,14.78,,25.2,,,,,,,,,2026-11-02,workspace/evaluation/stride_7s_test/Pi3_da3pre
+Pi3_da3pre_s0,seeds/eval,feedforward,full,48.2,91.1,63.8,hiroom+7scenes+scannetpp+eth3d,17.34,67.1,25.0,51.0,62.6,35.2,74.1,45.5,63.1,72.6,,2026-10-31,workspace/evaluation/seeds/Pi3_da3pre_s0
+Pi3_da3pre_s0,stride/seeds/eval,feedforward,0/7/20/0/0,38.3,89.2,52.9,7scenes+scannetpp,,,25.2,51.4,,,,41.8,64.0,,,2026-11-02,workspace/evaluation/stride/seeds/Pi3_da3pre_s0
+Pi3_da3pre_s1,seeds/eval,feedforward,full,48.3,91.1,63.6,hiroom+7scenes+scannetpp+eth3d,17.36,67.1,23.6,53.1,62.6,35.2,76.4,41.4,65.0,71.9,,2026-10-31,workspace/evaluation/seeds/Pi3_da3pre_s1
+Pi3_da3pre_s1,stride/seeds/eval,feedforward,0/7/20/0/0,38.3,89.2,52.4,7scenes+scannetpp,,,25.2,51.4,,,,43.2,61.6,,,2026-11-02,workspace/evaluation/stride/seeds/Pi3_da3pre_s1
+Pi3_da3pre_s2,seeds/eval,feedforward,full,48.6,91.2,63.9,hiroom+7scenes+scannetpp+eth3d,17.31,67.1,26.9,51.3,62.6,35.2,74.9,45.8,62.2,72.6,,2026-10-31,workspace/evaluation/seeds/Pi3_da3pre_s2
+Pi3_da3pre_s2,stride/seeds/eval,feedforward,0/7/20/0/0,38.3,89.2,53.4,7scenes+scannetpp,,,25.2,51.4,,,,43.4,63.4,,,2026-11-02,workspace/evaluation/stride/seeds/Pi3_da3pre_s2
+Pi3_da3pre_s3,seeds/eval,feedforward,full,48.2,91.0,62.7,hiroom+7scenes+scannetpp+eth3d,17.35,67.1,24.7,51.6,62.6,35.2,74.9,42.7,61.2,72.1,,2026-10-31,workspace/evaluation/seeds/Pi3_da3pre_s3
+Pi3_da3pre_s3,stride/seeds/eval,feedforward,0/7/20/0/0,38.3,89.2,54.2,7scenes+scannetpp,,,25.2,51.4,,,,44.7,63.6,,,2026-11-02,workspace/evaluation/stride/seeds/Pi3_da3pre_s3
+Pi3_first100,spp_frames/eval,feedforward,0/0/20/0/0,45.6,88.9,,,17.32,,,45.6,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/Pi3_first100
+Pi3_linspace,spp_frames/eval,feedforward,0/0/20/0/0,51.8,92.6,,,17.33,,,51.8,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/Pi3_linspace
+Pi3_stride5,spp_frames/eval,feedforward,0/0/20/0/0,51.4,92.2,63.5,scannetpp,7.66,,,51.4,,,,,63.5,,,2026-11-02,workspace/evaluation/spp_frames/Pi3_stride5
+VGGT-1B,eval,feedforward,full,47.8,86.7,58.9,hiroom+7scenes+scannetpp+eth3d,8.97,47.8,23.2,59.3,79.7,29.0,58.4,47.9,67.4,61.9,,2026-10-26,workspace/evaluation/VGGT-1B
+VGGT-1B_da3pre,eval,feedforward,full,47.3,86.6,57.3,hiroom+7scenes+scannetpp+eth3d,8.15,48.5,23.6,59.3,79.1,26.0,58.2,47.4,66.9,56.6,,2026-10-30,workspace/evaluation/VGGT-1B_da3pre
+VGGT-1B_da3pre,stride/eval,feedforward,0/7/20/0/0,43.1,90.0,57.3,7scenes+scannetpp,20.96,,23.9,62.4,,,,48.2,66.4,,,2026-11-02,workspace/evaluation/stride/VGGT-1B_da3pre
+VGGT-1B_da3pre,stride_7s_test/eval,feedforward,0/7/0/0/0,23.9,84.9,,,20.92,,23.9,,,,,,,,,2026-11-02,workspace/evaluation/stride_7s_test/VGGT-1B_da3pre
+VGGT-1B_da3pre_s0,seeds/eval,feedforward,full,47.7,86.7,57.6,hiroom+7scenes+scannetpp+eth3d,24.55,48.5,23.4,61.7,79.1,26.0,58.0,47.8,67.1,57.7,,2026-10-31,workspace/evaluation/seeds/VGGT-1B_da3pre_s0
+VGGT-1B_da3pre_s0,stride/seeds/eval,feedforward,0/7/20/0/0,43.1,90.0,56.9,7scenes+scannetpp,,,23.9,62.4,,,,47.8,66.0,,,2026-11-02,workspace/evaluation/stride/seeds/VGGT-1B_da3pre_s0
+VGGT-1B_da3pre_s1,seeds/eval,feedforward,full,48.2,86.6,57.3,hiroom+7scenes+scannetpp+eth3d,24.55,48.5,24.7,62.6,79.1,26.0,55.9,48.4,67.5,57.5,,2026-10-31,workspace/evaluation/seeds/VGGT-1B_da3pre_s1
+VGGT-1B_da3pre_s1,stride/seeds/eval,feedforward,0/7/20/0/0,43.1,90.0,57.2,7scenes+scannetpp,,,23.9,62.4,,,,47.8,66.6,,,2026-11-02,workspace/evaluation/stride/seeds/VGGT-1B_da3pre_s1
+VGGT-1B_da3pre_s2,seeds/eval,feedforward,full,47.8,86.5,56.6,hiroom+7scenes+scannetpp+eth3d,24.57,48.5,24.5,60.8,79.1,26.0,56.6,43.9,67.4,58.7,,2026-10-31,workspace/evaluation/seeds/VGGT-1B_da3pre_s2
+VGGT-1B_da3pre_s2,stride/seeds/eval,feedforward,0/7/20/0/0,43.1,90.0,57.4,7scenes+scannetpp,,,23.9,62.4,,,,48.4,66.4,,,2026-11-02,workspace/evaluation/stride/seeds/VGGT-1B_da3pre_s2
+VGGT-1B_da3pre_s3,seeds/eval,feedforward,full,47.7,86.5,57.6,hiroom+7scenes+scannetpp+eth3d,24.56,48.5,23.1,61.6,79.1,26.0,58.3,46.5,67.1,58.3,,2026-10-31,workspace/evaluation/seeds/VGGT-1B_da3pre_s3
+VGGT-1B_da3pre_s3,stride/seeds/eval,feedforward,0/7/20/0/0,43.1,90.0,57.3,7scenes+scannetpp,,,23.9,62.4,,,,48.0,66.5,,,2026-11-02,workspace/evaluation/stride/seeds/VGGT-1B_da3pre_s3
+VGGT-1B_first100,spp_frames/eval,feedforward,0/0/20/0/0,56.0,90.6,,,24.48,,,56.0,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/VGGT-1B_first100
+VGGT-1B_linspace,spp_frames/eval,feedforward,0/0/20/0/0,61.2,95.0,,,24.46,,,61.2,,,,,,,,2026-11-02,workspace/evaluation/spp_frames/VGGT-1B_linspace
+VGGT-1B_stride5,spp_frames/eval,feedforward,0/0/20/0/0,62.4,95.1,66.4,scannetpp,11.02,,,62.4,,,,,66.4,,,2026-11-02,workspace/evaluation/spp_frames/VGGT-1B_stride5
+dvlt,stride/eval,feedforward,0/7/20/0/0,51.9,92.6,61.3,7scenes+scannetpp,5.17,,30.5,73.3,,,,52.2,70.4,,,2026-11-02,workspace/evaluation/stride/dvlt
+dvlt_fs,C0_K12_fhk,feedforward,full,59.6,94.1,,,2.98,77.2,30.4,73.0,80.0,37.2,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/C0_K12_fhk
+dvlt_fs,C0_K12_fhk/pho_it25,pba,full,71.9,95.4,,,0.70,88.7,28.4,80.9,94.0,67.6,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/C0_K12_fhk/pho_it25
+dvlt_fs,C1_K12_fhk,feedforward,full,58.8,93.9,,,2.98,76.1,29.1,74.9,78.2,35.8,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/C1_K12_fhk
+dvlt_fs,C1_K12_fhk/pho_it25,pba,full,71.8,95.3,,,0.68,89.7,28.1,80.9,94.0,66.1,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/C1_K12_fhk/pho_it25
+dvlt_fs,K12_head,feedforward,full,55.2,93.3,,,2.80,67.6,29.6,68.6,78.1,32.1,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/K12_head
+dvlt_fs,K12_head/pho_it25,pba,full,71.6,95.3,,,0.69,88.9,28.5,80.9,94.1,65.8,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/K12_head/pho_it25
+dvlt_fs,K16_3080,feedforward,full,61.3,94.3,,,3.67,79.3,30.5,76.9,82.8,36.8,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/K16_3080
+dvlt_fs,K16_3080/pho_it25,pba,full,70.9,95.3,,,0.69,88.4,28.9,79.6,94.4,63.1,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/K16_3080/pho_it25
+dvlt_fs,K16_depthlr,feedforward,full,61.3,94.3,,,3.63,79.3,30.5,76.9,82.8,36.8,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/K16_depthlr
+dvlt_fs,K16_depthlr/pho_it25,pba,full,69.0,95.1,,,0.70,86.2,28.4,76.6,92.4,61.5,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/K16_depthlr/pho_it25
+dvlt_fs,K16_head,feedforward,full,57.3,93.6,,,3.49,70.1,30.6,72.1,80.6,32.9,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/K16_head
+dvlt_fs,K16_head/pho_it25,pba,full,71.6,95.2,,,0.69,90.0,28.3,81.9,95.3,62.8,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/K16_head/pho_it25
+dvlt_fs,K16_head_depthlr,feedforward,full,57.3,93.6,,,3.45,70.1,30.6,72.1,80.6,32.9,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/K16_head_depthlr
+dvlt_fs,K16_head_depthlr/pho_it25,pba,full,70.5,95.1,,,0.69,88.4,28.2,79.0,93.8,63.1,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/K16_head_depthlr/pho_it25
+dvlt_fs,K8_3080,feedforward,full,47.7,91.9,,,2.29,64.3,27.7,55.8,59.0,31.7,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/K8_3080
+dvlt_fs,K8_3080/pho_it25,pba,full,67.1,94.6,,,0.75,82.8,28.5,75.9,91.0,57.1,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/K8_3080/pho_it25
+dvlt_fs,R2_K12_fhk,feedforward,full,56.7,93.7,,,2.98,72.9,30.8,70.5,79.6,29.7,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R2_K12_fhk
+dvlt_fs,R2_K12_fhk/pho_it25,pba,full,70.4,95.2,,,0.70,90.2,28.7,80.7,87.8,64.5,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R2_K12_fhk/pho_it25
+dvlt_fs,R2_res336_K12_fhk,feedforward,full,52.0,92.7,,,1.08,62.9,28.6,61.4,71.5,35.5,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R2_res336_K12_fhk
+dvlt_fs,R2_res336_K12_fhk/pho_it25,pba,full,66.0,94.5,,,0.69,72.1,28.4,77.2,93.1,59.3,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R2_res336_K12_fhk/pho_it25
+dvlt_fs,R2_res336_K16_fhk,feedforward,full,53.9,93.1,,,1.27,64.3,28.2,65.6,74.4,37.1,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R2_res336_K16_fhk
+dvlt_fs,R2_res336_K16_fhk/pho_it25,pba,full,66.7,94.5,,,0.70,73.5,28.3,78.6,93.6,59.3,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R2_res336_K16_fhk/pho_it25
+dvlt_fs,R2_res420_K12_fhk,feedforward,full,58.5,93.8,,,1.76,76.0,30.2,74.5,78.5,33.4,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R2_res420_K12_fhk
+dvlt_fs,R2_res420_K12_fhk/pho_it25,pba,full,70.3,95.1,,,0.68,86.5,28.7,82.4,91.0,62.7,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R2_res420_K12_fhk/pho_it25
+dvlt_fs,R3_K12_fhk,feedforward,full,56.4,93.5,,,2.98,72.7,29.9,69.1,80.5,29.7,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R3_K12_fhk
+dvlt_fs,R3_K12_fhk/pho_it25,pba,full,70.7,95.1,,,0.69,88.2,28.5,80.5,93.0,63.3,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R3_K12_fhk/pho_it25
+dvlt_fs,R3_res336_K16_fhk,feedforward,full,54.2,93.1,,,1.28,66.8,27.8,65.0,73.9,37.5,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R3_res336_K16_fhk
+dvlt_fs,R3_res336_K16_fhk/pho_it25,pba,full,65.3,94.5,,,0.69,74.2,28.6,77.9,83.2,62.8,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R3_res336_K16_fhk/pho_it25
+dvlt_fs,R3_res420_K12_fhk,feedforward,full,58.4,93.9,,,1.76,76.6,29.6,72.5,78.2,35.2,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/R3_res420_K12_fhk
+dvlt_fs,R3_res420_K12_fhk/pho_it25,pba,full,70.0,95.2,,,0.68,86.6,28.5,79.7,89.7,65.4,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/R3_res420_K12_fhk/pho_it25
+dvlt_fs,hyb_fitE_headK,feedforward,full,61.3,94.3,,,,79.3,30.5,76.9,82.8,36.8,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/hyb_fitE_headK
+dvlt_fs,hyb_fitE_headK/pho_it25,pba,full,72.1,95.4,,,0.69,89.7,28.7,81.9,95.3,65.1,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/hyb_fitE_headK/pho_it25
+dvlt_fs,hyb_fit_cleanK,feedforward,full,61.3,94.3,,,,79.3,30.5,76.9,82.8,36.8,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/hyb_fit_cleanK
+dvlt_fs,hyb_fit_cleanK/pho_it25,pba,full,72.1,95.3,,,0.69,89.6,28.4,82.3,95.2,65.0,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/hyb_fit_cleanK/pho_it25
+dvlt_fs,hyb_headE_fitK,feedforward,full,57.3,93.6,,,,70.1,30.6,72.1,80.6,32.9,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/hyb_headE_fitK
+dvlt_fs,hyb_headE_fitK/pho_it25,pba,full,70.4,95.1,,,0.70,87.5,29.0,79.7,94.0,61.9,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/hyb_headE_fitK/pho_it25
+dvlt_fs,rel_K12_fhk,feedforward,full,58.7,94.0,,,2.98,76.0,29.8,72.0,79.5,36.0,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/rel_K12_fhk
+dvlt_fs,rel_K12_fhk/pho_it25,pba,full,71.7,95.3,,,0.68,89.4,28.4,80.9,93.6,66.1,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/rel_K12_fhk/pho_it25
+dvlt_fs,rel_res336_K16_fhk,feedforward,full,34.0,86.0,,,1.27,31.1,25.8,28.4,64.2,20.6,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/rel_res336_K16_fhk
+dvlt_fs,rel_res336_K16_fhk/pho_it25,pba,full,44.5,91.1,,,0.81,49.8,26.1,46.1,54.0,46.3,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/rel_res336_K16_fhk/pho_it25
+dvlt_fs,rel_res420_K12_fhk,feedforward,full,56.0,93.5,,,1.76,71.2,28.5,62.0,73.8,44.6,,,,,,2026-11-18,workspace/evaluation/dvlt_fs/rel_res420_K12_fhk
+dvlt_fs,rel_res420_K12_fhk/pho_it25,pba,full,65.2,94.5,,,0.70,82.8,28.6,72.3,79.7,62.4,,,,,iters=25,2026-11-18,workspace/tto/dvlt_fs/rel_res420_K12_fhk/pho_it25
+dvlt_fs,rope_res252_K16,feedforward,full,9.7,63.8,,,0.73,0.7,14.0,1.2,30.5,2.1,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/rope_res252_K16
+dvlt_fs,rope_res252_K16/pho_it25,pba,full,21.3,76.1,,,1.12,3.4,27.9,11.6,53.0,10.7,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/rope_res252_K16/pho_it25
+dvlt_fs,rope_res336_K16,feedforward,full,34.0,86.0,,,1.27,31.1,25.8,28.4,64.2,20.6,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/rope_res336_K16
+dvlt_fs,rope_res336_K16/pho_it25,pba,full,49.0,91.7,,,0.77,50.8,28.8,53.0,72.8,39.8,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/rope_res336_K16/pho_it25
+dvlt_fs,rope_res420_K12,feedforward,full,56.0,93.5,,,1.76,71.2,28.5,62.0,73.8,44.6,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/rope_res420_K12
+dvlt_fs,rope_res420_K12/pho_it25,pba,full,66.7,94.8,,,0.70,84.5,28.9,72.6,85.4,61.9,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/rope_res420_K12/pho_it25
+dvlt_fs,rope_res420_K12_head,feedforward,full,51.9,92.6,,,1.59,62.0,28.5,62.7,71.2,35.1,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/rope_res420_K12_head
+dvlt_fs,rope_res420_K12_head/pho_it25,pba,full,63.6,94.1,,,0.70,80.3,28.4,72.1,80.0,57.3,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/rope_res420_K12_head/pho_it25
+dvlt_fs,rope_res420_K12_head_depthlr,feedforward,full,51.9,92.6,,,1.56,62.0,28.5,62.7,71.2,35.1,,,,,,2026-11-17,workspace/evaluation/dvlt_fs/rope_res420_K12_head_depthlr
+dvlt_fs,rope_res420_K12_head_depthlr/pho_it25,pba,full,63.3,94.2,,,0.70,79.3,28.9,70.7,79.6,58.0,,,,,iters=25,2026-11-17,workspace/tto/dvlt_fs/rope_res420_K12_head_depthlr/pho_it25
+dvlt_fs,rope_res420_K16,feedforward,full,59.2,93.9,,,2.13,74.2,28.8,67.1,78.0,48.1,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/rope_res420_K16
+dvlt_fs,rope_res420_K16/pho_it25,pba,full,67.3,94.7,,,0.68,84.1,29.1,75.4,85.7,62.1,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/rope_res420_K16/pho_it25
+dvlt_fs,rope_res420_K8,feedforward,full,41.8,90.8,,,1.40,55.0,26.4,37.0,53.6,37.2,,,,,,2026-11-16,workspace/evaluation/dvlt_fs/rope_res420_K8
+dvlt_fs,rope_res420_K8/pho_it25,pba,full,62.8,94.2,,,0.74,77.0,28.4,66.5,85.2,57.1,,,,,iters=25,2026-11-16,workspace/tto/dvlt_fs/rope_res420_K8/pho_it25
+dvlt_s0,seeds/eval,feedforward,full,59.1,94.0,67.4,hiroom+7scenes+scannetpp+eth3d,8.98,76.0,30.5,73.5,79.5,36.0,76.6,52.9,70.3,69.9,,2026-10-31,workspace/evaluation/seeds/dvlt_s0
+dvlt_s0,stride/seeds/eval,feedforward,0/7/20/0/0,51.9,92.6,62.0,7scenes+scannetpp,,,30.5,73.3,,,,53.5,70.5,,,2026-11-02,workspace/evaluation/stride/seeds/dvlt_s0
+dvlt_s1,seeds/eval,feedforward,full,58.7,93.9,67.2,hiroom+7scenes+scannetpp+eth3d,8.98,76.0,30.0,72.0,79.5,36.0,76.5,53.1,69.9,69.5,,2026-10-31,workspace/evaluation/seeds/dvlt_s1
+dvlt_s1,stride/seeds/eval,feedforward,0/7/20/0/0,51.9,92.6,62.0,7scenes+scannetpp,,,30.5,73.3,,,,53.5,70.4,,,2026-11-02,workspace/evaluation/stride/seeds/dvlt_s1
+dvlt_s2,seeds/eval,feedforward,full,59.1,94.0,67.2,hiroom+7scenes+scannetpp+eth3d,8.97,76.0,30.9,72.8,79.5,36.0,78.0,51.4,70.4,69.1,,2026-10-31,workspace/evaluation/seeds/dvlt_s2
+dvlt_s2,stride/seeds/eval,feedforward,0/7/20/0/0,51.9,92.6,61.5,7scenes+scannetpp,,,30.5,73.3,,,,53.1,70.0,,,2026-11-02,workspace/evaluation/stride/seeds/dvlt_s2
+dvlt_s3,seeds/eval,feedforward,full,58.8,93.8,67.3,hiroom+7scenes+scannetpp+eth3d,8.99,76.0,29.5,73.1,79.5,36.0,78.2,51.5,70.4,69.3,,2026-10-31,workspace/evaluation/seeds/dvlt_s3
+dvlt_s3,stride/seeds/eval,feedforward,0/7/20/0/0,51.9,92.6,62.4,7scenes+scannetpp,,,30.5,73.3,,,,54.4,70.4,,,2026-11-02,workspace/evaluation/stride/seeds/dvlt_s3
+pilot_Pi3,eval,feedforward,30/0/0/0/0,65.1,94.5,73.1,hiroom,1.25,65.1,,,,,73.1,,,,,2026-10-26,workspace/evaluation/pilot_Pi3
+pilot_VGGT-1B,eval,feedforward,30/0/0/0/0,47.8,87.9,58.4,hiroom,1.98,47.8,,,,,58.4,,,,,2026-10-26,workspace/evaluation/pilot_VGGT-1B
+pilot_dvlt,eval,feedforward,30/0/0/0/0,76.0,96.9,76.5,hiroom,0.67,76.0,,,,,76.5,,,,,2026-10-26,workspace/evaluation/pilot_dvlt
