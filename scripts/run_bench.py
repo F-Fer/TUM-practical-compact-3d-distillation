@@ -51,8 +51,11 @@ import baselines  # noqa: E402
 import da3_lowmem  # noqa: E402
 
 # Keeps the backbone's output layers in CPU memory (bit-identical outputs); without it
-# DA3-LARGE-1.1 runs out of memory on 10 GB, see da3_lowmem.py
-da3_lowmem.install()
+# DA3-LARGE-1.1 runs out of memory on 10 GB, see da3_lowmem.py. DA3_LOWMEM=0 skips it: the CPU round trips
+# cost ~40 % of SMALL's forward time at 100 views (1.7 vs 2.3 s on the 3080), so timing runs of models that fit
+# without it should set it.
+if os.environ.get("DA3_LOWMEM", "1") != "0":
+    da3_lowmem.install()
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

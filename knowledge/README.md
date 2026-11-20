@@ -114,6 +114,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [dejaview-steps](ideas/dejaview-steps.md) | in progress | K = 12 58.7 at 0.96 s; collapses below K = 6; TTO on it pending (Antonin) |
 | [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
 | [dejaview-speed](ideas/dejaview-speed.md) | in progress | RoPE scaling fixes 420 px training-free; ray-fit principal point / aspect cost 1.2 after TTO (cleaned: 72.1); **resolution distillation** (2-3 h on ARKit, 3080): 336 px K = 16 34.0 → 53.9 alone, 49.0 → 66.7 after TTO at 1.27 s; 420 px K = 12 70.3 after TTO at 1.76 s |
+| [da3-resolution](ideas/da3-resolution.md) | measured | released DA3 at 420/336/252 px, training-free: RoPE stretching needed for TTO (naive 420 px BASE 26.7 after TTO vs 59.0); 420 px + RoPE ≈ 504 px after TTO at 60 % forward (BASE 59.0 vs 57.5); LARGE 336 px + RoPE 66.6 at 1.74 s beats BASE 504 57.5 at 1.36 s |
 | [dejaview-tto-teacher](ideas/dejaview-tto-teacher.md) | rejected (budget) | fine-tune towards TTO-refined cameras/depth (C1) 71.8 after TTO = plain-teacher control C0 71.9 = released K = 12 71.7 (81 scenes, 3080) |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
