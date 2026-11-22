@@ -115,6 +115,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
 | [dejaview-speed](ideas/dejaview-speed.md) | in progress | RoPE scaling fixes 420 px training-free; ray-fit principal point / aspect cost 1.2 after TTO (cleaned: 72.1); **resolution distillation** (2-3 h on ARKit, 3080): 336 px K = 16 34.0 → 53.9 alone, 49.0 → 66.7 after TTO at 1.27 s; 420 px K = 12 70.3 after TTO at 1.76 s |
 | [dejaview-tto-teacher](ideas/dejaview-tto-teacher.md) | rejected (budget) | fine-tune towards TTO-refined cameras/depth (C1) 71.8 after TTO = plain-teacher control C0 71.9 = released K = 12 71.7 (81 scenes, 3080) |
+| [learned-refinement-step](ideas/learned-refinement-step.md) | open (proposal) | learned step on DA3's explicit cameras/depth fed by PBA residuals + DA3 prior; plan in `reports/Learned refinement step between DA3 and DeepBA.md` |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
 ## Session reports (the long form)
