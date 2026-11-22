@@ -313,6 +313,32 @@ TTO corrects the pose errors that are consistent with the predicted depth; the r
 3. **Learned:** a depth refiner that uses the multi-view residuals (Refin3R uses SfM points instead), trained so that
    PBA's poses become right: the bilevel idea of §9, but for the depth instead of the features.
 
+## 11. Multi-view depth refinement by alternation (2026-11-22)
+
+Direction 2 of §10, as a one-hour test: does refining the depth from the multi-view terms alone, with the poses held so
+that it can't trade against them, make the depth better? `scripts/lpba_stage.py` starts each scene from a saved state
+and runs one stage of `run_tto_pba.py`:
+
+- depth stage: poses and focal fixed, a finer 32-cell log-depth grid, Adam on σ = 2 and 1 (no LM: the dense grid
+  coupling of 32 cells doesn't fit), 4,096 samples per frame;
+- pose stage: depth fixed (`depth_grid=0`), poses + focal + radial, Adam on σ = 2, 1, then LM.
+
+All 81 pose scenes, seed 0, from the B′ (`iters=25`) states of the dev and held-out runs:
+
+| stage | AUC@3 (5 sets) | HiRoom / ScanNet++ / ETH3D | depth abs. rel. HiRoom / ScanNet++ / ETH3D | extra TTO time |
+|---|---|---|---|---|
+| B′ | 43.6 | 49.8 / 33.2 / 27.3 | 5.38 / 5.95 / 5.16 % | — |
+| pose stage only | 44.5 | 50.9 / 34.8 / 29.5 | unchanged | 0.40 s |
+| depth 1 → pose 1 | 44.6 | 51.2 / 35.0 / 28.4 | 5.36 / 6.18 / 5.20 % | 1.4 s |
+| depth 2 → pose 2 | 45.2 | 52.1 / 35.8 / 29.4 | 5.45 / 6.44 / 5.33 % | 2.8 s |
+
+The depth doesn't get better: the depth stages leave HiRoom and ETH3D unchanged and make ScanNet++ worse. The AUC gain
+(+1.6 after two rounds) comes from the extra pose iterations, and most of it (+0.9) from a single pose polish with the
+depth fixed, which is cheap and could be added to B′ (one seed; needs seeds before adopting). Together with checks 1-2
+and the depth oracle: the photometric/geometric objective contains the pose ↔ depth trade-off but not the information to
+resolve it, so the better depth has to come from outside, either a stronger depth predictor (direction 1) or a learned
+prior (direction 3).
+
 ## References (arXiv IDs)
 
 DeepBA 2611.18256 · Refin3R 2611.23051 · PosePlaner 2610.34845 · Solv3R 2611.02857 · DéjàView 2605.30215 ·
