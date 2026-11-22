@@ -89,6 +89,9 @@ DEFAULTS = {
     "w_geo": 1.0,  # multi-view depth consistency
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
     "w_pose": 0.0,  # keeps the pose updates (rotation in rad, translation in median depths) near zero (= DA3's poses)
+    "pose_prior_oracle": 0.0,  # c > 0: adds a per-frame pose prior w_i = c / (e_i^2 + 1e-6), e_i = GT error of frame i's
+    # initial pose (6-vector, rad and median depths, in the init's gauge). An upper bound for a learned per-frame prior
+    # (reports/Learned refinement step between DA3 and DeepBA.md, G0a); uses the ground truth, not a method
     "huber_photo": 0.05,  # scale of the photometric Huber kernel (intensities in [0, 1])
     "huber_geo": 0.05,  # log depth
     "occ_thresh": 0.05,  # relative depth; a sample is occluded in the target if it lies further away
@@ -307,7 +310,7 @@ class PBA(torch.nn.Module):
     """Parameters of one scene: pose updates (rot, trans; frame 0 fixes the gauge), log focal scale, log-depth grid,
     brightness (log gain, bias) per frame and the radial coefficient kr. The scene is normalised to median depth 1."""
 
-    def __init__(self, images, depth, conf, ext, K, cfg):
+    def __init__(self, images, depth, conf, ext, K, cfg, pose_w=None):
         super().__init__()
         N, _, H, W = images.shape
         dev = images.device
@@ -323,6 +326,9 @@ class PBA(torch.nn.Module):
         self.register_buffer("K0", K)
         self.register_buffer("images", images)
         self.register_buffer("free", (torch.arange(N, device=dev) > 0).float()[:, None])
+        # pose prior weight per frame (w_pose, plus the oracle's per-frame weights if given)
+        self.register_buffer("pose_w", torch.full((N,), float(cfg["w_pose"]), device=dev) + (pose_w if pose_w is not None else 0))
+        self.has_pose_prior = bool(self.pose_w[1:].max() > 0) if N > 1 else False
 
         self.rot = torch.nn.Parameter(torch.zeros(N, 3, device=dev))
         self.trans = torch.nn.Parameter(torch.zeros(N, 3, device=dev))
@@ -698,8 +704,8 @@ class Kernel:
         v = 0.0
         if self.has_grid:
             v = v + cfg["w_prior"] * float((m.grid.data**2).mean())
-        if cfg["w_pose"] > 0:
-            v = v + cfg["w_pose"] * float(((m.rot.data * m.free) ** 2 + (m.trans.data * m.free) ** 2).mean())
+        if m.has_pose_prior:
+            v = v + float((m.pose_w[:, None] * ((m.rot.data * m.free) ** 2 + (m.trans.data * m.free) ** 2)).mean())
         if self.radial:
             v = v + cfg["w_radial"] * float((m.kr.data**2).sum())
         return v
@@ -771,8 +777,8 @@ class Kernel:
             rot.index_add_(0, j, (S2 - torch.linalg.cross(tau[nbrs], S1, dim=-1)).reshape(-1, 3))
             rot.copy_((Jl.transpose(-1, -2) @ rot[..., None])[..., 0] * m_.free)
             trans.mul_(m_.free)
-            if cfg["w_pose"] > 0:
-                f = 2 * cfg["w_pose"] / (3 * N)
+            if m_.has_pose_prior:
+                f = 2 * m_.pose_w[:, None] / (3 * N)
                 rot.add_(m_.rot.data * m_.free * f)
                 trans.add_(m_.trans.data * m_.free * f)
         else:
@@ -1008,12 +1014,13 @@ class Kernel:
             vals = ws[:, None, :, :, None] * wt[..., None, :] * (-dg_ * wg)[..., None, None]
             Hx.view(-1).index_add_(0, flat.reshape(-1), vals.reshape(-1))
         n_vis = max(n_vis, 1.0)
+        self.last_n_vis = float(n_vis)  # visible warps of the last normal_eq (scripts/lpba_info.py: total information)
         Hpp = Hpp.view(np_ + 1, np_ + 1)[:np_, :np_].double() / n_vis
         gp = gp[:np_].double() / n_vis
-        if self.has_pose and cfg["w_pose"] > 0:
-            f = 2 * cfg["w_pose"] / (3 * N)
-            Hpp[range(n_pose), range(n_pose)] += f
-            gp[:n_pose] += f * torch.cat([self.m.rot.data[1:], self.m.trans.data[1:]], 1).reshape(-1).double()
+        if self.has_pose and self.m.has_pose_prior:
+            f = (2 * self.m.pose_w[1:, None] / (3 * N)).double().expand(N - 1, 6)
+            Hpp[range(n_pose), range(n_pose)] += f.reshape(-1)
+            gp[:n_pose] += (f * torch.cat([self.m.rot.data[1:], self.m.trans.data[1:]], 1).double()).reshape(-1)
         if self.radial:  # keeps the coefficient near zero where the data do not determine it
             Hpp[k_idx, k_idx] += 2 * cfg["w_radial"]
             gp[k_idx] += 2 * cfg["w_radial"] * float(self.m.kr.data[0])
@@ -1128,7 +1135,8 @@ def refine_scene(image_files, pred, cfg, device):
     ext = torch.from_numpy(pred["extrinsics"]).float().to(device)
     K = torch.from_numpy(pred["intrinsics"]).float().to(device)
     images = load_images(image_files, H, W).to(device)
-    model = PBA(images, depth, conf, ext, K, cfg).to(device)
+    pose_w = torch.from_numpy(pred["pose_w"]).float().to(device) if "pose_w" in pred else None
+    model = PBA(images, depth, conf, ext, K, cfg, pose_w).to(device)
 
     decode_s = time.perf_counter() - start
     with torch.no_grad():
@@ -1267,6 +1275,27 @@ def refine_scene(image_files, pred, cfg, device):
     return {"depth": depth_out.astype(np.float32), "extrinsics": ext_out.astype(np.float32), "intrinsics": K_out.astype(np.float32)}, info, hist
 
 
+def gt_pose_error(gt_ext, pred_ext, scale):
+    """Per frame, the correction [N, 6] (rotation vector in rad, translation in units of scale) that takes the predicted
+    world-to-camera poses to the GT, in PBA's parameters (R = exp(w) R0, t = exp(w) t0 + tau) and in the prediction's
+    gauge: GT moved so that frame 0 coincides with the prediction's frame 0 and the camera spreads match (as init_gt)."""
+    from scipy.spatial.transform import Rotation
+
+    def h(e):
+        T = np.tile(np.eye(4), (len(e), 1, 1))
+        T[:, :3] = e[:, :3]
+        return T
+
+    G, P = h(gt_ext.astype(np.float64)), h(pred_ext.astype(np.float64))
+    G[:, :3, 3] *= camera_spread(P[:, :3]) / max(camera_spread(G[:, :3]), 1e-12)
+    G = G @ np.linalg.inv(G[0]) @ P[0]
+    R0, t0 = P[:, :3, :3], P[:, :3, 3] / scale
+    dR = G[:, :3, :3] @ R0.transpose(0, 2, 1)
+    w = Rotation.from_matrix(dR).as_rotvec()
+    tau = G[:, :3, 3] / scale - np.einsum("nij,nj->ni", dR, t0)
+    return np.concatenate([w, tau], 1)
+
+
 def camera_spread(ext):
     """Mean distance of the camera centres from their mean, of world-to-camera extrinsics [N, 3, 4]."""
     c = -np.einsum("nji,nj->ni", ext[:, :, :3], ext[:, :, 3])
@@ -1330,6 +1359,9 @@ def main():
                     k_[:, 0, 0] = gt["intrinsics"][:, 0, 0] * pred["depth"].shape[2] / w_orig
                     k_[:, 1, 1] = gt["intrinsics"][:, 1, 1] * pred["depth"].shape[2] / w_orig
                     pred.update(intrinsics=k_)
+            if cfg["pose_prior_oracle"] > 0:
+                err = gt_pose_error(gt["extrinsics"][:, :3], pred["extrinsics"][:, :3], float(np.median(pred["depth"])))
+                pred["pose_w"] = (cfg["pose_prior_oracle"] / ((err**2).sum(1) + 1e-6)).astype(np.float32)
             try:
                 out, info, hist = refine_scene(gt["image_files"], pred, cfg, device)
             except torch.cuda.OutOfMemoryError as e:  # not stored, so a rerun retries it

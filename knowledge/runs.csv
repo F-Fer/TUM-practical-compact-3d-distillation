@@ -1222,3 +1222,27 @@ dvlt_s3,stride/seeds/eval,feedforward,0/7/20/0/0,51.9,92.6,62.4,7scenes+scannetp
 pilot_Pi3,eval,feedforward,30/0/0/0/0,65.1,94.5,73.1,hiroom,1.25,65.1,,,,,73.1,,,,,2026-10-26,workspace/evaluation/pilot_Pi3
 pilot_VGGT-1B,eval,feedforward,30/0/0/0/0,47.8,87.9,58.4,hiroom,1.98,47.8,,,,,58.4,,,,,2026-10-26,workspace/evaluation/pilot_VGGT-1B
 pilot_dvlt,eval,feedforward,30/0/0/0/0,76.0,96.9,76.5,hiroom,0.67,76.0,,,,,76.5,,,,,2026-10-26,workspace/evaluation/pilot_dvlt
+DA3-SMALL,lpba_orac0.001,pba,dev,42.9,86.6,,,1.00,44.8,39.4,25.2,87.4,17.9,,,,,iters=25 pose_prior_oracle=0.001,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.001
+DA3-SMALL,lpba_orac0.003,pba,dev,43.8,86.2,,,0.93,43.2,40.9,25.2,82.4,27.4,,,,,iters=25 pose_prior_oracle=0.003,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.003
+DA3-SMALL,lpba_orac0.01,pba,dev,39.4,85.2,,,0.92,39.0,42.3,23.2,74.3,18.0,,,,,iters=25 pose_prior_oracle=0.01,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.01
+DA3-SMALL,lpba_orac0.03,pba,dev,34.7,83.2,,,0.86,33.5,43.0,17.5,62.8,16.8,,,,,iters=25 pose_prior_oracle=0.03,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.03
+DA3-SMALL,lpba_orac0.1,pba,dev,28.5,80.5,,,0.68,25.1,40.3,10.8,50.5,15.7,,,,,iters=25 pose_prior_oracle=0.1,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.1
+DA3-SMALL,lpba_orac0.3,pba,dev,23.2,78.3,,,0.64,19.9,35.6,8.7,41.5,10.3,,,,,iters=25 pose_prior_oracle=0.3,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac0.3
+DA3-SMALL,lpba_orac1,pba,dev,19.2,76.2,,,0.57,14.8,31.5,7.2,35.3,7.3,,,,,iters=25 pose_prior_oracle=1.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac1
+DA3-SMALL,lpba_orac3,pba,dev,17.6,74.9,,,0.57,12.6,30.1,6.5,32.6,6.1,,,,,iters=25 pose_prior_oracle=3.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_orac3
+DA3-SMALL,lpba_pho_it25_s0,pba,dev,41.9,86.3,,,0.97,43.8,37.0,24.7,86.6,17.5,,,,,iters=25,2026-11-22,results/pba/runs/DA3-SMALL/lpba_pho_it25_s0
+DA3-SMALL,lpba_pho_it25_s1,pba,dev,44.5,86.5,,,0.99,45.5,36.5,24.9,87.4,28.1,,,,,iters=25 seed=1,2026-11-22,results/pba/runs/DA3-SMALL/lpba_pho_it25_s1
+DA3-SMALL,lpba_pho_it25_s2,pba,dev,42.3,86.5,,,0.96,44.7,37.1,24.3,86.7,18.7,,,,,iters=25 seed=2,2026-11-22,results/pba/runs/DA3-SMALL/lpba_pho_it25_s2
+DA3-SMALL,lpba_wpose1,pba,dev,37.4,81.6,,,1.01,39.4,40.4,13.7,80.3,13.2,,,,,iters=25 w_pose=1.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_wpose1
+DA3-SMALL,lpba_wpose10,pba,dev,30.7,78.9,,,0.67,29.2,41.7,9.2,60.8,12.3,,,,,iters=25 w_pose=10.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_wpose10
+DA3-SMALL,lpba_wpose100,pba,dev,22.1,75.9,,,0.60,18.3,36.6,7.9,40.6,6.9,,,,,iters=25 w_pose=100.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_wpose100
+DA3-SMALL,lpba_wpose3,pba,dev,35.3,80.5,,,0.78,34.7,41.5,11.6,72.4,16.6,,,,,iters=25 w_pose=3.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_wpose3
+DA3-SMALL,lpba_wpose30,pba,dev,26.4,77.4,,,0.63,24.1,40.4,8.4,49.8,9.5,,,,,iters=25 w_pose=30.0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_wpose30
+DA3-SMALL,lpba_allpairs_s0,pba,10/0/0/0/3,29.9,83.3,,,0.97,47.1,,,,12.7,,,,,neighbors=1000 nbr_mode=top iters=25,2026-11-22,results/pba/runs/DA3-SMALL/lpba_allpairs_s0
+DA3-SMALL,lpba_pho_it25_ho_s0,pba,held-out,43.9,85.5,,,1.13,52.7,22.4,34.7,78.7,31.0,,,,,iters=25,2026-11-22,results/pba/runs/DA3-SMALL/lpba_pho_it25_ho_s0
+DA3-SMALL,lpba_dor_da3_s0,pba,30/7/20/0/11,35.2,83.0,,,1.12,50.3,26.9,33.8,,29.6,,,,,iters=25 [scripts/lpba_depth_oracle.py: DA3 depth (control)],2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_da3_s0
+DA3-SMALL,lpba_dor_da3_s1,pba,30/7/20/0/11,35.5,83.2,,,1.11,50.0,26.6,33.4,,32.0,,,,,iters=25 [scripts/lpba_depth_oracle.py: DA3 depth (control)] seed=1,2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_da3_s1
+DA3-SMALL,lpba_dor_gt_s0,pba,30/7/20/0/11,40.7,83.2,,,1.20,60.5,23.8,37.5,,40.8,,,,,iters=25 [scripts/lpba_depth_oracle.py: GT depth, grid free (oracle)],2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_gt_s0
+DA3-SMALL,lpba_dor_gt_s1,pba,30/7/20/0/11,40.1,83.2,,,1.23,61.1,23.9,37.5,,38.0,,,,,iters=25 [scripts/lpba_depth_oracle.py: GT depth, grid free (oracle)] seed=1,2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_gt_s1
+DA3-SMALL,lpba_dor_gtfix_s0,pba,30/7/20/0/11,42.0,83.2,,,0.78,62.6,20.0,39.6,,45.9,,,,,iters=25 [scripts/lpba_depth_oracle.py: GT depth fixed, depth_grid=0 (oracle)] depth_grid=0,2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_gtfix_s0
+DA3-SMALL,lpba_dor_gtfix_s1,pba,30/7/20/0/11,41.7,83.1,,,0.78,59.6,20.4,40.1,,46.7,,,,,iters=25 [scripts/lpba_depth_oracle.py: GT depth fixed, depth_grid=0 (oracle)] depth_grid=0 seed=1,2026-11-22,results/pba/runs/DA3-SMALL/lpba_dor_gtfix_s1

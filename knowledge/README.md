@@ -77,6 +77,9 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 6. Track BA rerun with the shared focal / current polish, so it can be compared fairly ([track-ba](ideas/track-ba.md)).
 7. Re-tune the per-model priors (`w_prior`, `w_pose`) on the current configurations; GIANT never had any prior.
 8. DTU focal drift and the DTU radial coefficient (−0.22) that looks like it absorbs another error.
+9. Depth as the bottleneck of the pose ([learned-refinement-step](ideas/learned-refinement-step.md)): GT depth gives SMALL
+   + PBA +10.9 AUC@3 on HiRoom/ScanNet++/ETH3D. Which non-oracle depth gets how much of it (larger model's depth with
+   SMALL's cameras, monocular depth, multi-view depth refinement finer than the 8-cell grid)?
 
 ## Index of ideas
 
@@ -115,7 +118,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
 | [dejaview-speed](ideas/dejaview-speed.md) | in progress | RoPE scaling fixes 420 px training-free; ray-fit principal point / aspect cost 1.2 after TTO (cleaned: 72.1); **resolution distillation** (2-3 h on ARKit, 3080): 336 px K = 16 34.0 → 53.9 alone, 49.0 → 66.7 after TTO at 1.27 s; 420 px K = 12 70.3 after TTO at 1.76 s |
 | [dejaview-tto-teacher](ideas/dejaview-tto-teacher.md) | rejected (budget) | fine-tune towards TTO-refined cameras/depth (C1) 71.8 after TTO = plain-teacher control C0 71.9 = released K = 12 71.7 (81 scenes, 3080) |
-| [learned-refinement-step](ideas/learned-refinement-step.md) | open (proposal) | learned step on DA3's explicit cameras/depth fed by PBA residuals + DA3 prior; plan in `reports/Learned refinement step between DA3 and DeepBA.md` |
+| [learned-refinement-step](ideas/learned-refinement-step.md) | partly (G0, checks 1-2) | weakest 10 % pose directions hold +19.6 AUC@3 after B′ (GT oracle, SMALL dev); GT-weighted prior towards DA3 gains nothing (V1 rejected); weak error not predictable from per-frame stats; flatness mostly pose ↔ depth grid (×29 stiffer with grid fixed), pairs/VGG ≤ 2x; **GT depth lifts PBA 38.2 → 49.1 (HiRoom/ScanNet++/ETH3D, 61 scenes), ≈ the weak-direction oracle: depth is the bottleneck** |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
 ## Session reports (the long form)

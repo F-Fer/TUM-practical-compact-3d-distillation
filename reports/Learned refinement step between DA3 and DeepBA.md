@@ -191,6 +191,128 @@ Report per step: AUC@3 / AUC@30, F1 (4 sets), total seconds per scene (DA3 + TTO
   system `$SCRATCH/jobs/pmba` ([infrastructure](../knowledge/infrastructure.md)).
 - Knowledge entry: [learned-refinement-step](../knowledge/ideas/learned-refinement-step.md).
 
+## 8. Results
+
+### G0 (2026-11-22, dev DA3-SMALL, B′ `iters=25`, RTX 3080 on tum1)
+
+Baseline over seeds 0/1/2: AUC@3 41.9 / 44.5 / 42.3 (mean 42.9), AUC@30 86.3-86.5. ETH3D alone ranges 17.5-28.1 and
+makes the seed spread ±1.3, larger than the ±0.4 in `knowledge/evaluation.md`.
+
+**G0a, oracle per-frame prior (V1's upper bound): fails the gate.** `pose_prior_oracle=c` adds a pose prior towards DA3
+with weight w_i = c / e_i² per frame (e_i = GT error of DA3's pose of frame i, in PBA's parameters), applied in the Adam
+and LM levels. AUC@3 (seed 0):
+
+| c | 0 | 0.001 | 0.003 | 0.01 | 0.03 | 0.1 | 0.3 | 1 | 3 |
+|---|---|---|---|---|---|---|---|---|---|
+| AUC@3 | 41.9 | 42.9 | 43.8 | 39.4 | 34.7 | 28.5 | 23.2 | 19.2 | 17.6 |
+
+A global `w_pose` (1-100) gives 37.4 → 22.1. Choosing c per scene with the GT gives 46.8, but choosing the best of three
+seeds per scene gives 45.7: the scene-level choice mostly picks favourable chaos. So even a perfect per-frame decision of
+"how much to trust DA3" adds at most ~1 point on SMALL, below the +3 gate. V1 isn't trained.
+
+**G0b, weak-direction oracle: large headroom.** At B′'s final state, removing the remaining GT error in the weakest
+eigen-directions of the pose Schur complement (`scripts/lpba_weak_oracle.py`):
+
+| removed | none | weakest 10 % | 10 % w/o gross frames | 25 % | 50 % | strongest 50 % | all |
+|---|---|---|---|---|---|---|---|
+| AUC@3 | 41.9 | 61.5 | 63.3 | 74.5 | 84.9 | 41.1 | 100 |
+
+54-73 % of the remaining error lies in the weakest 10 % of the directions (median condition number 6e4-6e5).
+
+**What this means for the plan.** The flat directions hold ~20 AUC@3 points, and the strong ones none, so a step that
+only does better optimisation of the same objective can't gain. DA3's poses don't carry the missing information either
+(G0a). V2 can only win if the network predicts the weak-direction error from something else: DA3's systematic biases
+learned from data, wide-baseline residuals, or features. The next cheap check, before building training data, is a
+probe of how predictable the weak-direction component of the error is from per-frame statistics (residuals, gradients,
+confidence, tokens) on held-out scenes. If it isn't, the learned-step line stops here and the information has to come
+from a new measurement (the wide-baseline term of open question 3 in `knowledge/README.md`).
+
+## 9. Checks 1 and 2 (2026-11-22, same setting)
+
+After G0 the candidate was to learn the *measurement* instead of the step: features trained through the solver (BA-Net,
+Diff3R-style implicit gradients), on the assumption that the flat directions come from weak comparisons (short
+baselines, grey intensities) that better features or more pairs would fix. Two checks before building it.
+
+**Check 1: does more measurement stiffen the weak directions?** (`scripts/lpba_info.py`, 22 dev scenes, at B′'s final
+state, Schur complement of the poses, information summed over visible warps, ratios to grey + 10 spread neighbours)
+
+| objective | median cond | weak directions | strong directions | weak10 oracle AUC@3 |
+|---|---|---|---|---|
+| grey, 10 spread neighbours (B′) | 3.2e5 | 1 | 1 | 61.7 |
+| grey, all covisible pairs | 2.0e5 | ×1.96 | ×1.37 | 61.1 |
+| VGG, 10 spread | 1.7e5 | ×1.22 | ×0.66 | 61.3 |
+| VGG, all pairs | 1.1e5 | ×2.00 | ×0.96 | 60.8 |
+| grey, 10 spread, **depth grid fixed** | 7.5e4 | **×28.7** | ×1.18 | 60.0 |
+| grey, 10 spread, grid and focal fixed | 7.5e4 | ×30.4 | ×1.18 | 58.3 |
+
+Per dataset, fixing the grid stiffens the weak directions ×52 (HiRoom), ×36 (DTU), ×16 (ETH3D), but only ×3-6 on the
+100-frame videos (7-Scenes, ScanNet++), where all pairs help more (×10-12, strong ×3-8). The direct all-pairs PBA run
+ran out of memory on the 3080 for the 64/100-frame scenes; HiRoom 47.1 vs 43.8-45.5, ETH3D 12.7 vs 17.5-28.1.
+
+So better features and more pairs buy ≤ 2x in conditioning; the flat directions mostly exist because a smooth per-frame
+change of the depth correction can absorb a pose change. That is a geometric ambiguity of the model (pose ↔ coarse
+depth), not a weakness of the comparison, and a learned feature can't remove it. In every variant the remaining error
+stays in the weakest directions of the new matrix (weak10 oracle ~60 throughout).
+
+**Check 2: is the weak-direction error predictable?** (`scripts/lpba_probe.py`, all 81 dev + held-out scenes, 4,123
+frames; 40 per-frame features: update from DA3, poses relative to index neighbours, reduced gradient, block
+eigenvalues, confidence, position, dataset)
+
+| model | explained in-sample | explained 5-fold CV | AUC@3 5-fold CV |
+|---|---|---|---|
+| none (B′) | 0 | 0 | 43.6 |
+| shrink (α · update) | 0.00 | 0.00 | 43.3 |
+| ridge | 0.15 | −0.01 | 34.5 |
+| boosted trees | 0.69 | 0.00 | 40.3 |
+| oracle (= G0b) | 1 | 1 | 58.2 |
+
+Leave-one-dataset-out is negative for every model. The trees memorise scenes but nothing transfers: there is no
+systematic DA3/PBA bias in the weak directions that per-frame state statistics reveal. Untested: image-level inputs
+(tokens, a CNN) and scene-level models (a GNN over frames).
+
+**Conclusion.** Neither learned steps on the current state nor learned features look promising as the next
+contribution: the missing information is about **depth** (or the pose ↔ depth trade-off), not about the comparison or
+the update rule. The natural next oracle is PBA with correct depth (GT depth as depth0, or the grid fitted to GT), poses
+free: if it closes most of the 20-point gap, the contribution is a better depth constraint (multi-view depth
+consistency, a learned depth-uncertainty prior from DA3's confidence, or re-running the depth head on refined
+cameras); if not, the gap is the photometric objective's bias itself ([objective-bias](../knowledge/ideas/objective-bias-gt-start.md)).
+
+## 10. Depth oracle (2026-11-22)
+
+Check 1 pointed at the depth: the weak directions are a pose ↔ depth trade-off. The oracle: run B′ (`iters=25`)
+unchanged, but with the GT depth as depth0 (`scripts/lpba_depth_oracle.py`; one scale per scene to DA3's median depth, so
+DA3's translations stay consistent; pixels without GT are not sampled). All scenes of the four datasets with GT depth
+(DTU-64 has none), seeds 0 and 1, AUC@3:
+
+| depth | HiRoom (30) | 7-Scenes (7) | ScanNet++ (20) | ETH3D (11) | mean w/o 7-Scenes |
+|---|---|---|---|---|---|
+| DA3 (control) | 50.1 | 26.8 | 33.6 | 30.8 | 38.2 |
+| GT, grid free | 60.8 | 23.9 | 37.5 | 39.4 | 45.9 |
+| GT, fixed (`depth_grid=0`) | 61.1 | 20.2 | 39.8 | 46.3 | **49.1** |
+| reference: B′ + weak10 oracle (seed 0) | 64.2 | 54.1 | 46.0 | 38.2 | 49.5 (from 36.8) |
+
+- **Correct depth recovers about the whole weak-direction headroom** (+10.9 vs +12.7) without touching the optimiser,
+  the objective or the poses' initialisation. Dev and held-out agree (4-set mean: dev +4.1 / +8.8, held-out +5.1 /
+  +5.3). On ETH3D the depth oracle even beats the weak10 oracle (46.3 vs 38.2): there, good depth also fixes errors in
+  stronger directions.
+- DA3-SMALL's depth is only 6.3 % off (abs. rel. after one scale per scene), but that is enough to cost ~11 points of
+  AUC@3: at 3° the pose is sensitive to small, smooth depth distortions that the photometric term can trade against it.
+- With correct depth, the free grid costs 3.2 points: the grid's freedom absorbs pose error (check 1).
+- 7-Scenes falls (−2.9 / −6.6): its GT depth is registered to the depth camera and shifted 4-12 px against the RGB
+  images (knowledge/evaluation.md), so it is not a valid oracle there.
+
+**What it means.** The pose accuracy of PBA on a DA3-SMALL initialisation is limited by the depth, not by the optimiser,
+the update rule or the comparison. That reframes the project question ("which initialisation errors can TTO correct?"):
+TTO corrects the pose errors that are consistent with the predicted depth; the rest needs better depth. Directions:
+
+1. **Matched compute, non-oracle:** a larger model's depth with SMALL's cameras, or a monocular depth model (one forward
+   per frame, parallel) as depth0. Cheap: the predictions exist (`workspace/evaluation/DA3-LARGE-1.1`).
+2. **Multi-view depth refinement inside the TTO** at a finer level than the 8-cell grid, constrained so that it can't
+   absorb pose (e.g. a depth update only from the geometric/photometric terms of frames whose pose is held, or
+   alternating).
+3. **Learned:** a depth refiner that uses the multi-view residuals (Refin3R uses SfM points instead), trained so that
+   PBA's poses become right: the bilevel idea of §9, but for the depth instead of the features.
+
 ## References (arXiv IDs)
 
 DeepBA 2611.18256 · Refin3R 2611.23051 · PosePlaner 2610.34845 · Solv3R 2611.02857 · DéjàView 2605.30215 ·
