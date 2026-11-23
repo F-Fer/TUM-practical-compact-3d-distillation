@@ -1,8 +1,8 @@
 # Make PBA optimise the depth: a shared scene-level depth correction instead of per-frame grids
 
-Status: **open (proposal, nothing run)** · Area: TTO method / depth · Updated 2026-11-23
+Status: **open (first prototype negative)** · Area: TTO method / depth · Updated 2026-11-23
 
-**Answer:** none yet. Proposal: replace (or constrain) the per-frame 8-cell log-depth grids of `run_tto_pba.py` by a
+**Answer (dev, SMALL, seed 0):** none of the variants beats B′ (recon F1 48.8 ± ~1.5 seed noise). Longer B′ (T = 25 → 100 → 400) improves the depth error only slightly (HiRoom 4.85 → 4.63 %, ScanNet++ 6.02 → 5.63 %) and F1 48.8 → 48.8 → 50.5 (within seed noise); the autograd world-space field (16³, 8³) is worse than the per-frame grid in the same autograd path at every T and *raises* the ScanNet++ depth error (6.0 → 6.9-8.8 %). Freezing the grid in the coarse levels (`grid_levels=3,4`) ties B′ with slightly lower depth error; `w_prior` 0.1-30 and the coupling penalty (`grid_proj`) don't help. Ceilings: GT-quality depth is worth up to +26 F1 on HiRoom and +16 on ETH3D. Proposal: replace (or constrain) the per-frame 8-cell log-depth grids of `run_tto_pba.py` by a
 depth correction that all frames share, so that a frame can no longer absorb its own pose error by bending its own
 depth. Judge every variant by **reconstruction F1** (TSDF, 4 sets; DTU-49 Chamfer) and by the **depth error against GT**
 before / after PBA, with pose AUC as a secondary metric.
@@ -64,6 +64,12 @@ dev scenes; analytic Jacobians in `Kernel` only once it works.
 
 | date | setting (model, set, seeds, baseline) | change | result | source |
 |---|---|---|---|---|
+| 11-23 | SMALL, dev 22 scenes, seed 0, B′ `iters=25` (F1 48.8, AUC@3 43.2; seeds 0-2: F1 47.2-50.3, AUC 42.1-45.3) | step 1 ceilings (`lpba_depth_oracle.py`): GT depth fixed / GT-fitted smooth 16 cells / LARGE-1.1's depth | F1 HiRoom / 7-Sc / ScanNet++ / ETH3D (mean): B′ 56.9 / 50.8 / 36.3 / 51.1 (48.8); GT 82.8 / 37.6 / 32.5 / 67.0 (55.0); smooth16 66.1 / 22.9 / 38.1 / 71.4 (49.6); LARGE 64.9 / 56.3 / 32.7 / 66.3 (55.0, AUC 48.3); the 7-Sc / ScanNet++ GT oracles only cover GT pixels, unreliable for F1 | `sdf/bp_*`, `gtfix_s0`, `smooth16_s0`, `large_s0` |
+| 11-23 | same | step 2: `w_prior` 0.1 / 0.3 / 3 / 10 / 30 (default 1) | F1 48.1 / 47.6 / 46.6 / 47.5 / 46.0; AUC 46.4 / 42.2 / 40.6 / 38.8 / 32.9; depth err roughly flat (ScanNet++ 7.1 % at 0.1) | `sdf/wp*` |
+| 11-23 | same | step 2: grid frozen except in levels 4 / 3,4 / 0-3 (`grid_levels`) | F1 48.4 / **49.0** / 40.2; AUC 42.8 / 43.2 / 30.8; depth err H/S/E 4.62 / 5.97 / 4.14 % (gl34) vs 4.85 / 6.02 / 4.32 | `sdf/gl*` |
+| 11-23 | same | step 2: LM penalty on grid steps in range(Hgp) (`grid_proj`, w 1000 / 10) | F1 41.1 / 42.2, AUC 30.7 / 31.8 (focal drifts) | `sdf/gp*` |
+| 11-23 | same | iterations: B′ `iters` 25 / 100 / 400 | F1 48.8 / 48.8 / 50.5; AUC 43.2 / 46.3 / 45.8; depth err HiRoom 4.85 / 4.79 / 4.63, ScanNet++ 6.02 / 5.89 / 5.63, ETH3D 4.32 / 4.26 / 4.23 % | `sdf/bp_wrap`, `bp_T*` |
+| 11-23 | same, autograd Adam (`lpba_field.py`, pinhole) + analytic pose polish with depth fixed (`_pol`) | step 3: world-space trilinear field 16³ (and 8³) + per-frame scale vs per-frame 8-cell grid, `iters` 25 / 100 / 400 | F1 (pol) grid 39.3 / 46.4 / 48.6, field16 39.7 / 44.0 / 46.7, field8 41.3 (T 25); AUC (pol) grid 30.6 / 36.8 / 44.3, field16 30.0 / 35.4 / 39.6; depth err ScanNet++ grid 6.69 / 6.34 / 5.69, field16 8.81 / 8.28 / 6.89 % (DA3 6.05) | `sdf/f_*` |
 
 ## Open / don't repeat
 

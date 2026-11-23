@@ -25,7 +25,8 @@ GT depth exists for HiRoom (16-bit PNG, /65535 * 100 m), 7-Scenes (PNG mm; regis
 4-12 px against the RGB images, knowledge/evaluation.md), ScanNet++ (render_depth PNG mm) and ETH3D (float32 raw, mask
 masks_for_images == 1 invalid); not for DTU-64. The oracle modes need it (pass datasets=hiroom,7scenes,scannetpp,eth3d);
 model: and file: run on any dataset. Per scene the log prints the depth error against the GT (abs. rel. after one scale
-per scene) of DA3's and of the used depth, and info gets depth_err_da3 / depth_err_used.
+per scene) of DA3's, of the used and of PBA's output depth, and info gets depth_err_da3 / depth_err_used / depth_err_out
+(nan without GT). With mode da3 this is plain run_tto_pba.py plus the depth diagnostic.
 """
 
 import os
@@ -187,7 +188,9 @@ def main():
         else:
             conf = pred["conf"]
         out, info, hist = refine(image_files, {**pred, "depth": depth, "conf": conf}, cfg, device)
-        info["depth_err_da3"], info["depth_err_used"] = e0, e1
+        e2 = abs_rel(out["depth"], gt) if gt is not None else float("nan")
+        print(f"[depth_oracle] depth after PBA {e2:.4f}")
+        info["depth_err_da3"], info["depth_err_used"], info["depth_err_out"] = e0, e1, e2
         return out, info, hist
 
     rp.refine_scene = patched

@@ -88,6 +88,11 @@ DEFAULTS = {
     "w_photo": 1.0,
     "w_geo": 1.0,  # multi-view depth consistency
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
+    "grid_levels": "",  # comma-separated level indices in which the depth grid may move (empty: all); in the others
+    # it is frozen (Adam: no update; LM: poses / focal / radial solved alone). knowledge/ideas/shared-depth-field.md
+    "grid_proj": False,  # LM: penalise grid steps in the range of the pose-grid coupling Hgp (the depth changes a pose
+    # change could explain) with grid_proj_w x the mean grid diagonal, knowledge/ideas/shared-depth-field.md
+    "grid_proj_w": 1000.0,
     "w_pose": 0.0,  # keeps the pose updates (rotation in rad, translation in median depths) near zero (= DA3's poses)
     "pose_prior_oracle": 0.0,  # c > 0: adds a per-frame pose prior w_i = c / (e_i^2 + 1e-6), e_i = GT error of frame i's
     # initial pose (6-vector, rad and median depths, in the init's gauge). An upper bound for a learned per-frame prior
@@ -522,6 +527,7 @@ class Kernel:
         self.grid_scale = torch.tensor([self.sx, self.sy], device=dev, dtype=dt)
         self.grid_base = torch.tensor([self.gw - 2.0, self.gh - 2.0], device=dev, dtype=dt)
         self.use_bright = False
+        self.freeze_grid = False  # LM: solve without the grid (it keeps its values); set per level by refine_scene
 
     def prep(self, nbrs):
         """What warp needs of the neighbours nbrs [n, k] and does not change during a level."""
@@ -1098,6 +1104,11 @@ class Kernel:
         """(H + lam diag(H)) delta = -g by a dense Cholesky of all unknowns, in single precision after Jacobi scaling
         (about half the time of float64 on a GPU, same result). None if not positive definite."""
         S = Hpp + torch.diag_embed(lam * Dp)
+        if self.has_grid and self.freeze_grid:
+            L, info = torch.linalg.cholesky_ex(S)
+            if int(info) != 0:
+                return None
+            return -torch.cholesky_solve(gp[:, None], L)[:, 0], torch.zeros(self.N, self.nc, dtype=gp.dtype, device=gp.device)
         if not self.has_grid:
             L, info = torch.linalg.cholesky_ex(S)
             return (-torch.cholesky_solve(gp[:, None], L)[:, 0], None) if int(info) == 0 else None
@@ -1112,6 +1123,9 @@ class Kernel:
         H[:n, n:] = Hgpf.T
         H[n:, n:] = Hx
         H[n:, n:] += torch.block_diag(*A)
+        if self.cfg["grid_proj"]:  # forbid grid steps a pose change could explain: a stiff penalty on range(Hgp)
+            Q = torch.linalg.qr(Hgpf.double())[0]
+            H[n:, n:] += self.cfg["grid_proj_w"] * float(A.diagonal(dim1=1, dim2=2).mean()) * (Q @ Q.T)
         rhs = torch.cat([gp, gg.reshape(-1)])
         sc = H.diagonal().clamp_min(1e-30).sqrt()
         L, info = torch.linalg.cholesky_ex((H / sc[:, None] / sc[None, :]).float())
@@ -1172,7 +1186,9 @@ def refine_scene(image_files, pred, cfg, device):
             blurred[(name, sig)] = gaussian_blur(maps[name], sig)
         return blurred[(name, sig)]
 
+    grid_levels = {int(x) for x in cfg["grid_levels"].split(",") if x != ""}
     for level, sigma in enumerate(levels):
+        grid_frozen = bool(grid_levels) and level not in grid_levels
         if cfg["features"] not in maps:
             t_feat = time.perf_counter()
             maps["vgg"] = vgg_features(images, cfg["feat_dim"])
@@ -1201,6 +1217,7 @@ def refine_scene(image_files, pred, cfg, device):
                 K_lm = Kernel(model, {**cfg, "photo_loss": lm_loss})
                 K_lm.radial = kernel.radial
                 K_lm.set_level(img, cfg["features"] == "grey" and lm_loss != "ncc", stride)
+            K_lm.freeze_grid = grid_frozen
             S = 9 if lm_loss == "ncc" else 1
             D = S * img.shape[1] + S
             if cfg["lm_samples"]:
@@ -1238,6 +1255,8 @@ def refine_scene(image_files, pred, cfg, device):
             idx = torch.randint(0, feat_pool.shape[1], (N, n_pix), device=device)
             log = it % 20 == 0 or it == iters - 1
             res = kernel.gradient(*kernel.take(feat_pool, quad_pool, idx), nbrs, const, fadam.grads, want_loss=log)
+            if grid_frozen:
+                fadam.grads[3].zero_()  # the grid (Adam is reset per level, so it doesn't move)
             fadam.step(0.1 + 0.45 * (1 + math.cos(math.pi * it / iters)))
             if cfg["radial"]:
                 model.kr.data.clamp_(max=cfg["radial_max"])
