@@ -38,6 +38,14 @@ Things that cost time once. CLAUDE.md has the setup; this is what went wrong in 
 - `/rhome` is a local disk on VC17 mounted elsewhere over NFS: a binary written from the login node fails on VC17 with
   ETXTBSY for ~15 min (CLAUDE.md).
 
+- **tum1's disk is nearly full** (937 GB, 97-100 % used on 2026-11-22/23; 3 GB free at one point, which silently killed
+  queued jobs with empty logs). Before writing predictions or training data, check `df -h /`; use `save=false`, export
+  only the scenes needed (e.g. the dev scenes), delete intermediate data after use. Sizes:
+  an export of all 81 pose scenes with depth + conf ≈ 6 GB; residual maps of 400 ARKit windows at 256x192 ≈ 6.6 GB.
+- **tum1's GPU is shared**: other jobs (from other clones) can take 4-6 GB at any time. PBA on the 100-frame scenes
+  needs ~4-5 GB and then fails with OOM (resumable: rerun the same command); scripts that run for long should wait and
+  retry on OOM instead of crashing.
+
 ## Git
 
 Run outputs (metric JSONs, configs, per-run comparisons) are not tracked since 2026-11-10; only the knowledge

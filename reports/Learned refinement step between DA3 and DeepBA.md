@@ -339,6 +339,59 @@ and the depth oracle: the photometric/geometric objective contains the pose ↔ 
 resolve it, so the better depth has to come from outside, either a stronger depth predictor (direction 1) or a learned
 prior (direction 3).
 
+## 12. Overnight 22-23.11: which depth error matters, where better depth comes from, can it be learned?
+
+All on tum1 (RTX 3080, shared with other jobs), DA3-SMALL, B′ `iters=25`, one seed unless noted; AUC@3. Details,
+per-dataset numbers and sources: `knowledge/ideas/depth-bottleneck.md`.
+
+**Which part of the depth error matters** (depth fixed, HiRoom / ScanNet++ / ETH3D mean, 68 scenes with GT depth):
+
+| depth | AUC@3 |
+|---|---|
+| DA3 (no correction) | 23.3 |
+| per-frame scale from GT | 24.8 |
+| GT-fitted smooth correction, 4 / 8 / 16 cells | 37.6 / 42.9 / 46.6 |
+| halfway to GT (log) | 37.6 |
+| GT | 49.4 |
+| *B′ with DA3's depth and its free 8-cell grid* | *37.9* |
+
+The error that matters is the depth's shape at ~16 cells, not the per-frame scale. On HiRoom / ScanNet++ B′'s own grid
+already finds about the best 8-cell correction (50.3 vs 51.6); on ETH3D it doesn't (29.6 vs 44.0).
+
+**Where better depth comes from: 2×2 of cameras × depth** (all 81 pose scenes):
+
+| cameras \ depth | SMALL | BASE | LARGE-1.1 |
+|---|---|---|---|
+| SMALL | 43.6 | 50.7 | 52.5 |
+| LARGE-1.1 | 58.3 | | 69.8 |
+
+The SMALL → LARGE gap after TTO (+26.2) is +14.7 cameras, +8.9 depth, +2.6 interaction. A larger model's depth is a
+real improvement for TTO, but it costs that model's forward pass, which also brings better cameras.
+
+**Can the depth correction be learned at our scale?** No, in four attempts:
+
+1. Single-view refiner (ResNet18 → 8-cell log-depth grid) on 200 ARKitScenes videos with LiDAR depth: worse than DA3 on
+   held-out videos at every checkpoint, also with a per-frame scale-invariant loss.
+2. Multi-view refiner (ResNet18-FPN on RGB, B′'s depth and residual maps against 10 neighbours → per-pixel correction):
+   worse than B′'s depth on held-out videos; the residual maps add nothing (identical without them); in-sample it barely
+   fits; learning curve 50 / 100 / 200 videos: 0.144 / 0.143 / 0.137 vs 0.130 for B′.
+3. Distilling DA3-LARGE's depth into DA3-SMALL on ARKit + outdoor clips (head, or head + 6 backbone blocks): ARKit val
+   12.3 → 11.8 % (LARGE 8.0 %); on the benchmark mixed (HiRoom +0.8, ETH3D +3.9, DTU −6.7 with SMALL's cameras).
+4. The same distillation on the 59 held-out benchmark scenes with LARGE's predictions as teacher (no GT): the teacher loss
+   falls to a third, but on the dev scenes the depth error is unchanged and B′ gives 43.3 vs 42.9 ± 1.3.
+
+Fine-tuning SMALL's backbone breaks its own cameras (dev 26.9 after B′) even with a camera-token loss; the distilled
+depth has to be combined with the frozen model's cameras.
+
+**Where this leaves the project.** The diagnosis chain is complete and presentable: TTO on a compact feed-forward
+initialisation fixes the pose errors that are consistent with the predicted depth (G0, checks 1-2), the rest is a
+pose ↔ depth trade-off the photometric objective can't resolve (check 1, alternation), and the depth's shape at ~16
+cells is what decides it (oracles). The method candidate that survives is "distil only what TTO can't fix": a compact
+model whose depth is distilled from a large one, with its own cameras corrected by TTO (upper bound 52.5 vs 43.6 at
+SMALL's forward cost). It did not generalise in 4k steps on ≤ 532 windows; it needs the 5090: thousands of clips, longer
+training, and the cameras kept from the frozen model. Measure the depth error on held-out scenes first (minutes), run
+PBA only when it drops.
+
 ## References (arXiv IDs)
 
 DeepBA 2611.18256 · Refin3R 2611.23051 · PosePlaner 2610.34845 · Solv3R 2611.02857 · DéjàView 2605.30215 ·

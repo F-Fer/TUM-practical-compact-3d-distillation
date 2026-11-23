@@ -344,6 +344,9 @@ class PBA(torch.nn.Module):
         valid = conf > thr
         valid[(valid.flatten(1).float().mean(1) < 0.01)] = True  # frames with (almost) no confident pixels: use all
         valid[:, :2], valid[:, -2:], valid[:, :, :2], valid[:, :, -2:] = False, False, False, False
+        empty = valid.flatten(1).sum(1) == 0  # confident pixels only at the border (seen on ARKit): use all inner pixels
+        if empty.any():
+            valid[empty, 2:-2, 2:-2] = True
         self.register_buffer("valid", valid)
 
     def poses(self):
