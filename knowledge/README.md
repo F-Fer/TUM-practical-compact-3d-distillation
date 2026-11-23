@@ -59,7 +59,11 @@ at total seconds per scene (DA3 forward + TTO). Configurations in [pba-method](i
 held-out run. DéjàView K = 12 alone: 58.7 AUC@3 on the full benchmark at 0.96 s. DéjàView + TTO (all 81 pose scenes,
 3080, 2026-11-18, [dejaview-speed](ideas/dejaview-speed.md)): released K = 16 with the ray fit's intrinsics cleaned
 (principal point centred, fx = fy) 72.1; resolution-distilled student (R2) at 336 px K = 16 66.7 at 1.27 s forward
-(released: 49.0), at 420 px K = 12 70.3 at 1.76 s (released 66.7).
+(released: 49.0), at 420 px K = 12 70.3 at 1.76 s (released 66.7). Scaled self-distillation with diverse cameras (S0b,
+ARKit + DL3DV + crops / zoom, 5 h on a 5090, [dejaview-res-distill-scale](ideas/dejaview-res-distill-scale.md),
+2026-11-23): **336 px K = 12 71.2 (fhk) / 70.8 (camera-head poses, no ray fit) at 1.08 s**; the multi-setting
+student reaches **71.7 at 420 px K = 12 (head)**, equal to the released model in head mode (504 px K = 12 71.8, K = 16
+71.7) at 56 % of its forward time, and 63.1 at 252 px K = 16 (released 21.3); a DA3-GIANT teacher makes it worse (S1).
 
 **Project question** ([matched-compute](ideas/matched-compute.md)): at matched time a model + photometric TTO now beats
 the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), and LARGE→GIANT on pose only.
@@ -71,8 +75,11 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 3. Information for the weak pose directions: a wide-baseline term or tracks on top of B′
    ([pose prior](ideas/pose-prior-and-flat-directions.md), [correspondences](ideas/correspondences-in-pba.md)).
 4. DéjàView + TTO ([dejaview-speed](ideas/dejaview-speed.md)): resolution distillation works (336 px +17.7, 420 px
-   +3.6 after TTO) but the ARKit-only student loses ETH3D and is slightly worse at 504 px: add outdoor data (R3),
-   train longer, try 252 px and K = 8; does training towards teacher + TTO targets help (C1 vs C0)?
+   +3.6 after TTO) but the ARKit-only student loses ETH3D and is slightly worse at 504 px. Outdoor data (R3),
+   TTO targets (C1) and a DA3-GIANT teacher (S1, [dejaview-res-distill-scale](ideas/dejaview-res-distill-scale.md))
+   didn't help; 4x data / steps did at 336 / 252 px, and diverse cameras (DL3DV + crop / zoom, S0b) fixed DTU and
+   lifted every setting by 3-5 after TTO. Open: which part of S0b did it, single setting vs mix with a second seed,
+   why better targets on ARKit don't transfer.
 5. One vs two radial coefficients in the same configuration on all 11 ETH3D scenes ([radial](ideas/radial-lens-model.md)).
 6. Track BA rerun with the shared focal / current polish, so it can be compared fairly ([track-ba](ideas/track-ba.md)).
 7. Re-tune the per-model priors (`w_prior`, `w_pose`) on the current configurations; GIANT never had any prior.
@@ -115,6 +122,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [dejaview-few-step-distillation](ideas/dejaview-few-step-distillation.md) | open (pilot) | 2 h self-distillation K = 16 → 4: 9.0 → ~15 AUC@3, + TTO 36 → 44; K = 6 released 31 / 59; tokens, 4x data no help |
 | [dejaview-speed](ideas/dejaview-speed.md) | in progress | RoPE scaling fixes 420 px training-free; ray-fit principal point / aspect cost 1.2 after TTO (cleaned: 72.1); **resolution distillation** (2-3 h on ARKit, 3080): 336 px K = 16 34.0 → 53.9 alone, 49.0 → 66.7 after TTO at 1.27 s; 420 px K = 12 70.3 after TTO at 1.76 s |
 | [da3-resolution](ideas/da3-resolution.md) | measured | released DA3 at 420/336/252 px, training-free: RoPE stretching needed for TTO (naive 420 px BASE 26.7 after TTO vs 59.0); 420 px + RoPE ≈ 504 px after TTO at 60 % forward (BASE 59.0 vs 57.5); LARGE 336 px + RoPE 66.6 at 1.74 s beats BASE 504 57.5 at 1.36 s |
+| [dejaview-res-distill-scale](ideas/dejaview-res-distill-scale.md) | answered: negative (GIANT teacher), positive (camera diversity) | DA3-GIANT teacher gives a worse student than the self-teacher (−4.3 AUC@3 alone); self-teacher with ARKit + DL3DV + crop / zoom (S0b): 336 px K = 12 71.2 / 70.8 (head) after TTO, mix 420 px K = 12 71.7 (head), 252 px K = 16 63.1 (released in head mode: 504 px 71.8); DTU 85.5 → 94.6 |
 | [dejaview-tto-teacher](ideas/dejaview-tto-teacher.md) | rejected (budget) | fine-tune towards TTO-refined cameras/depth (C1) 71.8 after TTO = plain-teacher control C0 71.9 = released K = 12 71.7 (81 scenes, 3080) |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 

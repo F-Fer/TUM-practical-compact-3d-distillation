@@ -72,18 +72,26 @@ def fetch(vid, fold, out, frames):
         z = zipfile.ZipFile(f)
     except Exception as e:  # noqa: BLE001
         return vid, f"skip ({e})"
-    names = sorted(n for n in z.namelist() if n.endswith(".png"))
-    if len(names) < 64:
-        return vid, f"skip ({len(names)} frames)"
-    idx = sorted(set(round(i * (len(names) - 1) / (frames - 1)) for i in range(min(frames, len(names)))))
-    os.makedirs(d, exist_ok=True)
-    for i in idx:
-        n = names[i]
-        img = Image.open(io.BytesIO(z.read(n))).convert("RGB")
-        img.save(os.path.join(d, os.path.basename(n)[:-4] + ".jpg"), quality=95)
-    r = s.get(f"{URL}/{fold}/{vid}/lowres_wide.traj", timeout=60)
-    if r.ok:
-        open(os.path.join(d, "lowres_wide.traj"), "wb").write(r.content)
+    try:  # network errors skip the video (no DONE, so a rerun retries it) instead of killing the whole run
+        names = sorted(n for n in z.namelist() if n.endswith(".png"))
+        if len(names) < 64:
+            return vid, f"skip ({len(names)} frames)"
+        idx = sorted(set(round(i * (len(names) - 1) / (frames - 1)) for i in range(min(frames, len(names)))))
+        os.makedirs(d, exist_ok=True)
+        for i in idx:
+            n = names[i]
+            img = Image.open(io.BytesIO(z.read(n))).convert("RGB")
+            img.save(os.path.join(d, os.path.basename(n)[:-4] + ".jpg"), quality=95)
+    except Exception as e:  # noqa: BLE001
+        return vid, f"skip ({type(e).__name__}: {e})"
+    for _ in range(3):
+        try:
+            r = s.get(f"{URL}/{fold}/{vid}/lowres_wide.traj", timeout=60)
+            if r.ok:
+                open(os.path.join(d, "lowres_wide.traj"), "wb").write(r.content)
+            break
+        except requests.RequestException:
+            continue
     open(os.path.join(d, "DONE"), "w").write(f"{len(idx)} of {len(names)}\n")
     return vid, f"{len(idx)} of {len(names)} frames"
 

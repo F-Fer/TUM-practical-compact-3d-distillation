@@ -35,15 +35,35 @@ import rope_scale  # noqa: E402
 from train import load_dvlt  # noqa: E402
 
 DATA = os.path.join(REPO, "workspace", "distill_data", "arkit_frames")
+DL3DV = os.path.join(REPO, "workspace", "distill_data", "dl3dv_frames")  # prep_dl3dv.py
 RUNS = os.path.join(REPO, "workspace", "distill_runs")
 
 
-class Folders(torch.utils.data.Dataset):
-    """Item i: a random video folder and a random sorted subset of frames, preprocessed at 504 px."""
+def crop_clip(imgs, rng, crop_min, p_zoom, aspects):
+    """One centred crop for the whole clip (one camera): aspect ratio from `aspects` ("native" or "w:h"), then with
+    probability p_zoom a zoom to a linear fraction U(crop_min, 1) of the largest such rectangle. A centred crop keeps
+    the principal point centred and narrows the field of view (ARKit 62° -> 33° at 0.5), so the student sees other
+    cameras than ARKit's; teacher and student get the same crop, so the targets stay consistent."""
+    W, H = imgs[0].size
+    a = rng.choice(aspects)
+    r = W / H if a == "native" else float(a.split(":")[0]) / float(a.split(":")[1])
+    cw, ch = (H * r, H) if W / H > r else (W, W / r)
+    s = rng.uniform(crop_min, 1.0) if rng.random() < p_zoom else 1.0
+    cw, ch = cw * s, ch * s
+    box = tuple(round(v) for v in ((W - cw) / 2, (H - ch) / 2, (W + cw) / 2, (H + ch) / 2))
+    return [im.crop(box) for im in imgs], f"{a}@{s:.2f}"
 
-    def __init__(self, dirs, length, min_views, max_views, seed, return_files=False, extra=(), p_extra=0.0):
+
+class Folders(torch.utils.data.Dataset):
+    """Item i: a random video folder and a random sorted subset of frames, preprocessed at 504 px. With `pools`
+    ([(dirs, weight)], e.g. ARKit / DL3DV / outdoor) the folder's pool is drawn by weight first; with crop_min < 1 or
+    aspects other than native, the clip is cropped by crop_clip (drawn after the frames, so old runs reproduce)."""
+
+    def __init__(self, dirs, length, min_views, max_views, seed, return_files=False, extra=(), p_extra=0.0,
+                 pools=None, crop_min=1.0, p_zoom=0.0, aspects=("native",)):
         self.dirs, self.length, self.min_views, self.max_views, self.seed = dirs, length, min_views, max_views, seed
         self.return_files, self.extra, self.p_extra = return_files, list(extra), p_extra
+        self.pools, self.crop_min, self.p_zoom, self.aspects = pools, crop_min, p_zoom, list(aspects)
 
     def __len__(self):
         return self.length
@@ -54,7 +74,15 @@ class Folders(torch.utils.data.Dataset):
         from dvlt.util.preprocess import preprocess_images
 
         rng = random.Random(self.seed * 1_000_003 + i)
-        pool = self.extra if (self.extra and rng.random() < self.p_extra) else self.dirs
+        if self.pools:
+            u, pool = rng.random() * sum(w for _, w in self.pools), self.pools[-1][0]
+            for dirs, w in self.pools:
+                if u < w:
+                    pool = dirs
+                    break
+                u -= w
+        else:
+            pool = self.extra if (self.extra and rng.random() < self.p_extra) else self.dirs
         d = pool[rng.randrange(len(pool))]
         files = sorted(glob.glob(os.path.join(d, "*.jpg")))
         n = min(rng.randint(self.min_views, self.max_views), len(files))
@@ -63,7 +91,11 @@ class Folders(torch.utils.data.Dataset):
         s0 = rng.randrange(len(files) - span + 1)
         idx = sorted(rng.sample(range(s0, s0 + span), n))
         imgs = [Image.open(files[j]).convert("RGB") for j in idx]
-        out = preprocess_images(imgs, 504, 14, "cpu")["images"][0], os.path.basename(d)
+        name = os.path.basename(d)
+        if self.crop_min < 1.0 or self.aspects != ["native"]:
+            imgs, how = crop_clip(imgs, rng, self.crop_min, self.p_zoom, self.aspects)
+            name = f"{name[:16]} {how}"
+        out = preprocess_images(imgs, 504, 14, "cpu")["images"][0], name
         return (*out, [files[j] for j in idx]) if self.return_files else out
 
 
@@ -183,11 +215,18 @@ def main():
     ap.add_argument("--hours", type=float, default=5.0)
     ap.add_argument("--max_steps", type=int, default=100000)
     ap.add_argument("--val_every", type=int, default=500)
+    ap.add_argument("--fit_steps", type=int, default=20, help="steps that time the schedule (after 10 warm-up)")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--deadline", type=float, default=0, help="unix time: save resume.pt and exit 3 (allocation ends)")
     ap.add_argument("--init", default="", help="start the student from this checkpoint (teacher stays released)")
     ap.add_argument("--p_outdoor", type=float, default=0.0, help="share of clips from arkit_frames/outdoor (M360, T&T/DB)")
+    ap.add_argument("--mix", default="", help="data pools and weights, e.g. arkit:0.5,dl3dv:0.4,outdoor:0.1 "
+                                              "(replaces --p_outdoor)")
+    ap.add_argument("--crop_min", type=float, default=1.0, help="zoom augmentation: smallest linear crop fraction")
+    ap.add_argument("--p_zoom", type=float, default=0.5, help="share of clips zoomed (with --crop_min < 1)")
+    ap.add_argument("--aspects", default="native", help="crop aspect ratios per clip, e.g. native,4:3,1:1,3:4")
     ap.add_argument("--targets", default="", help="dir of gen_tto_targets.py clips: train towards teacher + TTO")
     ap.add_argument("--smoke", type=int, default=0, help="run N steps, print memory / speed, save nothing")
     args = ap.parse_args()
@@ -244,12 +283,22 @@ def main():
         out_dirs = sorted(d for d in glob.glob(os.path.join(DATA, "outdoor", "*")) if os.path.exists(f"{d}/DONE"))
         if args.p_outdoor > 0:
             print(f"[data] {len(out_dirs)} outdoor scenes at p = {args.p_outdoor}", flush=True)
+        pools = None
+        if args.mix:
+            dl_dirs = sorted(d for d in glob.glob(os.path.join(DL3DV, "*")) if os.path.exists(f"{d}/DONE"))
+            src = {"arkit": train_dirs, "dl3dv": dl_dirs, "outdoor": out_dirs}
+            pools = [(src[k], float(w)) for k, w in (p.split(":") for p in args.mix.split(","))]
+            print("[data] mix " + ", ".join(f"{p.split(':')[0]} {len(d)} folders at {w}"
+                                            for p, (d, w) in zip(args.mix.split(","), pools)), flush=True)
+            assert all(d for d, _ in pools), "empty data pool"
         ds = Folders(train_dirs, args.max_steps, args.min_views, args.max_views, args.seed, extra=out_dirs,
-                     p_extra=args.p_outdoor)
+                     p_extra=args.p_outdoor, pools=pools, crop_min=args.crop_min, p_zoom=args.p_zoom,
+                     aspects=args.aspects.split(","))
     order = list(range(step, args.max_steps))
     dl = torch.utils.data.DataLoader(torch.utils.data.Subset(ds, order), batch_size=None, shuffle=False,
                                      num_workers=args.workers, prefetch_factor=4 if args.workers else None)
     val = [Folders([d], 1, 24, 24, 1000)[0][0] for d in val_dirs]
+    val_cfgs = [(252, 16), (336, 12), (336, 16), (420, 12), (504, 12)] if args.mix else [(336, 16), (420, 12), (504, 12)]
     amp = dict(device_type="cuda", dtype=torch.bfloat16)
     log = open(os.path.join(out, "log.jsonl"), "a")
     t0 = time.time() - t_used
@@ -260,7 +309,7 @@ def main():
         rec = dict(step=step)
         with torch.no_grad(), torch.autocast(**amp):
             tp = [run(teacher, v[None].to(dev), args.kt) for v in val]
-            for res, K in [(336, 16), (420, 12), (504, 12)]:
+            for res, K in val_cfgs:
                 acc = {}
                 for v, pt in zip(val, tp):
                     ps = run_student(student, v[None].to(dev), K, res)
@@ -287,12 +336,19 @@ def main():
         images, name, tgt = item if args.targets else (*item, None)
         if args.smoke and step >= args.smoke:
             break
-        if step % 50 == 0 and foreign_gpu_procs() and not args.smoke:
+        if step % 50 == 0 and not os.environ.get("SLURM_JOB_ID") and foreign_gpu_procs() and not args.smoke:
             save(rpath, full=True)
             print(f"[pause] foreign GPU process {foreign_gpu_procs()} at step {step}; saved resume.pt", flush=True)
             sys.exit(3)
+        if args.deadline and time.time() > args.deadline and not args.smoke:  # end of the Slurm allocation
+            save(rpath, full=True)
+            print(f"[pause] deadline reached at step {step}; saved resume.pt (continue with --resume)", flush=True)
+            sys.exit(3)
         images = images[None].to(dev, non_blocking=True)
-        if total == args.max_steps and step >= 30 and t_fit is not None and not args.smoke:
+        if time.time() - t0 > args.hours * 3600 * 1.06 and not args.smoke:  # wall-clock guard (slow late steps)
+            print(f"[sched] time budget exceeded at step {step}, stopping", flush=True)
+            break
+        if total == args.max_steps and step >= 10 + args.fit_steps and t_fit is not None and not args.smoke:
             per = (time.time() - t_fit[1]) / (step - t_fit[0])
             total = min(args.max_steps, step + int((args.hours * 3600 - (time.time() - t0)) / per))
             print(f"[sched] {per:.2f} s/step -> {total} steps", flush=True)
@@ -308,7 +364,7 @@ def main():
             pt = run(teacher, images, args.kt)
         with torch.autocast(**amp):
             ps = run_student(student, images, K, res)
-        if tgt is not None:
+        if args.targets:
             pt = apply_targets(pt, tgt, dev)
         L = losses(ps, pt)
         loss = L["ray"] + L["depth"] + 0.1 * L["conf"] + args.w_pose * L["pose"]
