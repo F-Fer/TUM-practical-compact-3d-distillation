@@ -20,6 +20,8 @@ before the refinement. Modes:
     model:<dir>    the depth of another model's predictions in <dir> (e.g. workspace/evaluation/DA3-LARGE-1.1), scaled
                    by one factor per scene to DA3-SMALL's median; cameras stay DA3-SMALL's (non-oracle)
     file:<dir>     the depth of results.npz files in <dir> (same layout as model:, e.g. a learned refiner's output)
+    ofile:<dir>    as file:, but an oracle depth (e.g. scripts/lpba_basis.py's GT fits): GT needed, and pixels without GT
+                   get the lowest confidence, as in the other oracle modes
 
 GT depth exists for HiRoom (16-bit PNG, /65535 * 100 m), 7-Scenes (PNG mm; registered to the depth camera, shifted
 4-12 px against the RGB images, knowledge/evaluation.md), ScanNet++ (render_depth PNG mm) and ETH3D (float32 raw, mask
@@ -129,7 +131,7 @@ def make_depth(mode, da3, gt, image_files):
     N, H, W = da3.shape
     if mode == "da3":
         return da3
-    if mode.startswith(("model:", "file:")):
+    if mode.startswith(("model:", "file:", "ofile:")):
         other = other_depth(mode.split(":", 1)[1], image_files)
         return other * (np.median(da3) / np.median(other))
     valid = gt > 0

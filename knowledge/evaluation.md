@@ -36,6 +36,7 @@ Read this before comparing any two numbers. Updated 2026-11-10.
 | held-out AUC@3 mean, one seed | roughly ±0.5 | REPORT5 §9 |
 | a single scene | several points | the optimisation is chaotic (below) |
 | ETH3D dev mean at long T | 30.4 to 39.9 over seeds (the radial gate decides differently) | REPORT4 §3 |
+| ETH3D dev mean, B′ T = 25, same seed | 20.8 / 27.2 (seeds 0 / 1) with the saved predictions vs 31.1 / 31.2 with a re-export that differs by ~1e-7 in depth (float round-off): the 3-scene mean moves by up to 10 points from an input perturbation that small. Compare ETH3D only over several seeds *and* on held-out (8 scenes) | 2026-11-24, `lpba/ft` (knowledge/ideas/da3-tta.md) |
 
 - **Chaos:** PBA diverges after tens of iterations from a 1e-9 perturbation (REPORT3 §2). On the GPU runs aren't
   bit-identical (`index_add_` atomics); on the CPU they are. So compare seed means, not scenes.

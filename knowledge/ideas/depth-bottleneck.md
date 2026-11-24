@@ -2,7 +2,7 @@
 
 Status: **open** (diagnosis measured; non-oracle sources measured; learned refiners and depth distillation at tum1
 scale negative) ·
-Area: TTO method / depth · Updated 2026-11-22
+Area: TTO method / depth · Updated 2026-11-23
 
 **Answer:** on DA3-SMALL + B′ (`iters=25`), the pose that PBA reaches is limited by the depth it is given
 ([learned-refinement-step](learned-refinement-step.md), depth oracle: GT depth fixed 38.2 → 49.1 on HiRoom / ScanNet++ /
@@ -36,9 +36,13 @@ with a camera-token loss, so the distilled depth must be combined with the origi
 | 11-23 | ARKit val 96 windows (LiDAR) | DA3-LARGE-1.1 as teacher: its depth error | abs. rel. SMALL 12.6 %, LARGE 8.0 % (one scale per window) | `teacher_val.log` |
 | 11-23 | DA3-SMALL, teacher LARGE on 400 ARKit + 132 outdoor windows (`lpba_distill_depth.py` (removed 2026-11-23, never committed; the description here is all that is left)), 3080 shared | **depth distillation**, head only (3.9M) 3k steps / head + last 6 blocks (14.5M, lr / 10, camera-token loss) 4k steps, 6-8 frames | ARKit val abs. rel. 12.31 → 12.01 % (head) / 11.76 % (6 blocks); benchmark (61 scenes without the 100-frame ones, OOM) with SMALL's cameras: HiRoom 49.8 → 50.6, DTU 81.2 → 74.5, ETH3D 27.3 → 31.2, depth error HiRoom 6.05 → 5.86 %, ETH3D 5.67 → 5.89 %; with its own cameras HiRoom 23.9 | `lpba_du6_*`, `lpba_distill/dist_*.log` |
 | 11-23 | DA3-SMALL, teacher = LARGE's saved predictions on the 59 held-out scenes (no GT), dev evaluation | in-domain depth distillation (6 blocks, 4k steps, 6 frames) | teacher loss 0.11 → 0.038; dev depth error HiRoom / ScanNet++ / ETH3D 5.37 → 5.23 / 6.05 → 6.20 / 5.24 → 5.26 %; **B′ dev 43.3** (SMALL 42.9 ± 1.3 over 3 seeds; LARGE depth 52.1); own cameras 26.9 | `lpba_db_*` |
+| 11-23 | SMALL, HiRoom / 7-Scenes / ScanNet++ / ETH3D (68 scenes), seed 0, B′ `iters=25 depth_grid=0`; refs lerp:0 23.3, smooth:4 / 8 / 16 37.6 / 42.9 / 46.6, GT 49.4 (3-set means w/o 7-Scenes) | **feature-span oracle** (`scripts/lpba_basis.py` + `lpba_depth_oracle.py ofile:`): GT-fitted per-frame ridge LS correction of log depth in the span of DA3's own head features (h32 = the 32 channels log depth is linear in; f64 = fused map; pNN = per-scene PCA; s4+/s8+ = plus grid hat functions), fit clipped to its range on GT pixels (unclipped, the features extrapolate to 1e34 / inf off GT and crash PBA) | AUC@3 H / 7-Sc / S / E (3-set mean), coefficients/frame: h32 38.6 / 20.9 / 26.3 / 33.1 (32.7), 33; f64 40.1 / 19.2 / 24.8 / 34.7 (33.2), 65; f64p16 35.5 / 21.2 / 25.9 / 33.3 (31.6), 17; s4+f64p16 47.2 / 20.6 / 28.8 / 38.5 (38.2), 28; s4+h32 49.5 / 19.2 / 29.6 / 41.6 (40.3), 44; s8+f64 52.0 / 18.2 / 30.8 / 46.1 (43.0), 112. In-sample RMS log error left (HiRoom) h32 .047, f64 .047, smooth4 .053, smooth8 .043, s8+f64 .035, smooth16 .036. **Negative:** the features fit the GT better than smooth4 but buy less pose (f64 depth abs. rel. HiRoom 2.80 % vs smooth4 2.92 %, AUC 40.1 vs 43.7); s4+h32 < smooth8, s8+f64 = smooth8: the frozen head features add nothing pose-relevant to a grid; the correction PBA needs is low-frequency and not in DA3's feature span | `lpba_bas_*`, `lpba_bas_s8_f64_s0/fit_summary.json` |
 
 ## Open / don't repeat
 
+- Don't build an "adjustable depth basis" from DA3's frozen head features (h32 / f64, BLASt3R-style Y = exp(αF + β)):
+  the GT-fitted oracle in their span is worse than a 4-cell grid at equal or more coefficients, and adds nothing on top
+  of an 8-cell grid (feature-span oracle, 11-23). A basis would have to be trained for it (and bounded off-GT).
 - The matched-compute question: LARGE's depth costs LARGE's forward pass, which also gives better cameras; the 2×2
   (cameras × depth from SMALL / LARGE) decides whether the gap SMALL + TTO → LARGE + TTO is depth or cameras. A cheap
   depth source (monocular model, lower resolution, a subset of frames) is what would make "small cameras + good depth"
@@ -53,6 +57,10 @@ with a camera-token loss, so the distilled depth must be combined with the origi
   error on unseen scenes doesn't. This is the experiment to scale on the 5090: many more clips (ARKitScenes has 4.5k
   training videos, plus ScanNet / CO3D / outdoor), longer training, the full backbone with the cameras taken from the
   frozen model (two passes) or a stronger camera constraint; measure depth error on held-out scenes before running PBA.
+
+- 2026-11-24: which part of the depth error matters (low-frequency; first-order sensitivity model) and the attempts
+  to fine-tune DA3 for PBA are in [learned-depth-basis](learned-depth-basis.md); test-time augmentation of DA3's depth
+  and cameras in [da3-tta](da3-tta.md).
 
 Related: [learned-refinement-step](learned-refinement-step.md), [depth-parametrisation](depth-parametrisation.md),
 [depth-prior](depth-prior.md), [matched-compute](matched-compute.md)

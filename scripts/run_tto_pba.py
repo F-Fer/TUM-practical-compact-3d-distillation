@@ -81,6 +81,9 @@ DEFAULTS = {
     "focal": "shared",  # shared (one scale for all frames) | none (fixed)
     "focal_init": "median",  # median (replace DA3's per-frame focals with their median first) | pred
     "depth_grid": 8,  # cells along the longer side of the log-depth correction grid, 0 = depth fixed
+    "depth_basis": "",  # work dir with a per-scene basis.npz [N, K, h, w] (scripts/lpba_basisnet.py export): the log-depth
+    # correction of frame i is sum_k c_ik B_ik(u, v) (bilinear in the maps) with K free coefficients, instead of the grid
+    "basis_grid": 0,  # with depth_basis: append the hat functions of a grid with this many cells to the basis (0 = none)
     "radial": True,  # one shared radial coefficient k of the division model x_u = x_d / (1 + k r_d^2) (lens distortion, ETH3D)
     "radial_max": 0.0,  # upper bound of k; 0 allows only barrel distortion
     "radial_gate": 0.01,  # at the first LM level: if |k| is below this, set it to 0 and leave it out (no distortion)
@@ -88,6 +91,8 @@ DEFAULTS = {
     "w_photo": 1.0,
     "w_geo": 1.0,  # multi-view depth consistency
     "w_prior": 1.0,  # keeps the log-depth correction near zero (also fixes the scale gauge)
+    "w_smooth": 0.0,  # smoothness prior on the grid: w_smooth x sum of squared differences of neighbouring cells / cells
+    # (damps the fine cells, so a finer grid keeps its coarse freedom; knowledge/ideas/learned-depth-basis.md)
     "grid_levels": "",  # comma-separated level indices in which the depth grid may move (empty: all); in the others
     # it is frozen (Adam: no update; LM: poses / focal / radial solved alone). knowledge/ideas/shared-depth-field.md
     "grid_proj": False,  # LM: penalise grid steps in the range of the pose-grid coupling Hgp (the depth changes a pose
@@ -315,7 +320,7 @@ class PBA(torch.nn.Module):
     """Parameters of one scene: pose updates (rot, trans; frame 0 fixes the gauge), log focal scale, log-depth grid,
     brightness (log gain, bias) per frame and the radial coefficient kr. The scene is normalised to median depth 1."""
 
-    def __init__(self, images, depth, conf, ext, K, cfg, pose_w=None):
+    def __init__(self, images, depth, conf, ext, K, cfg, pose_w=None, basis=None):
         super().__init__()
         N, _, H, W = images.shape
         dev = images.device
@@ -340,6 +345,11 @@ class PBA(torch.nn.Module):
         self.logf = torch.nn.Parameter(torch.zeros(1, device=dev))
         g = max(cfg["depth_grid"], 1)
         gh, gw = (g, max(2, round(g * W / H))) if H > W else (max(2, round(g * H / W)), g)
+        if basis is not None:  # learned basis: K coefficients per frame, stored as a [N, 1, K] "grid"
+            self.register_buffer("basis", basis)
+            gh, gw = 1, basis.shape[1]
+        else:
+            self.basis = None
         self.grid = torch.nn.Parameter(torch.zeros(N, gh, gw, device=dev))
         self.bright = torch.nn.Parameter(torch.zeros(N, 2, device=dev))
         self.kr = torch.nn.Parameter(torch.zeros(1, device=dev))
@@ -368,6 +378,10 @@ class PBA(torch.nn.Module):
     def grid_at(self, idx, u, v):
         """log-depth correction at pixel (u, v) of frame idx (bilinear, grid corners at the image corners)."""
         out = torch.zeros_like(u)
+        if self.basis is not None:
+            N, Kb, hb, wb = self.basis.shape
+            b = bilinear_gather(self.basis.permute(1, 0, 2, 3).reshape(Kb, -1), idx, u * (wb - 1) / (self.W - 1), v * (hb - 1) / (self.H - 1), hb, wb)
+            return (b * self.grid.view(N, -1)[idx]).sum(-1)
         if self.cfg["depth_grid"] > 0:
             N, gh, gw = self.grid.shape
             gu, gv = u * (gw - 1) / (self.W - 1), v * (gh - 1) / (self.H - 1)
@@ -376,6 +390,9 @@ class PBA(torch.nn.Module):
 
     def dense_depth(self):
         corr = torch.zeros_like(self.depth0)
+        if self.basis is not None:
+            B = F.interpolate(self.basis, size=(self.H, self.W), mode="bilinear", align_corners=True)
+            return self.depth0 * torch.exp((B * self.grid.view(self.N, -1, 1, 1)).sum(1))
         if self.cfg["depth_grid"] > 0:
             corr = corr + F.interpolate(self.grid[:, None], size=(self.H, self.W), mode="bilinear", align_corners=True)[:, 0]
         return self.depth0 * torch.exp(corr)
@@ -510,7 +527,7 @@ class Kernel:
         self.gh, self.gw = model.grid.shape[1:]
         self.nc = self.gh * self.gw
         self.sx, self.sy = (self.gw - 1) / (self.W - 1), (self.gh - 1) / (self.H - 1)
-        self.has_grid, self.has_focal, self.has_pose = cfg["depth_grid"] > 0, cfg["focal"] == "shared", cfg["poses"]
+        self.has_grid, self.has_focal, self.has_pose = cfg["depth_grid"] > 0 or model.basis is not None, cfg["focal"] == "shared", cfg["poses"]
         self.dp, self.dg = cfg["huber_photo"], cfg["huber_geo"]
         self.ncc = cfg["photo_loss"] == "ncc"
         self.radial = cfg["radial"]  # x_undistorted = x_distorted / (1 + k r_distorted^2)
@@ -526,12 +543,44 @@ class Kernel:
         self.tex_quad = torch.tensor([0, 1, self.W, self.W + 1], device=dev)
         self.grid_scale = torch.tensor([self.sx, self.sy], device=dev, dtype=dt)
         self.grid_base = torch.tensor([self.gw - 2.0, self.gh - 2.0], device=dev, dtype=dt)
+        self.basis = model.basis  # learned basis [N, K, hb, wb] instead of the grid (then nc = K, dense weights)
+        self.nw = 4
+        if self.basis is not None:
+            _, Kb, hb, wb = self.basis.shape
+            self.nw, self.hb, self.wb = Kb, hb, wb
+            self.btex = self.basis.permute(0, 2, 3, 1).reshape(-1, Kb).contiguous()  # [N hb wb, K]
+            self.bscale = torch.tensor([(wb - 1) / (self.W - 1), (hb - 1) / (self.H - 1)], device=dev, dtype=dt)
+            self.bbase = torch.tensor([wb - 2.0, hb - 2.0], device=dev, dtype=dt)
+            self.btex_quad = torch.tensor([0, 1, wb, wb + 1], device=dev)
+            self.quad = torch.arange(Kb, device=dev)
+        self.lap = None  # graph Laplacian of the grid cells [nc, nc] (w_smooth)
+        if cfg["w_smooth"] > 0 and self.basis is None and self.has_grid:
+            idx = torch.arange(self.nc, device=dev).view(self.gh, self.gw)
+            Lp = torch.zeros(self.nc, self.nc, device=dev, dtype=dt)
+            for a_, b_ in ((idx[:, :-1], idx[:, 1:]), (idx[:-1], idx[1:])):
+                a_, b_ = a_.reshape(-1), b_.reshape(-1)
+                Lp[a_, a_] += 1
+                Lp[b_, b_] += 1
+                Lp[a_, b_] -= 1
+                Lp[b_, a_] -= 1
+            self.lap = Lp
         self.use_bright = False
         self.freeze_grid = False  # LM: solve without the grid (it keeps its values); set per level by refine_scene
 
     def prep(self, nbrs):
         """What warp needs of the neighbours nbrs [n, k] and does not change during a level."""
-        return self.f0[nbrs][:, :, None], self.c0[nbrs][:, :, None], nbrs[:, :, None] * (self.H * self.W), nbrs[:, :, None] * self.nc
+        goff = nbrs[:, :, None] * (self.nc if self.basis is None else self.hb * self.wb)
+        return self.f0[nbrs][:, :, None], self.c0[nbrs][:, :, None], nbrs[:, :, None] * (self.H * self.W), goff
+
+    def basis_at(self, frame, u, v):
+        """Bilinear lookup of the basis maps at pixel (u, v) of frame: [..., K]."""
+        bu, bv = u * self.bscale[0], v * self.bscale[1]
+        u0, v0 = bu.floor().clamp(0, self.wb - 2), bv.floor().clamp(0, self.hb - 2)
+        a, b = (bu - u0)[..., None], (bv - v0)[..., None]
+        base = frame * (self.hb * self.wb) + (v0 * self.wb + u0).long()
+        c00, c01, c10, c11 = (self.btex[base + o] for o in (0, 1, self.wb, self.wb + 1))
+        top, bot = c00 + (c01 - c00) * a, c10 + (c11 - c10) * a
+        return top + (bot - top) * b
 
     # ---------------------------------------------------------------- data of one level
     def set_level(self, img, use_bright, stride=1.0):
@@ -569,13 +618,18 @@ class Kernel:
         du, dv = gu - gu0, gv - gv0
         sh = (self.N, 1, 1) if self.ncc else (self.N, 1)  # image coordinates at the initial focal length
         xb, yb = (u - self.cx.view(sh)) / self.fx0.view(sh), (v - self.cy.view(sh)) / self.fy0.view(sh)
-        head = torch.stack([xb, yb, flat[..., -1], (1 - du) * (1 - dv), du * (1 - dv), (1 - du) * dv, du * dv], -1)
+        if self.basis is not None:
+            head = torch.cat([torch.stack([xb, yb, flat[..., -1]], -1), self.basis_at(frame, u, v)], -1)
+            q = torch.zeros_like(u0)
+        else:
+            head = torch.stack([xb, yb, flat[..., -1], (1 - du) * (1 - dv), du * (1 - dv), (1 - du) * dv, du * dv], -1)
+            q = gv0.long() * self.gw + gu0.long()
         ch = flat[..., :-1]
         if self.ncc:
             ch = ch - ch.mean((-2, -1), keepdim=True)
             aa = (ch * ch).sum((-2, -1), keepdim=True).expand(*ch.shape[:-1], 1)
             ch = torch.cat([ch, aa], -1)
-        return torch.cat([head, ch], -1), gv0.long() * self.gw + gu0.long()
+        return torch.cat([head, ch], -1), q
 
     def take(self, feat_pool, quad_pool, idx):
         """The candidates idx [N, P] of a pool as samples [N, M, D] (with NCC, M = 9 P)."""
@@ -607,7 +661,8 @@ class Kernel:
         w = Warps()
         f_t, c_t, off, goff = const
         fxy = f_t * s_f
-        ws = feat[..., 3:7]
+        nw = self.nw
+        ws = feat[..., 3 : 3 + nw]
         grid = self.m.grid.data.view(self.N, -1)
         if self.has_grid:
             rows = self.frames[:, None, None] if src is None else src[:, None, None]
@@ -654,7 +709,24 @@ class Kernel:
         Tv = bot - top
         val, Tu = top + Tv * dv, ab + (cd - ab) * dv
         # depth correction of the target at the warped pixel, with its derivatives
-        if self.has_grid:
+        if self.basis is not None:
+            buv = uvc * self.bscale
+            buv0 = torch.minimum(buv.floor(), self.bbase)
+            bdu, bdv = (buv - buv0).unbind(-1)
+            bdu, bdv = bdu[..., None], bdv[..., None]
+            base_b = goff + (buv0[..., 1] * self.wb + buv0[..., 0]).long()
+            a, b, c, d = self.btex[base_b[..., None] + self.btex_quad].unbind(-2)  # [n, k, M, K] each
+            ab, cd = b - a, d - c
+            top, bot = a + ab * bdu, c + cd * bdu
+            bv_ = bot - top
+            Bt = top + bv_ * bdv
+            cf = grid[nbrs][:, :, None]  # [n, k, 1, K]
+            g_t = (Bt * cf).sum(-1)
+            g_u = ((ab + (cd - ab) * bdv) * cf).sum(-1) * self.bscale[0]
+            g_v = (bv_ * cf).sum(-1) * self.bscale[1]
+            e_g = torch.exp(g_t)
+            w.base_g, w.wt = None, Bt
+        elif self.has_grid:
             guv = uvc * self.grid_scale
             guv0 = torch.minimum(guv.floor(), self.grid_base)
             gdu, gdv = (guv - guv0).unbind(-1)
@@ -679,7 +751,7 @@ class Kernel:
         w.I, w.Iu, w.Iv = val[..., :-1], Tu[..., :-1], Tv[..., :-1]
         w.ux, w.vy = uvx.unbind(-1)
         w.fxt, w.fyt = fxy.unbind(-1)
-        w.Xc, w.Xt, w.ds, w.s, w.Rji, w.tji, w.src, w.nbrs, w.iz = Xc, Xt, ds, feat[..., 7:], Rji, tji, src, nbrs, iz
+        w.Xc, w.Xt, w.ds, w.s, w.Rji, w.tji, w.src, w.nbrs, w.iz = Xc, Xt, ds, feat[..., 3 + nw :], Rji, tji, src, nbrs, iz
         return w
 
     def photo_res(self, st, w):
@@ -713,6 +785,9 @@ class Kernel:
         v = 0.0
         if self.has_grid:
             v = v + cfg["w_prior"] * float((m.grid.data**2).mean())
+            if self.lap is not None:
+                g_ = m.grid.data.view(self.N, -1)
+                v = v + cfg["w_smooth"] * float(((g_ @ self.lap) * g_).sum()) / m.grid.numel()
         if m.has_pose_prior:
             v = v + float((m.pose_w[:, None] * ((m.rot.data * m.free) ** 2 + (m.trans.data * m.free) ** 2)).mean())
         if self.radial:
@@ -794,9 +869,13 @@ class Kernel:
             rot.zero_(), trans.zero_()
         dLs = (gX * Xr).sum(-1)  # dL / dlog(source depth) per warp
         if self.has_grid:
-            ws, gflat = feat[..., 3:7], grid.view(N, -1)
+            ws, gflat = feat[..., 3 : 3 + self.nw], grid.view(N, -1)
             gflat.zero_()
             gflat.scatter_add_(1, (quad[..., None] + self.quad).reshape(N, -1), (dLs.sum(1)[..., None] * ws).reshape(N, -1))
+        if self.basis is not None:  # target role: -dLg times the basis values at the warped pixel
+            gflat.index_add_(0, nbrs.reshape(-1), (-dLg[..., None] * w.wt).sum(2).reshape(-1, self.nw))
+            grid.add_(m_.grid.data, alpha=2 * cfg["w_prior"] / m_.grid.numel())
+        elif self.has_grid:
             gdu, gdv = w.wt
             a, b = dLg * (gdu - 1), -dLg * gdu  # -dLg (1 - gdu), -dLg gdu
             ga, gb, gw_ = a * gdv, b * gdv, self.gw
@@ -804,6 +883,8 @@ class Kernel:
             grid.reshape(-1).index_add_(0, torch.cat([base, base + 1, base + gw_, base + gw_ + 1], -1).reshape(-1),
                                         torch.cat([a - ga, b - gb, ga, gb], -1).reshape(-1))
             grid.add_(m_.grid.data, alpha=2 * cfg["w_prior"] / m_.grid.numel())
+            if self.lap is not None:
+                grid.view(N, -1).add_(m_.grid.data.view(N, -1) @ self.lap, alpha=2 * cfg["w_smooth"] / m_.grid.numel())
         else:
             grid.zero_()
         if self.has_focal or self.radial:
@@ -978,12 +1059,16 @@ class Kernel:
             if not has_grid:
                 continue
             # depth grid: dense bilinear weights [.., M, nc] of the source and the warped pixels
-            ws = feat[src][..., 3:7]
+            ws = feat[src][..., 3 : 3 + self.nw]
             Ws = torch.zeros(n, M, nc, device=dev).scatter_(2, quad[src][..., None] + self.quad, ws)
-            gdu, gdv = w.wt
-            ct = w.base_g[..., None] - nb[:, :, None, None] * nc + self.quad  # cell within the target's grid
-            wt = torch.stack([(1 - gdu) * (1 - gdv), gdu * (1 - gdv), (1 - gdu) * gdv, gdu * gdv], -1)
-            Wt = torch.zeros(n, k, M, nc, device=dev).scatter_(3, ct, wt)
+            if self.basis is not None:  # dense: the weights are the basis values themselves
+                wt = w.wt
+                Wt = wt
+            else:
+                gdu, gdv = w.wt
+                ct = w.base_g[..., None] - nb[:, :, None, None] * nc + self.quad  # cell within the target's grid
+                wt = torch.stack([(1 - gdu) * (1 - gdv), gdu * (1 - gdv), (1 - gdu) * gdv, gdu * gdv], -1)
+                Wt = torch.zeros(n, k, M, nc, device=dev).scatter_(3, ct, wt)
             # source role: the row's derivative in log depth is dp_ / dg_. The photometric rows of NCC belong to a patch
             # and use the mean weights of its samples
             dsp = (dp_ * wp)  # [n, k, P, Dp]
@@ -1008,14 +1093,24 @@ class Kernel:
             gg.index_add_(0, nb.reshape(-1), gt[..., 0].reshape(-1, nc))
             # 16 entries per warp, by frame of the target (a matrix product would touch nc^2 per warp)
             fr = nb[:, :, None, None]
-            flat = (fr * nc + ct)[..., None] * nc + ct[..., None, :]  # frame nc^2 + cell nc + cell
-            Hgg.view(-1).index_add_(0, flat.reshape(-1), (wt[..., None] * wt[..., None, :] * wg[..., None, None]).reshape(-1))
+            if self.basis is not None:
+                Hgg.index_add_(0, nb.reshape(-1), ((Wt * wg[..., None]).transpose(-1, -2) @ Wt).reshape(-1, nc, nc))
+            else:
+                flat = (fr * nc + ct)[..., None] * nc + ct[..., None, :]  # frame nc^2 + cell nc + cell
+                Hgg.view(-1).index_add_(0, flat.reshape(-1), (wt[..., None] * wt[..., None, :] * wg[..., None, None]).reshape(-1))
             Tt = T13.transpose(-1, -2)
             Hs, Ht = Hs @ Tt, Ht @ Tt
             size = nc * (np_ + 1)
             cell = torch.arange(nc, device=dev)[None, None, :, None] * (np_ + 1)
             Hgp.index_add_(0, (src[:, None, None, None] * size + cell + ids[:, :, None]).reshape(-1), Hs.reshape(-1))
             Hgp.index_add_(0, (nb[:, :, None, None] * size + cell + ids[:, :, None]).reshape(-1), Ht.reshape(-1))
+            if self.basis is not None:  # cross blocks (source frame x target frame) [n, k, K, K]
+                blk = Ws[:, None].transpose(-1, -2) @ (Wt * (-dg_ * wg)[..., None])
+                ar = torch.arange(nc, device=dev)
+                rows_ = (src[:, None, None, None] * nc + ar[:, None]) * (N * nc)
+                cols_ = nb[:, :, None, None] * nc + ar[None, :]
+                Hx.view(-1).index_add_(0, (rows_ + cols_).reshape(-1), blk.reshape(-1))
+                continue
             # 16 entries per warp: cell of the source frame x cell of the target frame
             cs_ = src[:, None, None, None] * nc + (quad[src][..., None] + self.quad)[:, None]  # [n, 1, M, 4]
             ct_ = fr * nc + ct  # [n, k, M, 4]
@@ -1040,6 +1135,10 @@ class Kernel:
             f = 2 * cfg["w_prior"] / self.m.grid.numel()
             Hgg[:, range(nc), range(nc)] += f
             gg += f * self.m.grid.data.view(N, -1).double()
+            if self.lap is not None:
+                fs = 2 * cfg["w_smooth"] / self.m.grid.numel()
+                Hgg += fs * self.lap.double()
+                gg += fs * (self.m.grid.data.view(N, -1).double() @ self.lap.double())
             Hx = (Hx + Hx.T).double() / n_vis
         loss = cfg["w_photo"] * sp / (max(np_sum, 1.0) if self.ncc else n_vis) + cfg["w_geo"] * sg / n_vis + self.priors()
         return Hpp, Hgp, Hgg, gp, gg, Hx, loss
@@ -1153,7 +1252,8 @@ def refine_scene(image_files, pred, cfg, device):
     K = torch.from_numpy(pred["intrinsics"]).float().to(device)
     images = load_images(image_files, H, W).to(device)
     pose_w = torch.from_numpy(pred["pose_w"]).float().to(device) if "pose_w" in pred else None
-    model = PBA(images, depth, conf, ext, K, cfg, pose_w).to(device)
+    basis = torch.from_numpy(pred["basis"]).float().to(device) if "basis" in pred else None
+    model = PBA(images, depth, conf, ext, K, cfg, pose_w, basis).to(device)
 
     decode_s = time.perf_counter() - start
     with torch.no_grad():
@@ -1360,6 +1460,20 @@ def main():
             exports = os.path.join(scene_dir, "unposed", "exports")
             gt = dict(np.load(os.path.join(exports, "gt_meta.npz"), allow_pickle=True))
             pred = dict(np.load(os.path.join(exports, "mini_npz", "results.npz")))
+            if cfg["depth_basis"]:
+                bp = os.path.join(cfg["depth_basis"], "model_results", dataset, scene, "unposed", "exports", "basis.npz")
+                if not os.path.exists(bp):
+                    print(f"[run_tto_pba] {dataset} {scene}: no {bp}, skipped")
+                    continue
+                basis = np.load(bp)["basis"].astype(np.float32)
+                if cfg["basis_grid"]:
+                    _, _, hb, wb = basis.shape
+                    H_, W_ = pred["depth"].shape[1:]
+                    g = cfg["basis_grid"]
+                    gh, gw = (g, max(2, round(g * W_ / H_))) if H_ > W_ else (max(2, round(g * H_ / W_)), g)
+                    hat = F.interpolate(torch.eye(gh * gw).reshape(gh * gw, 1, gh, gw), size=(hb, wb), mode="bilinear", align_corners=True)[:, 0]
+                    basis = np.concatenate([basis, np.broadcast_to(hat.numpy()[None], (len(basis), *hat.shape))], 1)
+                pred["basis"] = basis
             if cfg["init_from"]:
                 other = os.path.join(cfg["init_from"], "model_results", dataset, scene, "unposed", "exports", "mini_npz", "results.npz")
                 if not os.path.exists(other):

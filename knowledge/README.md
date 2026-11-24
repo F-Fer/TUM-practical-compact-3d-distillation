@@ -82,7 +82,13 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
    SMALL's cameras, monocular depth, a learned depth refiner)? Self-consistent multi-view refinement (alternation) doesn't
    reduce the depth error. Measured since ([depth-bottleneck](ideas/depth-bottleneck.md)): LARGE's depth with SMALL's
    cameras 52.5 vs 43.6 (81 scenes), BASE's 50.7; small refiners and short distillation runs don't transfer; scaling
-   the depth distillation is the open experiment for the 5090.
+   the depth distillation is the open experiment for the 5090. 2026-11-24 ([learned-depth-basis](ideas/learned-depth-basis.md)):
+   the pose follows the depth's low-frequency error (blur σ = H/16-H/8), and a first-order sensitivity model
+   (`scripts/lpba_sens.py`) predicts the oracles; with the free 8-cell grid the bias comes from the 8-16-cell band.
+   Fine-tuning DA3's depth head for PBA (depth / pose-sensitivity / photometric losses, in-domain or ARKit) and learned
+   depth bases don't transfer at tum1 scale; test-time augmentation of depth + cameras does help (held-out 43.8 →
+   46.7 with 7 passes, [da3-tta](ideas/da3-tta.md)) but costs more than BASE's forward. Scaling the sensitivity loss with a large
+   teacher as pseudo-GT is the version for the 5090.
 
 ## Index of ideas
 
@@ -122,8 +128,10 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [dejaview-speed](ideas/dejaview-speed.md) | in progress | RoPE scaling fixes 420 px training-free; ray-fit principal point / aspect cost 1.2 after TTO (cleaned: 72.1); **resolution distillation** (2-3 h on ARKit, 3080): 336 px K = 16 34.0 → 53.9 alone, 49.0 → 66.7 after TTO at 1.27 s; 420 px K = 12 70.3 after TTO at 1.76 s |
 | [dejaview-tto-teacher](ideas/dejaview-tto-teacher.md) | rejected (budget) | fine-tune towards TTO-refined cameras/depth (C1) 71.8 after TTO = plain-teacher control C0 71.9 = released K = 12 71.7 (81 scenes, 3080) |
 | [learned-refinement-step](ideas/learned-refinement-step.md) | partly (G0, checks 1-2) | weakest 10 % pose directions hold +19.6 AUC@3 after B′ (GT oracle, SMALL dev); GT-weighted prior towards DA3 gains nothing (V1 rejected); weak error not predictable from per-frame stats; flatness mostly pose ↔ depth grid (×29 stiffer with grid fixed), pairs/VGG ≤ 2x; **GT depth lifts PBA 38.2 → 49.1 (HiRoom/ScanNet++/ETH3D, 61 scenes), ≈ the weak-direction oracle: depth is the bottleneck**; alternating multi-view depth/pose refinement doesn't improve the depth (+1.6 from extra pose iterations) |
-| [depth-bottleneck](ideas/depth-bottleneck.md) | open | PBA's pose is depth-limited: smooth 16-cell GT correction ≈ GT; LARGE depth + SMALL cams + B′ 52.5 vs 43.6 (81 scenes); 2×2: cams +14.7, depth +8.9; small learned refiners and 4k-step depth distillation (LARGE → SMALL) don't transfer at tum1 scale |
+| [depth-bottleneck](ideas/depth-bottleneck.md) | open | PBA's pose is depth-limited: smooth 16-cell GT correction ≈ GT; LARGE depth + SMALL cams + B′ 52.5 vs 43.6 (81 scenes); 2×2: cams +14.7, depth +8.9; small learned refiners and 4k-step depth distillation (LARGE → SMALL) don't transfer at tum1 scale; a GT-fitted correction in the span of DA3's frozen head features is worse than a 4-cell grid (feature-span oracle) |
 | [shared-depth-field](ideas/shared-depth-field.md) | open (first prototype negative: world-space field ≤ per-frame grid; longer B′ moves depth only slightly) | make PBA optimise depth: one scene-level depth correction shared by all frames instead of per-frame grids (which absorb pose); judged by recon F1 + depth error vs GT |
+| [learned-depth-basis](ideas/learned-depth-basis.md) | rejected at tum1 scale / analysis tool adopted | fine-tune DA3 for PBA: learned depth basis, correction head, head fine-tuning (depth / first-order pose-sensitivity / photometric loss, in-domain and ARKit) don't transfer; **pose follows the low-frequency depth error; first-order model dp = -Hpp^-1 Hgp^T predicts the oracles and B′ (HiRoom)**; 12-cell grid +1.6 / +3.9 (H / E dev) |
+| [da3-tta](ideas/da3-tta.md) | open (positive, not compute-matched) | average DA3-SMALL depth + cameras over 7 passes (flip, reversed order, 3 other reference strategies) before B′: dev 42.9 → 48.0, held-out 43.8 → 46.7 (HiRoom 52.2 → 63.3, ScanNet++ 34.7 → 42.7); BASE neutral; distilling the ensemble into one pass fails |
 | [depth-free-pose](ideas/depth-free-pose.md) | open (AUC small positive, F1 not better than B′, no scaling) | pose-only refinement on the Sampson distance of dense NCC patch matches (no depth unknowns); epipolar → B′ → epipolar dev 46.1 vs 42.8; plane sweep on RoMa cameras F1 43.4 → 58.5 (HiRoom) |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
