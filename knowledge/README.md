@@ -75,6 +75,9 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
    train longer, try 252 px and K = 8; does training towards teacher + TTO targets help (C1 vs C0)?
 5. One vs two radial coefficients in the same configuration on all 11 ETH3D scenes ([radial](ideas/radial-lens-model.md)).
 6. Track BA rerun with the shared focal / current polish, so it can be compared fairly ([track-ba](ideas/track-ba.md)).
+   Done 2026-11-24 with a GPU pipeline ([fast-sparse-ba](ideas/fast-sparse-ba.md)): dense RoMa tracks + BA reach
+   held-out 67.1 from SMALL (NCC-PBA 57.2) at ~36 s; for LARGE B′ (69.9, 0.8 s) equals them. What a no-track method
+   must close: ScanNet++ / ETH3D / DTU from small models.
 7. Re-tune the per-model priors (`w_prior`, `w_pose`) on the current configurations; GIANT never had any prior.
 8. DTU focal drift and the DTU radial coefficient (−0.22) that looks like it absorbs another error.
 9. Depth as the bottleneck of the pose ([learned-refinement-step](ideas/learned-refinement-step.md)): GT depth gives SMALL
@@ -119,6 +122,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [gross-failures-and-reference-view](ideas/gross-failures-and-reference-view.md) | diagnosed | reference view decides gross failures; relocalisation broke more than it fixed |
 | [da3-reconditioning](ideas/da3-reconditioning.md) | rejected | re-running DA3 on refined cameras: not consistent after the hybrid; helps DTU Chamfer |
 | [track-ba](ideas/track-ba.md) | works, behind | RoMa + radial BA 54-57 dev at ~37 s; now below the photometric BA (Antonin) |
+| [fast-sparse-ba](ideas/fast-sparse-ba.md) | answered | own GPU LM BA (0.1-4 s, = pycolmap at 1/10-1/40 time); tracks decide: RoMa + BA held-out 67 / 68 / 70 (SMALL / BASE / LARGE) at ~36 s vs B′ 44 / 57 / 70 at ~1 s, NCC 57 (SMALL); SuperPoint + LightGlue 1-4 s but 46-49; skipping tracks buys 20-35x over dense tracks, 2-4x over keypoints |
 | [ba-iterations](ideas/ba-iterations.md) | answered | pycolmap never converges; SMALL needs ~10-15 iterations, LARGE drifts after 2-3 (Antonin) |
 | [da3-failure-modes](ideas/da3-failure-modes.md) | analysed | smooth correlated pose error + gross failures; cameras cost more F1 than depth |
 | [views-scaling](ideas/views-scaling.md) | answered | saturates at 32-64 views; views trade worse than model size |
