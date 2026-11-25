@@ -2,7 +2,7 @@
 
 Read this first, before planning or running any experiment. One file per idea in [ideas/](ideas/), sorted by question
 rather than by session; the session reports (`results/pba/REPORT*.md` etc.) stay the long-form evidence and are cited
-by section. Updated 2026-11-10.
+by section. Updated 2026-11-25.
 
 - [evaluation.md](evaluation.md): scene sets, noise levels, timing conventions and evaluation pitfalls. Needed to read
   any number here.
@@ -42,7 +42,7 @@ Status: adopted | rejected | open | partly (<what>) | superseded by <file> · Ar
 Related: [other](other.md)
 ```
 
-## Current best (2026-11-10)
+## Current best (2026-11-10; GMR 2026-11-25)
 
 **Dev** (22 scenes, one seed, RTX 5090, compute plot `results/pba/figures5/compute_all_models.png`): AUC@3 / F1 (4 sets)
 at total seconds per scene (DA3 forward + TTO). Configurations in [pba-method](ideas/pba-method.md).
@@ -60,6 +60,12 @@ held-out run. DéjàView K = 12 alone: 58.7 AUC@3 on the full benchmark at 0.96 
 3080, 2026-11-18, [dejaview-speed](ideas/dejaview-speed.md)): released K = 16 with the ray fit's intrinsics cleaned
 (principal point centred, fx = fy) 72.1; resolution-distilled student (R2) at 336 px K = 16 66.7 at 1.27 s forward
 (released: 49.0), at 420 px K = 12 70.3 at 1.76 s (released 66.7).
+
+**Geometry-guided match refinement** (2026-11-25, 3080, [guided-match-refinement](ideas/guided-match-refinement.md),
+`reports/Geometry-guided match refinement.md`): B′ → geometric warp → fine-tuned RoMa 1/4 refiner → GPU BA. Held-out
+(59 scenes, clean cross-fold refiners): SMALL **71.5**, BASE **76.7**, LARGE-1.1 **80.2** AUC@3 at ~20 s TTO; F1
+SMALL 58.8. Refiner trained on ARKitScenes only: SMALL 68.1. Dev: SMALL 68.9, BASE 76.3, LARGE 81.2; cheap
+configuration 68.3 at 4.2 s; DéjàView alone 56.1 → 79.8 (no PBA).
 
 **Project question** ([matched-compute](ideas/matched-compute.md)): at matched time a model + photometric TTO now beats
 the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), and LARGE→GIANT on pose only.
@@ -92,6 +98,17 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
    depth bases don't transfer at tum1 scale; test-time augmentation of depth + cameras does help (held-out 43.8 →
    46.7 with 7 passes, [da3-tta](ideas/da3-tta.md)) but costs more than BASE's forward. Scaling the sensitivity loss with a large
    teacher as pseudo-GT is the version for the 5090.
+
+10. **Geometry-guided match refinement** ([guided-match-refinement](ideas/guided-match-refinement.md), 2026-11-25): the
+    first learned component on this branch that transfers. It is positive held-out, and the gain saturates in data at
+    this refiner size. Open:
+    - matched compute (17 s per 100-frame scene on the 3080, 4.2 s cheap; not yet timed on the 5090);
+    - all three refiners trained;
+    - a wider recurrent refiner, so that B′ isn't needed;
+    - the refiner on DA3's own features;
+    - predicted precision in the BA;
+    - depth from the BA points (a per-frame scale and a 16-cell grid barely help);
+    - outdoor / synthetic training data to close the ARKit-only gap (68.1 vs 71.5).
 
 ## Index of ideas
 
@@ -137,6 +154,8 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
 | [learned-depth-basis](ideas/learned-depth-basis.md) | rejected at tum1 scale / analysis tool adopted | fine-tune DA3 for PBA: learned depth basis, correction head, head fine-tuning (depth / first-order pose-sensitivity / photometric loss, in-domain and ARKit) don't transfer; **pose follows the low-frequency depth error; first-order model dp = -Hpp^-1 Hgp^T predicts the oracles and B′ (HiRoom)**; 12-cell grid +1.6 / +3.9 (H / E dev) |
 | [da3-tta](ideas/da3-tta.md) | open (positive, not compute-matched) | average DA3-SMALL depth + cameras over 7 passes (flip, reversed order, 3 other reference strategies) before B′: dev 42.9 → 48.0, held-out 43.8 → 46.7 (HiRoom 52.2 → 63.3, ScanNet++ 34.7 → 42.7); BASE neutral; distilling the ensemble into one pass fails |
 | [depth-free-pose](ideas/depth-free-pose.md) | open (AUC small positive, F1 not better than B′, no scaling) | pose-only refinement on the Sampson distance of dense NCC patch matches (no depth unknowns); epipolar → B′ → epipolar dev 46.1 vs 42.8; plane sweep on RoMa cameras F1 43.4 → 58.5 (HiRoom) |
+| [guided-match-refinement](ideas/guided-match-refinement.md) | **open, positive: direction to scale (2026-11-25)** | the feed-forward geometry replaces RoMa v2's coarse stage: geometric warp of every covisible pair → RoMa's conv refiners → GPU BA with free points (`scripts/gmr_ba.py`). RoMa's weights capture only ≤ 2-3 px. **The 1/4 refiner fine-tuned for 15 min** (`scripts/gmr_train.py`) gives held-out (clean folds) SMALL **71.5**, BASE **76.7**, LARGE **80.2** (B′ 44.1 / 57.0 / 69.9; NCC-PBA 57.2 / 68.0 / 74.3; RoMa + BA 67.1 from SMALL) and F1 SMALL 58.8. ARKit-only training gives 68.1. Saturates after ~8 training scenes. DéjàView alone 56.1 → 79.8 dev |
+| [local-windows](ideas/local-windows.md) | rejected | DA3-SMALL is far better inside 16-frame windows (ScanNet++ local pairs AUC@3 19 vs 5) but stitched windows are a worse PBA start (27-30 vs 34.0) |
 | [distillation](ideas/distillation.md) | dropped | lessons from the strategy runs before the plan change; new pilot in dejaview-few-step-distillation |
 
 ## Session reports (the long form)

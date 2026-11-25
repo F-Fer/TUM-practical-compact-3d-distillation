@@ -23,6 +23,9 @@ DA3-BASE,fit_grid8_rej,track,dev,47.5,88.0,53.5,hiroom+7scenes+scannetpp,47.38,4
 DA3-BASE,fit_grid_r100,track,dev,47.6,88.0,54.5,hiroom+7scenes+scannetpp,47.60,43.3,34.1,49.8,100.0,10.8,52.8,62.6,48.1,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_r100
 DA3-BASE,fit_grid_r1000,track,dev,47.6,88.0,53.5,hiroom+7scenes+scannetpp,47.49,43.3,34.1,49.7,100.0,10.8,51.8,62.3,46.3,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_r1000
 DA3-BASE,fit_grid_rej,track,dev,47.6,88.0,53.7,hiroom+7scenes+scannetpp,48.87,43.3,34.1,49.7,100.0,10.8,52.8,62.3,45.9,,,2026-11-04,workspace/tto/DA3-BASE/fit_grid_rej
+DA3-BASE,gmr/t_a,other,dev,76.3,94.9,68.7,hiroom+7scenes+scannetpp+eth3d,16.42,85.7,36.1,73.7,100.0,86.2,82.3,59.3,59.2,73.8,,2026-11-25,results/pba/runs/DA3-BASE/gmr/t_a
+DA3-BASE,gmr/t_a_raw,other,dev,68.9,92.8,,,16.45,69.4,35.4,55.4,100.0,84.0,,,,,,2026-11-25,results/pba/runs/DA3-BASE/gmr/t_a_raw
+DA3-BASE,gmr/t_cv_ho,other,held-out,76.7,94.6,,,19.75,92.9,23.9,85.7,99.9,81.0,,,,,,2026-11-25,results/pba/runs/DA3-BASE/gmr/t_cv_ho
 DA3-BASE,hyb_rad,pba,dev,49.6,90.4,59.3,hiroom+7scenes+scannetpp,2.53,51.4,36.3,49.0,87.4,23.8,65.1,62.4,50.4,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/hyb_rad
 DA3-BASE,hyb_rej,pba,dev,49.3,89.7,57.8,hiroom+7scenes+scannetpp,2.54,51.1,36.7,49.2,87.7,21.6,63.8,61.4,48.1,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-BASE/hyb_rej
 DA3-BASE,init_dev,track,dev,27.1,83.6,45.2,hiroom+7scenes+scannetpp,0.00,21.1,32.6,13.3,55.6,12.9,34.5,63.2,37.8,,,2026-11-04,workspace/tto/DA3-BASE/init_dev
@@ -126,6 +129,9 @@ DA3-LARGE-1.1,fit_grid8_rej,track,dev,48.9,90.3,56.0,hiroom+7scenes+scannetpp,47
 DA3-LARGE-1.1,fit_grid_r100,track,dev,48.9,90.3,56.9,hiroom+7scenes+scannetpp,48.10,50.3,35.1,47.9,100.0,11.5,60.8,58.6,51.2,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_r100
 DA3-LARGE-1.1,fit_grid_r1000,track,dev,48.9,90.3,57.0,hiroom+7scenes+scannetpp,47.34,50.3,35.1,47.9,100.0,11.5,60.8,59.0,51.4,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_r1000
 DA3-LARGE-1.1,fit_grid_rej,track,dev,48.9,90.3,55.5,hiroom+7scenes+scannetpp,48.70,50.3,35.1,47.9,100.0,11.5,58.9,57.7,49.8,,,2026-11-04,workspace/tto/DA3-LARGE-1.1/fit_grid_rej
+DA3-LARGE-1.1,gmr/t_a,other,dev,81.2,97.3,71.9,hiroom+7scenes+scannetpp+eth3d,16.40,86.3,35.7,85.6,100.0,98.5,87.2,54.9,69.6,75.8,,2026-11-25,results/pba/runs/DA3-LARGE-1.1/gmr/t_a
+DA3-LARGE-1.1,gmr/t_a_raw,other,dev,79.2,96.9,,,16.39,77.7,36.0,84.3,100.0,98.2,,,,,,2026-11-25,results/pba/runs/DA3-LARGE-1.1/gmr/t_a_raw
+DA3-LARGE-1.1,gmr/t_cv_ho,other,held-out,80.2,95.8,,,19.75,95.9,23.6,96.7,100.0,85.1,,,,,,2026-11-25,results/pba/runs/DA3-LARGE-1.1/gmr/t_cv_ho
 DA3-LARGE-1.1,hyb_focal10,pba,dev,51.9,92.1,64.7,hiroom+7scenes+scannetpp,2.52,56.8,42.5,58.8,86.1,15.4,69.5,63.3,61.3,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 w_focal=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_focal10
 DA3-LARGE-1.1,hyb_focal100,pba,dev,51.6,91.9,64.7,hiroom+7scenes+scannetpp,2.53,57.5,42.5,57.6,85.7,14.5,70.6,63.4,60.3,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 w_focal=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-LARGE-1.1/hyb_focal100
 DA3-LARGE-1.1,hyb_prior100,pba,dev,58.7,94.4,70.8,hiroom+7scenes+scannetpp,2.53,73.4,42.7,64.3,83.9,29.3,80.7,64.7,66.9,,lm_iters=5 lm_samples=0 focal_init=pred w_prior=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-LARGE-1.1/hyb_prior100
@@ -237,6 +243,47 @@ DA3-SMALL,fit_grid_r1000,track,dev,47.4,85.3,48.9,hiroom+7scenes+scannetpp,48.43
 DA3-SMALL,fit_grid_rej,track,dev,47.4,85.3,48.1,hiroom+7scenes+scannetpp,49.47,49.2,34.8,44.2,100.0,8.8,52.6,52.8,38.8,,,2026-11-04,workspace/tto/DA3-SMALL/fit_grid_rej
 DA3-SMALL,fit_none,track,dev,47.4,85.3,37.6,hiroom+7scenes+scannetpp,45.56,49.1,34.8,44.2,100.0,8.8,38.7,56.1,18.0,,,2026-11-04,workspace/tto/DA3-SMALL/fit_none
 DA3-SMALL,fit_scene,track,dev,47.4,85.3,47.9,hiroom+7scenes+scannetpp,47.63,49.1,34.8,44.2,100.0,8.8,48.0,55.2,40.7,,,2026-11-04,workspace/tto/DA3-SMALL/fit_scene
+DA3-SMALL,gmr/d_bp,other,dev,53.8,88.2,,,12.07,53.4,36.3,31.9,99.9,47.5,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/d_bp
+DA3-SMALL,gmr/d_bp_r3,other,dev,53.9,87.8,,,35.88,53.3,35.2,32.4,100.0,48.7,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/d_bp_r3
+DA3-SMALL,gmr/d_da3,other,dev,18.4,74.8,,,12.08,12.0,30.3,5.9,37.1,6.6,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/d_da3
+DA3-SMALL,gmr/e_c2,other,dev,57.2,88.9,,,11.99,57.8,36.5,34.2,100.0,57.3,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/e_c2
+DA3-SMALL,gmr/e_c4,other,dev,61.8,89.4,,,12.34,51.1,36.7,41.1,100.0,80.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/e_c4
+DA3-SMALL,gmr/e_da3_c4,other,dev,48.7,82.3,,,12.39,38.0,36.1,21.5,100.0,47.8,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/e_da3_c4
+DA3-SMALL,gmr/e_ncc,other,dev,60.7,89.8,,,10.76,57.8,35.1,50.7,100.0,60.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/e_ncc
+DA3-SMALL,gmr/e_p1k,other,dev,54.0,88.2,,,10.76,53.5,36.4,32.0,99.9,48.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/e_p1k
+DA3-SMALL,gmr/f_c4_gt,other,10/0/3/0/3,64.1,87.5,,,8.96,53.5,,53.0,,85.7,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/f_c4_gt
+DA3-SMALL,gmr/f_c4_r2,other,10/2/2/0/0,40.0,81.9,,,18.87,49.9,35.3,34.7,,,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/f_c4_r2
+DA3-SMALL,gmr/f_gt,other,10/0/3/0/3,45.4,83.4,,,7.79,53.1,,32.1,,50.9,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/f_gt
+DA3-SMALL,gmr/g_c2i,other,dev,56.7,88.8,,,16.49,54.7,36.4,34.2,100.0,58.2,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/g_c2i
+DA3-SMALL,gmr/h_c4_r3l,other,10/0/0/0/0,47.1,85.7,,,7.70,47.1,,,,,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/h_c4_r3l
+DA3-SMALL,gmr/lc_10k_1000,other,10/0/8/0/5,72.3,90.6,,,4.29,80.6,,64.2,,72.3,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_10k_1000
+DA3-SMALL,gmr/lc_10k_10000,other,10/0/8/0/5,74.3,91.3,,,4.30,85.3,,64.0,,73.5,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_10k_10000
+DA3-SMALL,gmr/lc_10k_3000,other,10/0/8/0/5,74.2,90.8,,,4.30,84.5,,65.6,,72.5,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_10k_3000
+DA3-SMALL,gmr/lc_cva_3k,other,10/0/8/0/5,72.7,90.6,,,4.30,83.8,,61.2,,73.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_cva_3k
+DA3-SMALL,gmr/lc_d2,other,10/0/8/0/5,72.3,90.6,,,4.30,83.6,,60.4,,73.0,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_d2
+DA3-SMALL,gmr/lc_d4,other,10/0/8/0/5,69.7,90.1,,,4.31,75.9,,60.9,,72.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_d4
+DA3-SMALL,gmr/lc_roma,other,10/0/8/0/5,55.6,85.7,,,4.33,66.9,,45.8,,54.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/lc_roma
+DA3-SMALL,gmr/m_eval,other,10/0/3/0/3,44.5,83.2,,,9.22,53.5,,32.0,,48.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/m_eval
+DA3-SMALL,gmr/m_eval_c4,other,10/0/3/0/3,57.5,85.1,,,10.38,51.1,,41.1,,80.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/m_eval_c4
+DA3-SMALL,gmr/s_no1,other,dev,68.7,91.3,,,14.19,61.7,36.3,56.1,100.0,89.2,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/s_no1
+DA3-SMALL,gmr/s_r240_n6_no1,other,dev,68.3,92.2,,,4.11,61.2,36.2,57.1,99.9,87.3,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/s_r240_n6_no1
+DA3-SMALL,gmr/s_r288,other,dev,69.0,92.0,,,10.00,61.5,36.2,58.3,100.0,89.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/s_r288
+DA3-SMALL,gmr/s_r288_n6,other,dev,68.0,91.7,,,6.66,59.0,36.1,56.7,100.0,88.2,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/s_r288_n6
+DA3-SMALL,gmr/s_r288_n6_no1,other,dev,68.3,91.8,,,5.41,62.0,36.2,55.4,100.0,88.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/s_r288_n6_no1
+DA3-SMALL,gmr/t_a,other,dev,68.9,91.3,56.5,hiroom+7scenes+scannetpp+eth3d,16.46,62.8,36.3,55.9,100.0,89.4,63.5,54.9,45.4,62.1,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a
+DA3-SMALL,gmr/t_a_da3,other,dev,62.5,89.0,,,16.50,56.7,35.9,47.9,100.0,72.0,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_da3
+DA3-SMALL,gmr/t_a_da3_r2,other,dev,66.9,90.3,,,32.74,61.4,36.1,52.8,100.0,84.1,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_da3_r2
+DA3-SMALL,gmr/t_a_dvlt,other,dev,79.8,96.9,,,16.41,79.3,36.6,86.9,100.0,96.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_dvlt
+DA3-SMALL,gmr/t_a_eval,other,10/0/3/0/3,69.4,88.3,,,13.44,62.8,,55.9,,89.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_eval
+DA3-SMALL,gmr/t_a_g16,other,dev,68.9,91.3,,,16.45,62.8,36.3,55.9,100.0,89.4,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_g16
+DA3-SMALL,gmr/t_a_ho3,other,0/3/0/5/5,64.5,91.5,,,20.82,,16.2,,99.9,77.5,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_ho3
+DA3-SMALL,gmr/t_a_r2,other,10/0/3/0/3,68.5,87.0,,,22.87,59.9,,56.4,,89.3,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_r2
+DA3-SMALL,gmr/t_a_s1,other,dev,67.8,91.0,,,16.43,59.6,36.3,55.6,100.0,87.6,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_s1
+DA3-SMALL,gmr/t_a_s2,other,dev,68.7,91.2,,,16.43,61.9,36.3,55.7,100.0,89.6,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_a_s2
+DA3-SMALL,gmr/t_ark_dev,other,dev,64.8,91.2,,,16.37,50.8,32.0,51.2,100.0,89.9,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_ark_dev
+DA3-SMALL,gmr/t_ark_ho,other,held-out,68.1,91.2,,,20.07,78.5,23.6,72.0,99.9,66.5,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_ark_ho
+DA3-SMALL,gmr/t_bp,other,10/0/0/0/0,53.4,89.7,,,2.45,53.4,,,,,,,,,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_bp
+DA3-SMALL,gmr/t_cv_ho,other,held-out,71.5,91.5,58.8,hiroom+7scenes+scannetpp+eth3d,19.73,86.9,23.4,73.6,100.0,73.8,64.5,43.5,54.0,73.2,,2026-11-25,results/pba/runs/DA3-SMALL/gmr/t_cv_ho
 DA3-SMALL,hyb_focal10,pba,dev,43.1,84.9,49.8,hiroom+7scenes+scannetpp,2.53,49.4,37.5,43.0,76.9,8.8,54.5,55.2,39.7,,lm_iters=5 lm_samples=0 focal_init=pred w_focal=10.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_focal10
 DA3-SMALL,hyb_focal100,pba,dev,43.3,84.9,49.6,hiroom+7scenes+scannetpp,2.52,51.4,37.5,42.2,76.7,8.6,53.8,55.4,39.8,,lm_iters=5 lm_samples=0 focal_init=pred w_focal=100.0 bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_focal100
 DA3-SMALL,hyb_q1,pba,dev,37.5,83.8,47.8,hiroom+7scenes+scannetpp,2.51,40.9,37.6,19.0,81.2,9.1,53.1,54.1,36.3,,lm_iters=5 lm_samples=0 focal_init=pred bright_rel=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-04,workspace/tto/DA3-SMALL/hyb_q1
@@ -524,6 +571,12 @@ DA3-SMALL,tracks_q2,track,dev,41.8,81.7,44.7,hiroom+7scenes+scannetpp,30.02,37.6
 DA3-SMALL,vggsfm_cauchy,track,dev,40.8,82.0,37.1,hiroom+7scenes+scannetpp,251.17,36.4,33.5,29.2,100.0,5.3,37.1,57.4,16.9,,,2026-11-04,workspace/tto/DA3-SMALL/vggsfm_cauchy
 DA3-SMALL,vggsfm_trivial,track,dev,18.5,72.7,30.7,hiroom+7scenes+scannetpp,200.70,12.3,29.2,5.9,40.2,5.1,22.5,50.9,18.5,,,2026-11-04,workspace/tto/DA3-SMALL/vggsfm_trivial
 DA3-SMALL,viz_featuremetric,pba,1/0/0/0/0,21.7,85.0,,,8.80,21.7,,,,,,,,,lm_iters=5 lm_samples=0 focal_init=pred features=vgg feat_dim=16 vgg_fast=False impl=autograd lm_impl=jvp lm_solver=dense lm_stop=0.0 radial=False,2026-11-05,workspace/tto/DA3-SMALL/viz_featuremetric
+DA3-SMALL,win/base_pho25,pba,0/0/20/0/0,34.0,79.5,,,2.20,,,34.0,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/base_pho25
+DA3-SMALL,win/w16_anchor1_dep0_pho25,pba,0/0/20/0/0,28.9,74.3,,,1.82,,,28.9,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/w16_anchor1_dep0_pho25
+DA3-SMALL,win/w16_anchor1_pho25,pba,0/0/20/0/0,27.5,74.0,,,1.85,,,27.5,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/w16_anchor1_pho25
+DA3-SMALL,win/w16_anchor_dep_pho25,pba,0/0/20/0/0,34.3,79.2,,,2.14,,,34.3,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/w16_anchor_dep_pho25
+DA3-SMALL,win/w16_anchor_pho25,pba,0/0/20/0/0,30.3,73.0,,,2.08,,,30.3,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/w16_anchor_pho25
+DA3-SMALL,win/w16_chain_pho25,pba,0/0/20/0/0,9.3,46.0,,,1.95,,,9.3,,,,,,,iters=25,2026-11-25,workspace/tto/DA3-SMALL/win/w16_chain_pho25
 DA3-SMALL-roma-base,eval,feedforward,1/0/0/0/0,2.0,52.7,,,,2.0,,,,,,,,,,2026-11-02,workspace/evaluation/DA3-SMALL-roma-base
 DA3-SMALL-roma-base-q4,.,other,30/0/0/0/0,65.9,90.4,37.6,hiroom,,65.9,,,,,37.6,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-base-q4
 DA3-SMALL-roma-fast-q4,.,other,30/0/0/0/0,63.9,89.6,36.8,hiroom,,63.9,,,,,36.8,,,,,2026-11-03,workspace/tto/DA3-SMALL-roma-fast-q4

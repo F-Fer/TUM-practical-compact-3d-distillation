@@ -52,6 +52,12 @@ training: test-time augmentation of depth and cameras ([da3-tta](da3-tta.md), he
 
 ## Open / don't repeat
 
+- **2026-11-25 caveat:** the ARKit windows of `lpba_prep_arkit_pose.py` store the nearest 10 Hz trajectory pose, which is
+  ~1.3° off for two thirds of the frames ([guided-match-refinement](guided-match-refinement.md)). Every ARKit result
+  above that used the poses (photometric loss with GT poses, sensitivity loss, camera targets) was trained on wrong
+  cameras; `scripts/gmr_arkit_interp.py` interpolates them. Depth-only losses (LiDAR) are unaffected.
+
+
 - Judge depth sources by the low-frequency residual (or the linearised AUC of `lpba_sens.py`), not RMS / abs. rel.
 - Don't retry at tum1 scale: learned bases / correction heads on frozen features, head fine-tuning on ≤ 1k clips with
   any of the three losses. The data scale is the problem (as for the refiners and the distillation in

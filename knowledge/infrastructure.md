@@ -52,3 +52,8 @@ Run outputs (metric JSONs, configs, per-run comparisons) are not tracked since 2
 (`knowledge/`, reports, figures, tables, job scripts). `knowledge/runs.csv` indexes the local run folders. Removing the
 tracked copies deletes them from disk in any other clone that merges the change (e.g. `/rhome/pr26rb00/TUM-dvlt`);
 restore with `git restore --source=<commit before the merge> --worktree -- results/pba/runs results/pba/runs6`.
+
+- `scripts/index_runs.py` walks with `followlinks=False`. On tum1 some run folders under `workspace/tto/<model>/` (e.g.
+  `sba_ho`) were moved to `/mnt/hdd/TUM-compact-3d/workspace/` and replaced by symlinks (2026-11-25). A fresh index
+  silently drops them. On 2026-11-25 `runs.csv` was therefore merged: the committed rows plus the new ones. Check
+  `git diff --stat knowledge/runs.csv` for deletions after re-indexing.
