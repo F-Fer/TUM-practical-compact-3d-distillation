@@ -93,7 +93,7 @@ the next larger model alone for SMALL→BASE and BASE→LARGE (held-out too), an
    cameras 52.5 vs 43.6 (81 scenes), BASE's 50.7; small refiners and short distillation runs don't transfer; scaling
    the depth distillation is the open experiment for the 5090. 2026-11-24 ([learned-depth-basis](ideas/learned-depth-basis.md)):
    the pose follows the depth's low-frequency error (blur σ = H/16-H/8), and a first-order sensitivity model
-   (`scripts/lpba_sens.py`) predicts the oracles; with the free 8-cell grid the bias comes from the 8-16-cell band.
+   (`lpba_sens.py`, commit 107ea16) predicts the oracles; with the free 8-cell grid the bias comes from the 8-16-cell band.
    Fine-tuning DA3's depth head for PBA (depth / pose-sensitivity / photometric losses, in-domain or ARKit) and learned
    depth bases don't transfer at tum1 scale; test-time augmentation of depth + cameras does help (held-out 43.8 →
    46.7 with 7 passes, [da3-tta](ideas/da3-tta.md)) but costs more than BASE's forward. Scaling the sensitivity loss with a large

@@ -32,3 +32,5 @@ frames, drifts: AUC@30 53 at the start), 34.3 (full-pass cameras, depth averaged
 
 Related: [da3-tta](da3-tta.md), [gross-failures-and-reference-view](gross-failures-and-reference-view.md),
 [views-scaling](views-scaling.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_win.py`.

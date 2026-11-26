@@ -1,4 +1,6 @@
-"""ARKitScenes clips with LiDAR depth and poses, for training DA3's depth head with GT (scripts/lpba_ft_head.py).
+"""ARKitScenes clips with LiDAR depth and poses: the training windows of scripts/gmr_train.py (arkit=...). First
+written for the rejected DA3 head fine-tuning (lpba_ft_head.py, commit 107ea16). Afterwards run
+scripts/gmr_arkit_interp.py: the poses stored here are the nearest 10 Hz trajectory samples (~1.3 deg off).
 
     .venv/bin/python scripts/lpba_prep_arkit_pose.py --meta workspace/distill/arkit_raw_metadata.csv \
         --out workspace/tto/DA3-SMALL/lpba/arkit --n 300 [--fold Training] [--windows 2] [--frames 24] [--stride 8]

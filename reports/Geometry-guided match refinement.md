@@ -299,7 +299,7 @@ GMR at ~2.2 s for ~68 (estimate), while LARGE + B′ gives 71.0 at 1.8 s (dev); 
 ## 8. Files
 
 - `scripts/gmr_ba.py` (the method; options in its `DEFAULTS`), `scripts/gmr_train.py` (fine-tuning),
-  `scripts/gmr_basin.py` (capture-range table), `scripts/lpba_scenes.py` (per-scene table), `scripts/lpba_win.py`
+  `scripts/gmr_basin.py` (capture-range table), `scripts/lpba_scenes.py` (per-scene table), `lpba_win.py` (removed, commit 107ea16)
   (local windows).
 - Runs: `workspace/tto/<model>/gmr/<run>/` (metrics in `metric_results/<dataset>_pba.json`, read by
   `scripts/sba_sum.py`); checkpoints `workspace/tto/DA3-SMALL/gmr/ft/{a,cva,cvb,ark}.pt` (`a`: held-out HiRoom / ScanNet++; `cva` / `cvb`:

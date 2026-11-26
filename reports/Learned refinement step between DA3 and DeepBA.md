@@ -399,3 +399,7 @@ BA-T 2606.03287 · Diff3R 2604.01030 · DeltaSplat 2610.09853 · GradSplat 2610.
 DRO 2103.13201 · BA-Net 1806.04807 · DeepV2D 1812.04605 · DeepSFM 1912.09697 · GASfM 2308.15984 ·
 PoseDiffusion 2306.15667 · BLASt3R 2609.05210 · GeoWeaver 2608.17389 · EPO 2607.00579 · Self-Geometry 2608.10708 ·
 Test3R 2506.13750 · Pixel-Perfect SfM 2108.08291.
+
+The scripts of G0 and of §9-§12 (`lpba_info.py`, `lpba_probe.py`, `lpba_weak_oracle.py`, `lpba_stage.py`, and the
+`run_tto_pba.py` option `pose_prior_oracle`) were removed in the merge cleanup of 2026-11-26; the last version is at commit
+`107ea16` (`git show 107ea16:scripts/<name>.py`). `lpba_depth_oracle.py` is still in `scripts/`.

@@ -82,3 +82,5 @@ dev scenes; analytic Jacobians in `Kernel` only once it works.
 Related: [depth-bottleneck](depth-bottleneck.md), [learned-refinement-step](learned-refinement-step.md),
 [pose-prior-and-flat-directions](pose-prior-and-flat-directions.md), [depth-prior](depth-prior.md),
 [depth-parametrisation](depth-parametrisation.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_field.py`, `lpba_mvs.py`, `lpba_stage.py`, and the `run_tto_pba.py` options `grid_levels`, `grid_proj`, `grid_proj_w`.

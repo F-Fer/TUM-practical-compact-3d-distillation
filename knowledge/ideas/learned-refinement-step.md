@@ -67,3 +67,5 @@ stage (depth fixed) twice leaves the depth error 5.4-6.0 % → 5.3-6.4 % (ScanNe
 
 Related: [pose-prior-and-flat-directions](pose-prior-and-flat-directions.md), [depth-prior](depth-prior.md),
 [objective-bias-gt-start](objective-bias-gt-start.md), [matched-compute](matched-compute.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_info.py`, `lpba_probe.py`, `lpba_weak_oracle.py`, `lpba_stage.py`, and the `run_tto_pba.py` option `pose_prior_oracle`.

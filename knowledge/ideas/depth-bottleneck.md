@@ -66,3 +66,5 @@ with a camera-token loss, so the distilled depth must be combined with the origi
 
 Related: [learned-refinement-step](learned-refinement-step.md), [depth-parametrisation](depth-parametrisation.md),
 [depth-prior](depth-prior.md), [matched-compute](matched-compute.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_basis.py` (GT fits), `lpba_ft_head.py` (refiners, distillation); `lpba_depth_oracle.py` is still in `scripts/` (gmr_*.py import it).

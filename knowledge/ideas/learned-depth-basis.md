@@ -74,3 +74,5 @@ training: test-time augmentation of depth and cameras ([da3-tta](da3-tta.md), he
 
 Related: [depth-bottleneck](depth-bottleneck.md), [depth-parametrisation](depth-parametrisation.md),
 [shared-depth-field](shared-depth-field.md), [learned-refinement-step](learned-refinement-step.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_basis.py`, `lpba_basisnet.py`, `lpba_ft_head.py`, `lpba_sens.py`, `lpba_devsum.py`, `lpba_hesum.py`, and the `run_tto_pba.py` options `depth_basis`, `basis_grid`, `w_smooth`.

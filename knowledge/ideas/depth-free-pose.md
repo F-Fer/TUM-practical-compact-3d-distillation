@@ -47,3 +47,5 @@ Sampson distance over poses (frame 0 fixed) and the shared focal, with a penalty
 
 Related: [shared-depth-field](shared-depth-field.md), [depth-bottleneck](depth-bottleneck.md),
 [track-ba](track-ba.md), [pose-prior-and-flat-directions](pose-prior-and-flat-directions.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_epi.py`, `lpba_mvs.py` (plane sweep).

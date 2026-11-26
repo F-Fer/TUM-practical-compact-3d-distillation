@@ -48,3 +48,5 @@ translations averaged; written as `tta_{flip,rev,all}` (depth only) and `*_cam` 
 
 Related: [depth-bottleneck](depth-bottleneck.md), [learned-depth-basis](learned-depth-basis.md),
 [matched-compute](matched-compute.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (closed experiment); the last version is at commit `107ea16`, e.g. `git show 107ea16:scripts/<name>.py`: `lpba_tta.py`, `lpba_selfdistill.py`.
