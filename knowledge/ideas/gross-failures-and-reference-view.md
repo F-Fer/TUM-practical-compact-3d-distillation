@@ -25,7 +25,9 @@ them (7-9 % of frames stay wrong), and fixing them before PBA is worth at most +
 ## Open
 
 Several reference views per scene (a few forward passes), choosing or merging by DA3's confidence (failure-mode
-report's suggestion, never run in the pipeline). `scripts/reference_view_sweep.py` exists from the analysis.
+report's suggestion). 2026-11-24: merging run as test-time augmentation (flip / reversed order, cameras averaged
+relative to frame 0, depth in log): B′ held-out 43.8 → 45.5, HiRoom +7.5 ([da3-tta](da3-tta.md)); a single pass with
+another reference strategy and an ensemble over strategies are in the same file. `scripts/reference_view_sweep.py` exists from the analysis.
 Covers DA3-SMALL and ScanNet++ only; larger models fail less ([views](views-scaling.md)).
 
 Related: [da3-failure-modes](da3-failure-modes.md), [evaluation](../evaluation.md) (reference view as a hidden variable).

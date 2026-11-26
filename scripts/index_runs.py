@@ -59,7 +59,10 @@ LEGACY_COMMIT = "1c1a921"  # last commit of the multi-option run_tto_pba.py (wit
 # options of the old code that the current one has no longer, with what it now does without them
 NOW_FIXED = {"impl": "analytic", "lm_impl": "analytic", "lm_solver": "dense32", "bright": True, "bright_rel": True,
              "gray": True, "vgg_fast": True, "optimizer": "adam", "camera": "pinhole", "res_scale": 1.0, "depth_param": "grid",
-             "photo_agg": "mean", "grad_weight": 1.0, "pool_factor": 16, "patch_stride": 1.0, "lm_fixed": False}
+             "photo_agg": "mean", "grad_weight": 1.0, "pool_factor": 16, "patch_stride": 1.0, "lm_fixed": False,
+             # options of the lpba branch removed on 2026-11-26 (last version at commit 107ea16), at their inert defaults
+             "depth_basis": "", "basis_grid": 0, "w_smooth": 0.0, "grid_levels": "", "grid_proj": False,
+             "grid_proj_w": 1000.0, "pose_prior_oracle": 0.0}
 MODEL_RE = re.compile(r"^(DA3-|dvlt|VGGT|Pi3|pilot_)")
 
 

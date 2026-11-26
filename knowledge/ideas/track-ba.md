@@ -54,4 +54,7 @@ SMALL/BASE with a weak pose prior (< 30); a faster solver so the anchored BA is 
 recon of the anchored cameras without the polish; aligned F1 for the photometric runs; a tracker newer than RoMa v2.
 New: rerun the track BA with the shared focal / current photometric polish, since the comparison above mixes ages.
 
-Related: [ba-iterations](ba-iterations.md), [matched-compute](matched-compute.md).
+Superseded for speed and the fair comparison by [fast-sparse-ba](fast-sparse-ba.md) (2026-11-24): the same RoMa tracks
+with a GPU LM BA (0.5-4 s instead of pycolmap's 15-125 s) give dev 55.6 / held-out 67.1 on SMALL.
+
+Related: [ba-iterations](ba-iterations.md), [matched-compute](matched-compute.md), [fast-sparse-ba](fast-sparse-ba.md).

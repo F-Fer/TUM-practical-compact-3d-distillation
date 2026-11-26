@@ -2,7 +2,7 @@
 
 Status: **adopted:** 8-cell log-depth grid per frame · **rejected / not better:** 4, 6, 32-cell (fine) grids, free
 per-sample depth from DA3's start, fine-tuning DA3's depth head (SMALL) · **open:** 12-16 cells (memory), depth head
-on LARGE (better recon, 8x time) · Area: PBA · Updated 2026-11-10
+on LARGE (better recon, 8x time) · Area: PBA · Updated 2026-11-24
 
 **Answer:** some depth freedom is essential (frozen depth collapses), a coarse grid is the right amount from DA3's
 start: finer or free depth can explain away pose errors. 16 cells holds the poses better in the GT-start test but the
@@ -22,6 +22,9 @@ dense LM system doesn't fit; 12 cells gains where it fits.
 | 11-07 | SMALL, LM from GT, NCC | free per-sample depth (`lm_free_depth`, exact Schur) | passes the 16-cell bar at 1/14 of its time (0.17 vs 2.42 s): HiRoom 91.8/78.9, DTU 99.6/97.4; but NCC with frozen depth is already 88.3/64.6: most of the gain is NCC | REPORT4 §4 |
 | 11-07 | SMALL dev, Adam 4x50 + 40 LM on NCC | free depth vs grid | **29.6 vs 33.9**: from DA3's start free depth explains away pose errors (converges by iteration 15) | REPORT4 §4, §6 |
 | 11-08 | SMALL dev, 3 seeds | 12-cell grid (`depth_grid=12`) | gains on the 3 sets that fit in 8 GB (DTU +1.9, ETH3D +5.1; 39.9 vs 37.7 on those sets); + fitted prior 40.3; 100-frame sets OOM with the dense LM | REPORT5 §4 |
+| 11-24 | SMALL, HiRoom (10) / ETH3D (3) dev, B′ `iters=25`, 3 seeds, current code | `depth_grid` 8 / 12 / 16 | HiRoom 44.7 / 46.3 / 47.0, ETH3D 31.2 / 35.1 / (16: OOM on 1 scene with training jobs on the GPU); depth error after PBA unchanged (H 4.88 / 4.90 / 4.90 %). The first-order sensitivity model (learned-depth-basis.md) predicts the direction (free 4 / 8 / 12 cells: 30.2 / 44.0 / 54.4 linearised) but overestimates the gain | `lpba/ft/r_g12_*`, `r_g16_*` |
+| 11-24 | same, 2 seeds | smoothness prior on the finer grid (`w_smooth` 1 / 10 / 100, squared neighbour differences) | 12 cells: H 44.7 / 42.6 / 33.4, E 31.3 / 27.7 / 21.1; 16 cells: H 45.5 / 42.7 / 35.2, E 39.4 / 29.2 / 22.4: **the fine cells' freedom helps; damping it hurts** | `lpba/ft/r_g1*w*` |
+| 11-24 | SMALL dev (3 seeds) / held-out (2 seeds), HiRoom + DTU + ETH3D, B′ T = 25 | `depth_grid=12` vs 8 | dev 3-set 51.0 → 53.8 (H 44.6 → 45.5, DTU 86.9 → 90.2, E 21.4 → 25.6); held-out 53.9 → 54.9 (H 52.2 → 53.2, DTU 78.4 → 80.3, E 31.3 → 31.3); + DA3 TTA 57.7 / 56.2 (da3-tta.md). 7-Scenes / ScanNet++ (100 frames) still OOM on the 3080 with nothing else on the GPU | `lpba/tta/g12_*` |
 
 ## Notes
 
