@@ -75,14 +75,17 @@ def install_timing_hooks(cls, work_dir):
     orig_inference = cls.inference
 
     def forward(self, image, *args, **kwargs):
-        torch.cuda.synchronize()
-        torch.cuda.reset_peak_memory_stats()
+        cuda = torch.cuda.is_available()  # False in CPU-only runs (e.g. a single scene for a figure)
+        if cuda:
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
         start = time.perf_counter()
         out = orig_forward(self, image, *args, **kwargs)
-        torch.cuda.synchronize()
+        if cuda:
+            torch.cuda.synchronize()
         last_forward.update(
             forward_s=time.perf_counter() - start,
-            peak_mem_gib=torch.cuda.max_memory_allocated() / 2**30,
+            peak_mem_gib=torch.cuda.max_memory_allocated() / 2**30 if cuda else 0.0,
             num_frames=image.shape[1],
             input_hw=list(image.shape[-2:]),
         )

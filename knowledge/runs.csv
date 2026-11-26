@@ -1341,3 +1341,15 @@ dvlt_rs,released-head_504_K12/pho_it25,pba,full,71.8,95.3,,,0.22,88.9,28.0,80.8,
 dvlt_rs,released-head_504_K16,feedforward,full,57.2,93.6,,,1.06,70.5,30.5,71.9,80.5,32.8,,,,,,2026-11-23,workspace/evaluation/dvlt_rs/released-head_504_K16
 dvlt_rs,released-head_504_K16/eval,other,full,57.2,93.6,,,,70.5,30.5,71.9,80.5,32.8,,,,,,2026-11-23,results/pba/runs/dvlt_rs/released-head_504_K16/eval
 dvlt_rs,released-head_504_K16/pho_it25,pba,full,71.7,95.2,,,0.21,89.8,28.3,82.3,95.2,62.8,,,,,iters=25,2026-11-23,results/pba/runs/dvlt_rs/released-head_504_K16/pho_it25
+dvlt_rs,S0b_mix_252_K16,feedforward,full,48.1,91.9,,,0.25,51.5,24.6,56.5,71.8,36.0,,,,,,2026-11-26,workspace/evaluation/dvlt_rs/S0b_mix_252_K16
+dvlt_rs,S0b_mix_252_K16/eval,other,full,48.1,91.9,,,,51.5,24.6,56.5,71.8,36.0,,,,,,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_252_K16/eval
+dvlt_rs,S0b_mix_252_K16/pho_it25,pba,full,64.5,93.9,,,0.21,73.4,27.6,74.3,91.1,55.9,,,,,iters=25,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_252_K16/pho_it25
+dvlt_rs,S0b_mix_336_K16,feedforward,full,58.2,93.8,,,0.40,73.2,29.3,69.8,80.8,37.9,,,,,,2026-11-26,workspace/evaluation/dvlt_rs/S0b_mix_336_K16
+dvlt_rs,S0b_mix_336_K16/eval,other,full,58.2,93.8,,,,73.2,29.3,69.8,80.8,37.9,,,,,,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_336_K16/eval
+dvlt_rs,S0b_mix_336_K16/pho_it25,pba,full,71.0,95.3,,,0.21,85.8,28.0,80.4,94.3,66.2,,,,,iters=25,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_336_K16/pho_it25
+dvlt_rs,S0b_mix_420_K12,feedforward,full,58.3,93.8,,,0.59,73.9,30.6,72.0,79.3,35.9,,,,,,2026-11-26,workspace/evaluation/dvlt_rs/S0b_mix_420_K12
+dvlt_rs,S0b_mix_420_K12/eval,other,full,58.3,93.8,,,,73.9,30.6,72.0,79.3,35.9,,,,,,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_420_K12/eval
+dvlt_rs,S0b_mix_420_K12/pho_it25,pba,full,71.7,95.3,,,0.21,88.0,29.2,79.8,94.0,67.4,,,,,iters=25,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_420_K12/pho_it25
+dvlt_rs,S0b_mix_504_K12,feedforward,full,56.0,93.5,,,0.96,71.3,29.4,68.5,77.6,33.5,,,,,,2026-11-26,workspace/evaluation/dvlt_rs/S0b_mix_504_K12
+dvlt_rs,S0b_mix_504_K12/eval,other,full,56.0,93.5,,,,71.3,29.4,68.5,77.6,33.5,,,,,,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_504_K12/eval
+dvlt_rs,S0b_mix_504_K12/pho_it25,pba,full,70.6,95.2,,,0.21,85.5,28.5,78.9,92.7,67.4,,,,,iters=25,2026-11-26,results/pba/runs/dvlt_rs/S0b_mix_504_K12/pho_it25
