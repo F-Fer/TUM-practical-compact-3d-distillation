@@ -1,6 +1,6 @@
 # How fast and how good can track-based (sparse) BA on DA3 be, compared with PBA?
 
-Status: **answered (2026-11-24)** · Area: TTO method / track BA / speed · Updated 2026-11-24 · Report: `reports/Fast sparse BA vs photometric BA.md`
+Status: **answered (2026-11-24)** · Area: TTO method / track BA / speed · Updated 2026-11-26 · Report: `reports/Fast sparse BA vs photometric BA.md`
 
 **Answer (RTX 3080):** BA itself is cheap on the GPU (own LM: 0.1-0.2 s on keypoint tracks, 0.5-4 s on 0.15-1.7M RoMa
 observations; pycolmap 15-125 s, same accuracy); the tracks cost the time and decide the accuracy. **Dense RoMa tracks +
@@ -57,6 +57,7 @@ the same GPU (`workspace/tto/<model>/sba_ref`): B′ `iters=25`, NCC `iters=800 
 | 11-24 | held-out, LARGE-1.1 | B′ / SP / SP + prior 30 / RoMa / + prior 100 / p30 | **69.9 at 0.8 s** / 48.7 / 61.4 / 68.5 / **70.4 at 36 s** / 67.3 | `DA3-LARGE-1.1/sba_ho/*` |
 | 11-24 | held-out, BASE / LARGE-1.1 | NCC (`iters=800 lm_photo_loss=ncc lm_iters=40 lm_stop=0`) on the 3080 | BASE **68.0** at 15 s (85.8 / 24.6 / 63.2 / 93.5 / 72.7) = RoMa BA 67.9 at 36 s; LARGE **74.3** at 15 s (90.0 / 24.9 / 76.8 / 97.3 / 82.5) > RoMa BA + prior 70.4 (5090 values 68.3 / 74.8) | `DA3-*/sba_ho/ncc800` |
 | 11-24 | recon F1 (4 sets), dev / SMALL held-out | `eval_tto.py recon_unposed` | dev SMALL B′ 47.8, NCC 51.6, RoMa 46.8, SP 43.2; BASE B′ 61.9, RoMa 55.7, SP 50.3; LARGE B′ 70.2, RoMa 61.0, SP 55.6; **held-out SMALL RoMa 57.0, NCC 53.2, B′ 51.1** (SP: fusion of a HiRoom scene OOM-killed the scorer) | `*.recon.log` |
+| 11-26 | SMALL held-out (59 scenes), existing runs `sba_ho/{pho25,ncc800,r8}` + GMR `t_cv_ho` | per frame pair: share brought below 3°, binned by DA3-SMALL's initial pair error (max of rot / trans angle, evaluator functions; each scene weighted equally), `scripts/plot_error_basin.py` | initial 0-3° (25 % of pairs): B′ 93 / NCC 96 / RoMa 97 / GMR 98 %; 5-10° (28 %): 55 / 75 / 83 / 85; 10-20° (15 %): 30 / 57 / 70 / 72; 20-45° (6 %): 9 / 34 / 52 / 50; > 45° (3 %): 2 / 13 / 30 / 23. Photometric BA's basin ends at ~5-10°, sparse BA on dense matches still fixes half of the 20-45° pairs. Figure `results/pba/figures_depth/error_basin.png` | `plot_error_basin.py` |
 
 ## Open / don't repeat
 

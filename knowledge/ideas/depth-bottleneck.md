@@ -2,7 +2,7 @@
 
 Status: **open** (diagnosis measured; non-oracle sources measured; learned refiners and depth distillation at tum1
 scale negative) ·
-Area: TTO method / depth · Updated 2026-11-23
+Area: TTO method / depth · Updated 2026-11-26
 
 **Answer:** on DA3-SMALL + B′ (`iters=25`), the pose that PBA reaches is limited by the depth it is given
 ([learned-refinement-step](learned-refinement-step.md), depth oracle: GT depth fixed 38.2 → 49.1 on HiRoom / ScanNet++ /
@@ -15,8 +15,9 @@ DA3-SMALL's cameras + B′: 52.5 on all 81 scenes vs 43.6** (HiRoom 64.1, ScanNe
 27.5). Small learned refiners trained on 200 ARKitScenes videos (LiDAR depth) don't improve DA3's or B′'s depth on
 held-out videos, with or without multi-view residual maps as input, and more data (50 → 200 videos) helps only a little.
 **2×2 on all 81 scenes** (B′, seed 0; cameras × depth): SMALL/SMALL 43.6, SMALL/BASE 50.7, SMALL/LARGE 52.5,
-LARGE/SMALL 58.3, LARGE/LARGE 69.8. Of the SMALL → LARGE gap after TTO (+26.2), the depth is +8.9, the cameras +14.7,
-the interaction +2.6; BASE's depth gives 80 % of LARGE's depth gain. **Distilling LARGE's depth into SMALL** (head + last
+LARGE/SMALL 58.3, LARGE/BASE 64.0, LARGE/LARGE 69.8. Of the SMALL → LARGE gap after TTO (+26.2), the depth is +8.9, the
+cameras +14.7, the interaction +2.6; BASE's depth gives 80 % of LARGE's depth gain with SMALL's cameras (+7.1 of +8.9)
+but only half with LARGE's (+5.7 of +11.5): the better the cameras, the more the finer depth of LARGE pays off. **Distilling LARGE's depth into SMALL** (head + last
 6 backbone blocks, 4k steps on the 3080) doesn't transfer to unseen scenes yet: trained on ARKit + outdoor clips, dev
 depth error and AUC unchanged within noise; trained on the 59 held-out benchmark scenes (teacher = LARGE's predictions,
 no GT), dev 43.3 vs 42.9 ± 1.3 with SMALL's cameras. Fine-tuning the backbone breaks SMALL's own cameras (dev 26.9) even
@@ -33,6 +34,7 @@ with a camera-token loss, so the distilled depth must be combined with the origi
 | 11-22 | same, at B′'s state | **multi-view refiner** (`lpba_mvrefiner.py` (removed 2026-11-23, never committed; the description here is all that is left): ResNet18-FPN on RGB + B′ log depth + conf + residual maps against the 10 spread neighbours → per-pixel log-depth correction), control without maps | val 0.116 (B′) → 0.126 (maps) / 0.140 (no maps, larger val); in-sample on 40 train windows 0.144 → 0.114 (both), shape 0.094 → 0.084 (a GT-fitted 16-cell correction reaches ~0.02): the maps add nothing, the network barely fits | `mvref_train*.log` |
 | 11-22 | same, val = 96 windows of 48 videos | learning curve of the residual-map refiner: 50 / 100 / 200 training videos, 5k steps | val L1 0.144 / 0.143 / 0.137 vs B′ 0.130 and DA3 0.1225 (shape 0.096 / 0.095 / 0.089 vs 0.085 / 0.071): improves slowly with data, worse than no correction at every size | `curve*.log` |
 | 11-22 | all 81 pose scenes, B′ `iters=25`, seed 0 | **2×2 cameras × depth**: LARGE's cameras via `init_from` with SMALL's depth; B′ on LARGE itself; BASE's depth with SMALL's cameras | AUC@3 (HiRoom / 7-Scenes / ScanNet++ / DTU / ETH3D; mean): LARGE cam + SMALL depth 72.5 / 26.2 / 60.8 / 88.6 / 43.5; 58.3 · LARGE / LARGE 87.4 / 27.8 / 74.3 / 95.1 / 64.3; 69.8 · SMALL cam + BASE depth 58.4 / 28.0 / 38.7 / 85.5 / 42.7; 50.7 | `lpba_tb_*`, `lpba_pa_base_s0` |
+| 11-26 | all 81 pose scenes, B′ `iters=25`, seed 0, 3080 | missing cell of the cameras × depth table: LARGE-1.1's cameras (`init_from`) + BASE's depth (`lpba_depth_oracle.py model:workspace/evaluation/DA3-BASE`, scaled to SMALL's median), SMALL's run as the source | AUC@3 78.7 / 29.9 / 66.6 / 92.2 / 52.6; **64.0** (LARGE/SMALL 58.3, LARGE/LARGE 69.8); AUC@30 93.4; 0.81 s TTO. Figure `results/pba/figures_depth/depth_camera_swap.png` (`scripts/plot_depth_bottleneck.py`) | `lpba_tb_largecam_basedepth` |
 | 11-23 | ARKit val 96 windows (LiDAR) | DA3-LARGE-1.1 as teacher: its depth error | abs. rel. SMALL 12.6 %, LARGE 8.0 % (one scale per window) | `teacher_val.log` |
 | 11-23 | DA3-SMALL, teacher LARGE on 400 ARKit + 132 outdoor windows (`lpba_distill_depth.py` (removed 2026-11-23, never committed; the description here is all that is left)), 3080 shared | **depth distillation**, head only (3.9M) 3k steps / head + last 6 blocks (14.5M, lr / 10, camera-token loss) 4k steps, 6-8 frames | ARKit val abs. rel. 12.31 → 12.01 % (head) / 11.76 % (6 blocks); benchmark (61 scenes without the 100-frame ones, OOM) with SMALL's cameras: HiRoom 49.8 → 50.6, DTU 81.2 → 74.5, ETH3D 27.3 → 31.2, depth error HiRoom 6.05 → 5.86 %, ETH3D 5.67 → 5.89 %; with its own cameras HiRoom 23.9 | `lpba_du6_*`, `lpba_distill/dist_*.log` |
 | 11-23 | DA3-SMALL, teacher = LARGE's saved predictions on the 59 held-out scenes (no GT), dev evaluation | in-domain depth distillation (6 blocks, 4k steps, 6 frames) | teacher loss 0.11 → 0.038; dev depth error HiRoom / ScanNet++ / ETH3D 5.37 → 5.23 / 6.05 → 6.20 / 5.24 → 5.26 %; **B′ dev 43.3** (SMALL 42.9 ± 1.3 over 3 seeds; LARGE depth 52.1); own cameras 26.9 | `lpba_db_*` |

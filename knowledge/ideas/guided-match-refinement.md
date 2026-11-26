@@ -94,6 +94,28 @@ the overlap logit towards "visible and within 3 px". The dev scenes and 7-Scenes
 - That is a training-distribution problem with a measurable target (the table above): a refiner trained on the errors
   of a feed-forward initialisation, iterated, with an honest confidence.
 
+## Closest prior work (checked 2026-11-26, alphaXiv + web; re-check before writing, the area moves monthly)
+
+GMR = (1) the feed-forward geometric warp as the coarse match, (2) a learned local refiner on it, (3) trained on that
+model's error distribution, (4) BA with free points on unordered multi-view sets. Each piece exists; the combination
+was not found.
+
+| work | (1) geometric warp | (2) refiner on it | (3) trained for FF errors | (4) BA, unordered | difference |
+|---|---|---|---|---|---|
+| Glob3R 2607.09225 (Pi3X + matching head) | no: coarse warp from a learned global head on frozen Pi3X tokens | RoMa-v2-initialised refiners | on its own head's warps (16 H20, 4-5 days) | global SfM + BA | closest system; its ablation: coarse warp alone helps little, refinement is what matters (as here) |
+| MASt3R-SLAM 2412.12392 | yes: "iterative projective matching" from the two-view pointmap | hand-written: max MASt3R-feature similarity in a local window | no | SLAM backend (rays) | the non-learned two-view ancestor of GMR (2 ms vs 2 s for MASt3R's global matching) |
+| RoMa-Ω 2609.09507 §5.1 | yes: depth warp of VGGT-Ω, matched without refinement | no | no | two-view RANSAC | raw warp = the cameras' own pose (ScanNet-1500 34.2 = 34.2 "direct"): no new information without a refiner |
+| GLUEMAP 2605.26103 (Pan, Schönberger, Pollefeys) | yes: "virtual tracks" reprojected with π³ depth/poses | no | no | augmented global BA with SIFT + VGGSfM tracks | warp used as a soft prior, not as a measurement to refine |
+| DROID-SLAM / MegaSaM / ViPE / FoundationSLAM 2512.25008 / F² SLAM 2610.05207 | yes: induced flow of the current state | learned GRU on a correlation volume | end-to-end on synthetic video, cold start or mono-depth init | dense BA, video | same mechanism, but sequential video, own features, trained from scratch for days; not a warm start from a multi-view FF model |
+| BLASt3R 2609.05210, VGGT+BA, MASt3R-SfM | no: own global matcher / tracker | — | — | yes | FF geometry only initialises / regularises BA |
+| Refin3R 2611.23051 / GGPT 2603.11174 | no: RoMa v2 global | — | — | yes, then learned densifier | our RoMa + BA baseline plus depth |
+| Detector-Free SfM 2306.15669, PixSfM 2108.08291 | from a coarse SfM | learned multi-view / featuremetric track refinement | no FF prior | yes | refine-then-BA loop from a classical start |
+| MVLoMa 2610.31321 | no (sparse, DA3-G tokens as descriptors) | — | — | relative pose only | FF features in a matcher, not FF geometry |
+| render-and-compare object pose (DeepIM, CosyPose, MegaPose, SCFlow) | yes: render at the current pose | learned flow / pose update | yes, on perturbed poses | single object | the conceptual analogue at object level |
+
+Baselines this suggests: GLUEMAP (open source, `colmap/gluemap`), Glob3R, BLASt3R, and the non-learned ablation
+"geometric warp + local feature argmax" (MASt3R-SLAM style) to isolate what the learned refiner adds.
+
 ## Open / don't repeat
 
 - Pitfall: `gmr_ba.py subset=held-out` drops the first DEV[ds] scenes of the source; with a held-out-only source
