@@ -17,7 +17,7 @@ it alone and after photometric TTO.
 ## Setup (pilot, 2026-11-16)
 
 - Code: `scripts/distill_steps/`: `train.py`, `eval_student.py` (benchmark adapter with a checkpoint
-  and K), `slurm_train_eval.sh` (train, then pose at K = 4 + photometric TTO T = 25 on all 81 pose scenes, pose at
+  and K), at commit f3ab013: `slurm_train_eval.sh` (train, then pose at K = 4 + photometric TTO T = 25 on all 81 pose scenes, pose at
   K = 6, 8), `slurm_eval_ckpt.sh`, `slurm_base_tto.sh`, `compare.py` (the table below). Runs in
   `$SCRATCH/distill_runs/<name>/` (log.jsonl, config.json, checkpoints), predictions in
   `workspace/evaluation/dvlt_fs/`, TTO in `workspace/tto/dvlt_fs/`.
@@ -36,7 +36,7 @@ it alone and after photometric TTO.
 
 Official evaluator, pose AUC@3 (mean of 5 datasets) for the model alone, and photometric TTO (`run_tto_pba.py`
 defaults, T = 25) on its predictions: dataset means over dev (22 scenes), held-out (59) and all 81 pose scenes,
-alone → after TTO. RTX 5090, one seed. Table from `scripts/distill_steps/compare.py`.
+alone → after TTO. RTX 5090, one seed. Table from `scripts/distill_steps/compare.py` (commit f3ab013).
 
 | date | model | fwd s | AUC@3 | AUC@30 | HiRoom / 7Sc / SN++ / DTU / ETH3D | dev | held-out | all |
 |---|---|---|---|---|---|---|---|---|
@@ -75,3 +75,5 @@ the evaluator's by a few tenths.)
   Next direction: [dejaview-speed](dejaview-speed.md).
 
 Related: [dejaview-steps](dejaview-steps.md), [distillation](distillation.md), [matched-compute](matched-compute.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (the pilot's answer: not worth it at this budget); the last version is at commit `f3ab013`, e.g. `git show f3ab013:scripts/distill_steps/<name>`: `slurm_train_eval.sh`, `slurm_eval_ckpt.sh`, `slurm_base_tto.sh`, `compare.py` (`train.py` stays: `train_res.py` and `profile_dvlt.py` use its model loader).

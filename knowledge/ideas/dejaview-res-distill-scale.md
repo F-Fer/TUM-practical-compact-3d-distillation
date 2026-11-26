@@ -66,6 +66,11 @@ plot was the pose mode (head costs S0b 2.5-4.2 alone, 0-1.4 after TTO), not over
 - **Eval** (`slurm_res_eval.sh`, `compare_rs.py`): all 81 pose scenes, RoPE stretched, ray-fit extrinsics +
   camera-head intrinsics (fhk), photometric TTO T = 25; (res, K) = 336/16, 420/12, 252/16, 336/12, 252/12, 420/8.
   Forward times are the 3080 medians of the architecture at that (res, K) from dejaview-speed.md.
+- **Recon** (`slurm_res_recon.sh <run> [res:K]`, 2026-11-26): recon_unposed F1 on HiRoom, 7-Scenes, ScanNet++, ETH3D
+  (4-set average) and DTU-49 Chamfer, alone and after photometric TTO T = 25 (`save=true`), one fusion worker, whole
+  node (`--mem=56G`, ETH3D fusion); without res:K it re-scores a model's saved 504-px predictions (e.g. DA3-BASE).
+- **Figures** (`plot_da3_res.py`): `results/figures/res_distill_dejaview.png` (released, v0 = R2, v1 = S0b_mix,
+  S0b_336K12, S1) and `res_distill_vs_da3.png` (v1 vs DA3-Small / Base / Large-1.1), AUC@3 after TTO over 3080 time.
 
 - **S0b (2026-11-22, jobs 3775-3779):** S0 reworked for camera diversity, evaluated with camera-head poses
   (the deployment mode: no RANSAC ray fit, `POSE=head slurm_res_eval.sh`, stored as run `<name>-head`) and fhk at

@@ -59,10 +59,10 @@ class Folders(torch.utils.data.Dataset):
     ([(dirs, weight)], e.g. ARKit / DL3DV / outdoor) the folder's pool is drawn by weight first; with crop_min < 1 or
     aspects other than native, the clip is cropped by crop_clip (drawn after the frames, so old runs reproduce)."""
 
-    def __init__(self, dirs, length, min_views, max_views, seed, return_files=False, extra=(), p_extra=0.0,
-                 pools=None, crop_min=1.0, p_zoom=0.0, aspects=("native",)):
+    def __init__(self, dirs, length, min_views, max_views, seed, extra=(), p_extra=0.0, pools=None,
+                 crop_min=1.0, p_zoom=0.0, aspects=("native",)):
         self.dirs, self.length, self.min_views, self.max_views, self.seed = dirs, length, min_views, max_views, seed
-        self.return_files, self.extra, self.p_extra = return_files, list(extra), p_extra
+        self.extra, self.p_extra = list(extra), p_extra
         self.pools, self.crop_min, self.p_zoom, self.aspects = pools, crop_min, p_zoom, list(aspects)
 
     def __len__(self):
@@ -95,51 +95,7 @@ class Folders(torch.utils.data.Dataset):
         if self.crop_min < 1.0 or self.aspects != ["native"]:
             imgs, how = crop_clip(imgs, rng, self.crop_min, self.p_zoom, self.aspects)
             name = f"{name[:16]} {how}"
-        out = preprocess_images(imgs, 504, 14, "cpu")["images"][0], name
-        return (*out, [files[j] for j in idx]) if self.return_files else out
-
-
-class TargetClips(torch.utils.data.Dataset):
-    """Clips of gen_tto_targets.py: the same frames, preprocessed at 504 px, plus the TTO-refined cameras / depth."""
-
-    def __init__(self, paths, length, seed):
-        self.paths, self.length, self.seed = paths, length, seed
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, i):
-        import numpy as np
-        from PIL import Image
-
-        from dvlt.util.preprocess import preprocess_images
-
-        p = self.paths[random.Random(self.seed * 1_000_003 + i).randrange(len(self.paths))]
-        d = np.load(p)
-        imgs = [Image.open(os.path.join(DATA, str(f))).convert("RGB") for f in d["files"]]
-        tgt = {k: torch.from_numpy(d[k]).float() for k in ("ext_teacher", "K_teacher", "ext_ref", "K_ref", "logdepth_ref")}
-        return preprocess_images(imgs, 504, 14, "cpu")["images"][0], os.path.basename(p), tgt
-
-
-def apply_targets(pt, tgt, dev):
-    """Teacher predictions moved to the TTO result: rays += rays(refined cameras) - rays(teacher cameras) (so the
-    teacher's non-pinhole ray detail is kept), depth *= exp(refined log-depth correction), pose_enc = refined cameras."""
-    from dvlt.common.rays import compute_world_rays
-    from dvlt.model_components.pose_encoding import extri_intri_to_pose_enc
-
-    H, W = pt["depth"].shape[2:4]
-    c2w = lambda e: torch.linalg.inv(torch.cat([e, torch.tensor([[[0, 0, 0, 1.0]]], device=dev).expand(len(e), 1, 4)], 1))
-    ct, cr = c2w(tgt["ext_teacher"].to(dev)), c2w(tgt["ext_ref"].to(dev))
-    rt = compute_world_rays(ct[None], tgt["K_teacher"].to(dev)[None], H, W)
-    rr = compute_world_rays(cr[None], tgt["K_ref"].to(dev)[None], H, W)
-    out = dict(pt)
-    out["rays"] = pt["rays"].float() + (rr - rt)
-    lr = F.interpolate(tgt["logdepth_ref"].to(dev)[:, None], size=(H, W), mode="bilinear", align_corners=False)[:, 0]
-    out["depth"] = pt["depth"].float() * lr.exp()[None, ..., None]
-    pe = extri_intri_to_pose_enc(cr[:, :3], tgt["K_ref"].to(dev), (H, W))[None]
-    sign = torch.sign((pe[..., 3:7] * pt["pose_enc"][..., 3:7].float()).sum(-1, keepdim=True)).clamp_min(0) * 2 - 1
-    out["pose_enc"] = torch.cat([pe[..., :3], pe[..., 3:7] * sign, pe[..., 7:]], -1)
-    return out
+        return preprocess_images(imgs, 504, 14, "cpu")["images"][0], name
 
 
 def student_size(H, W, res):
@@ -227,7 +183,6 @@ def main():
     ap.add_argument("--crop_min", type=float, default=1.0, help="zoom augmentation: smallest linear crop fraction")
     ap.add_argument("--p_zoom", type=float, default=0.5, help="share of clips zoomed (with --crop_min < 1)")
     ap.add_argument("--aspects", default="native", help="crop aspect ratios per clip, e.g. native,4:3,1:1,3:4")
-    ap.add_argument("--targets", default="", help="dir of gen_tto_targets.py clips: train towards teacher + TTO")
     ap.add_argument("--smoke", type=int, default=0, help="run N steps, print memory / speed, save nothing")
     args = ap.parse_args()
     res_choices = [int(r) for r in args.res.split(",")]
@@ -275,25 +230,20 @@ def main():
                        "val_videos": [os.path.basename(d) for d in val_dirs],
                        "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, f, indent=1)
 
-    if args.targets:
-        tpaths = sorted(glob.glob(os.path.join(args.targets, "*.npz")))
-        print(f"[data] {len(tpaths)} TTO target clips", flush=True)
-        ds = TargetClips(tpaths, args.max_steps, args.seed)
-    else:
-        out_dirs = sorted(d for d in glob.glob(os.path.join(DATA, "outdoor", "*")) if os.path.exists(f"{d}/DONE"))
-        if args.p_outdoor > 0:
-            print(f"[data] {len(out_dirs)} outdoor scenes at p = {args.p_outdoor}", flush=True)
-        pools = None
-        if args.mix:
-            dl_dirs = sorted(d for d in glob.glob(os.path.join(DL3DV, "*")) if os.path.exists(f"{d}/DONE"))
-            src = {"arkit": train_dirs, "dl3dv": dl_dirs, "outdoor": out_dirs}
-            pools = [(src[k], float(w)) for k, w in (p.split(":") for p in args.mix.split(","))]
-            print("[data] mix " + ", ".join(f"{p.split(':')[0]} {len(d)} folders at {w}"
-                                            for p, (d, w) in zip(args.mix.split(","), pools)), flush=True)
-            assert all(d for d, _ in pools), "empty data pool"
-        ds = Folders(train_dirs, args.max_steps, args.min_views, args.max_views, args.seed, extra=out_dirs,
-                     p_extra=args.p_outdoor, pools=pools, crop_min=args.crop_min, p_zoom=args.p_zoom,
-                     aspects=args.aspects.split(","))
+    out_dirs = sorted(d for d in glob.glob(os.path.join(DATA, "outdoor", "*")) if os.path.exists(f"{d}/DONE"))
+    if args.p_outdoor > 0:
+        print(f"[data] {len(out_dirs)} outdoor scenes at p = {args.p_outdoor}", flush=True)
+    pools = None
+    if args.mix:
+        dl_dirs = sorted(d for d in glob.glob(os.path.join(DL3DV, "*")) if os.path.exists(f"{d}/DONE"))
+        src = {"arkit": train_dirs, "dl3dv": dl_dirs, "outdoor": out_dirs}
+        pools = [(src[k], float(w)) for k, w in (p.split(":") for p in args.mix.split(","))]
+        print("[data] mix " + ", ".join(f"{p.split(':')[0]} {len(d)} folders at {w}"
+                                        for p, (d, w) in zip(args.mix.split(","), pools)), flush=True)
+        assert all(d for d, _ in pools), "empty data pool"
+    ds = Folders(train_dirs, args.max_steps, args.min_views, args.max_views, args.seed, extra=out_dirs,
+                 p_extra=args.p_outdoor, pools=pools, crop_min=args.crop_min, p_zoom=args.p_zoom,
+                 aspects=args.aspects.split(","))
     order = list(range(step, args.max_steps))
     dl = torch.utils.data.DataLoader(torch.utils.data.Subset(ds, order), batch_size=None, shuffle=False,
                                      num_workers=args.workers, prefetch_factor=4 if args.workers else None)
@@ -333,7 +283,7 @@ def main():
         validate()
     t_fit = None
     for item in dl:
-        images, name, tgt = item if args.targets else (*item, None)
+        images, name = item
         if args.smoke and step >= args.smoke:
             break
         if step % 50 == 0 and not os.environ.get("SLURM_JOB_ID") and foreign_gpu_procs() and not args.smoke:
@@ -364,8 +314,6 @@ def main():
             pt = run(teacher, images, args.kt)
         with torch.autocast(**amp):
             ps = run_student(student, images, K, res)
-        if args.targets:
-            pt = apply_targets(pt, tgt, dev)
         L = losses(ps, pt)
         loss = L["ray"] + L["depth"] + 0.1 * L["conf"] + args.w_pose * L["pose"]
         opt.zero_grad(set_to_none=True)
