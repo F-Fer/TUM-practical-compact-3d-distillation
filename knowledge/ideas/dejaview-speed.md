@@ -38,9 +38,11 @@ Code in `scripts/distill_steps/`:
 - `eval_student.py` with `DVLT_RES`: it runs the net at a smaller longest side (antialiased resize of the 504-px
   input), then upsamples depth / conf to the 504 frame and rescales the intrinsics, so the evaluator and
   `run_tto_pba.py` see 504-px predictions;
-- `slurm_profile.sh`, `slurm_res_sweep.sh`, `slurm_encoder.sh` + `train_encoder.py` (ViT-S student);
+- `slurm_profile.sh`; at commit f3ab013: `slurm_res_sweep.sh`, `slurm_encoder.sh` + `train_encoder.py` (ViT-S student,
+  `DVLT_ENC` in `eval_student.py`);
 - `rope_scale.py` (float RoPE positions stretched to the native grid, `DVLT_ROPE=1` in `eval_student.py`),
-  `rope_dec_check.py` (RoPE equivalence check + decoder timing breakdown), `slurm_rope.sh`.
+  `rope_dec_check.py` (RoPE equivalence check + decoder timing breakdown), `slurm_rope.sh` (commit f3ab013;
+  `slurm_res_eval.sh` now covers both sweeps: `released` with any res:K, RoPE stretched).
 
 `profile_dvlt.py` and `rope_dec_check.py` take `--images <folder>` to run on a local GPU without the ARKit zips.
 
@@ -301,8 +303,10 @@ Benchmark (all 81 pose scenes, TTO = `run_tto_pba.py` iters = 25, fwd s = median
   downsampled student input).
   - This is a distribution shift rather than removed computation, so it may fine-tune more easily than K = 4 did.
   - It would cut the 100-view forward by ~3x.
-- **Encoder distillation** (tum2 job 2888, ViT-S/14 + projection, regressing z_0, `train_encoder.py`): result never
+- **Encoder distillation** (tum2 job 2888, ViT-S/14 + projection, regressing z_0, `train_encoder.py`, commit f3ab013): result never
   collected (no access to tum2 from tum1 since). By the profile it cannot give more than ~5 % speed, so it is parked.
 
 Related: [dejaview-steps](dejaview-steps.md), [dejaview-few-step-distillation](dejaview-few-step-distillation.md),
 [matched-compute](matched-compute.md)
+
+Code: removed in the merge cleanup of 2026-11-26 (superseded or parked); the last version is at commit `f3ab013`, e.g. `git show f3ab013:scripts/distill_steps/<name>`: `slurm_res_sweep.sh`, `slurm_rope.sh` (superseded by `slurm_res_eval.sh`), `train_encoder.py` + `slurm_encoder.sh` (parked encoder distillation).

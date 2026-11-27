@@ -14,9 +14,12 @@ OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
                    "workspace", "distill_data", "arkit_frames", "outdoor")
 SRC = [("http://storage.googleapis.com/gresearch/refraw360/360_v2.zip", "images_4", "m360_"),
        ("https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip", "images", "tdb_")]
+LOCAL = os.environ.get("DISTILL_ZIPS", "")  # dir with local copies of the zips (tum2: $SCRATCH/distill_data/zips)
 s = requests.Session()
 for url, sub, pre in SRC:
-    z = zipfile.ZipFile(io.BufferedReader(HTTPFile(url, s), buffer_size=1 << 20))
+    local = os.path.join(LOCAL, os.path.basename(url)) if LOCAL else ""
+    src = local if local and os.path.exists(local) else io.BufferedReader(HTTPFile(url, s), buffer_size=1 << 20)
+    z = zipfile.ZipFile(src)
     scenes = {}
     for n in z.namelist():
         if n.lower().endswith((".jpg", ".png", ".jpeg")) and os.path.basename(os.path.dirname(n)) == sub:

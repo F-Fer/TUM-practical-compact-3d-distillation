@@ -2,7 +2,6 @@
 
   DVLT_K=4          loop steps (linspace grid), default 12
   DVLT_CKPT=...pt   replace all weights by a train.py checkpoint
-  DVLT_ENC=...pt    replace the image encoder by a train_encoder.py student (ViT-S + projection)
   DVLT_RES=336      run the network at this longest side (input resized from the 504-px frame with antialiasing),
                     then upsample depth / confidence back to the 504-px frame and rescale the intrinsics, so the
                     evaluator and run_tto_pba.py (which works at the prediction resolution) see 504-px predictions
@@ -29,7 +28,6 @@ import baselines  # noqa: E402
 
 K = int(os.environ.get("DVLT_K", "12"))
 CKPT = os.environ.get("DVLT_CKPT", "")
-ENC = os.environ.get("DVLT_ENC", "")
 RES = int(os.environ.get("DVLT_RES", "0"))
 ROPE = os.environ.get("DVLT_ROPE", "") not in ("", "0")
 DEPTH_LR = os.environ.get("DVLT_DEPTH_LR", "") not in ("", "0")
@@ -47,10 +45,6 @@ def init(self, model_id, inference_steps=None):
     _init(self, model_id, inference_steps=K)
     if CKPT:
         self.model.load_state_dict(torch.load(CKPT, map_location="cpu", weights_only=False)["model"], strict=True)
-    if ENC:
-        from train_encoder import load_student
-
-        self.model.patch_embed_encoder = load_student(ENC)
     if DEPTH_LR or POSE == "head":
         import functools
 
@@ -58,7 +52,7 @@ def init(self, model_id, inference_steps=None):
 
         self.model._decode = functools.partial(fast_decode.decode, self.model, depth_lr=DEPTH_LR,
                                                rays=POSE == "rays")
-    print(f"[eval_student] K={self.model.inference_steps} ckpt={CKPT or 'released'} enc={ENC or 'released'} "
+    print(f"[eval_student] K={self.model.inference_steps} ckpt={CKPT or 'released'} "
           f"res={RES or 'native'} rope_scale={ROPE} depth_lr={DEPTH_LR} pose={POSE}", flush=True)
 
 

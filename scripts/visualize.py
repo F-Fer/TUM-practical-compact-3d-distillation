@@ -147,6 +147,7 @@ def main():
     ap.add_argument("dataset", choices=DATASETS)
     ap.add_argument("scene")
     ap.add_argument("--models", nargs="+", default=list(LABELS))
+    ap.add_argument("--labels", nargs="+", help="panel titles, one per --models entry (default: LABELS or the name)")
     ap.add_argument("--mode", default="unposed", choices=["unposed", "posed"])
     ap.add_argument("--elev", type=float, default=35, help="viewpoint elevation in degrees")
     ap.add_argument("--dist", type=float, default=1.0, help="viewpoint distance factor")
@@ -156,6 +157,8 @@ def main():
     args = ap.parse_args()
 
     os.chdir(REPO_ROOT)
+    names = dict(zip(args.models, args.labels or []))
+    label = lambda m: names.get(m, LABELS.get(m, m))
     cfg = DATASETS[args.dataset]
     tag = f"{args.dataset}_{args.scene.replace('/', '-')}"
     suffix = f"_{args.mode}" + ("" if args.color == "rgb" else f"_{args.color}") + f"_elev{args.elev:g}"
@@ -174,7 +177,7 @@ def main():
     clouds = [("GT", load_cloud(cfg["gt"](args.scene), cfg["voxel"], crop, keep), "")]
     for m in args.models:
         path = os.path.join(scene_dir(m, args.dataset, args.scene, args.mode), "fuse", "pcd.ply")
-        clouds.append((LABELS.get(m, m), load_cloud(path, cfg["voxel"], crop, keep), metric_of(m, args.dataset, args.scene, args.mode)))
+        clouds.append((label(m), load_cloud(path, cfg["voxel"], crop, keep), metric_of(m, args.dataset, args.scene, args.mode)))
     if args.dataset == "dtu":
         for _, pcd, _ in clouds:
             shade_by_height(pcd, up)
@@ -261,7 +264,7 @@ def main():
         draw(ax, gt_c2w, "black", "GT")
         for p, g in zip(pred_xy, gt_xy):
             ax.plot(*np.stack([p, g]).T, color="tab:red", lw=0.6, alpha=0.5)
-        ax.set_title(LABELS.get(m, m), fontsize=12)
+        ax.set_title(label(m), fontsize=12)
         ax.set_aspect("equal")
         ax.set_xticks([])
         ax.set_yticks([])
